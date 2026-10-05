@@ -1,14 +1,26 @@
 import { colIndex, parseA1 } from "@/lib/sheets/a1";
-import type { CellWrite, RowOverride, SheetsGateway } from "@/lib/sheets/gateway";
+import type {
+  CellWrite,
+  RowOverride,
+  SheetsGateway,
+  ValueRender,
+} from "@/lib/sheets/gateway";
 
 type Grid = unknown[][];
 
 /**
- * In-memory SheetsGateway for tests. Formula cells are strings starting with
- * "=" and are returned as-is for every render mode (no evaluation).
- * cloneRow shifts relative row references (A5 -> A6) the way Google does for
- * a plain copy/paste; absolute rows ($5) are left alone. Methods listed in
- * `failOn` throw on every call while they stay listed.
+ * In-memory SheetsGateway for tests. It mimics the parts of Google's behavior
+ * the app relies on:
+ * - Formula cells are strings starting with "=". Reading with the FORMULA
+ *   render returns the text; any other render returns 0 as a stand-in for the
+ *   computed value (so code that tries to detect formulas without asking for
+ *   FORMULA fails its tests, as it would on a real sheet).
+ * - getValues fills blank cells inside a row with "" and omits trailing blanks.
+ * - addTab fails if the title exists; cloneRow fails if the source row is
+ *   empty or the target row already has content, and then changes nothing.
+ * - cloneRow shifts relative row references (A5 -> A6) the way a plain copy
+ *   and paste does; absolute rows ($5) are left alone.
+ * Methods listed in `failOn` throw on every call while they stay listed.
  */
 export class FakeGateway implements SheetsGateway {
   readonly tabs = new Map<string, Grid>();
@@ -39,10 +51,11 @@ export class FakeGateway implements SheetsGateway {
 
   async addTab(title: string) {
     this.enter("addTab");
+    if (this.tabs.has(title)) throw new Error(`A tab named ${title} already exists`);
     this.tabs.set(title, []);
   }
 
-  async getValues(tab: string, a1: string) {
+  async getValues(tab: string, a1: string, render: ValueRender) {
     this.enter("getValues");
     const range = parseA1(a1);
     const grid = this.grid(tab);
@@ -51,7 +64,10 @@ export class FakeGateway implements SheetsGateway {
     for (let r = range.startRow; r <= Math.min(lastRow, grid.length); r++) {
       const row = grid[r - 1] ?? [];
       const endCol = range.endCol ?? row.length - 1;
-      const slice = row.slice(range.startCol, Math.min(endCol, row.length - 1) + 1);
+      const slice = Array.from(
+        row.slice(range.startCol, Math.min(endCol, row.length - 1) + 1),
+        (value) => readCell(value, render),
+      );
       while (slice.length > 0 && isEmpty(slice[slice.length - 1])) slice.pop();
       out.push(slice);
     }
@@ -88,7 +104,14 @@ export class FakeGateway implements SheetsGateway {
   ) {
     this.enter("cloneRow");
     const grid = this.grid(tab);
-    const source = grid[fromRow - 1] ?? [];
+    const source = grid[fromRow - 1];
+    if (!source || source.every(isEmpty)) {
+      throw new Error(`cloneRow: row ${fromRow} is empty or missing`);
+    }
+    const target = grid[toRow - 1];
+    if (target && !target.every(isEmpty)) {
+      throw new Error(`cloneRow: row ${toRow} is not empty`);
+    }
     const delta = toRow - fromRow;
     const copy = source.map((cell) =>
       typeof cell === "string" && cell.startsWith("=") ? shiftRows(cell, delta) : cell,
@@ -102,6 +125,16 @@ export class FakeGateway implements SheetsGateway {
 
 function isEmpty(value: unknown) {
   return value === undefined || value === null || value === "";
+}
+
+function isFormula(value: unknown): value is string {
+  return typeof value === "string" && value.startsWith("=");
+}
+
+function readCell(value: unknown, render: ValueRender): unknown {
+  if (value === undefined || value === null) return "";
+  if (isFormula(value) && render !== "FORMULA") return 0;
+  return value;
 }
 
 function shiftRows(formula: string, delta: number) {
