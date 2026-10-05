@@ -19,7 +19,14 @@ describe("detectMonthCodec", () => {
     });
   });
   it("refuses to guess unknown formats", () => {
-    expect(() => detectMonthCodec("10/2026")).toThrow(AppError);
+    let thrown: unknown;
+    try {
+      detectMonthCodec("10/2026");
+    } catch (error) {
+      thrown = error;
+    }
+    expect(thrown).toBeInstanceOf(AppError);
+    expect((thrown as AppError).code).toBe("sheet-structure");
     expect(() => detectMonthCodec(undefined)).toThrow(/Month column format/);
   });
 });
