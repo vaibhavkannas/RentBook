@@ -119,9 +119,12 @@ export async function ensureTabs(gateway: SheetsGateway, scheduleTab: string): P
   bootstrapped.add(gateway);
 }
 
-export async function readSettings(gateway: SheetsGateway): Promise<PortionConfig[]> {
+type SettingsRow = { portion: PortionConfig; sheetRow: number };
+
+/** Portions with the 1-based Settings-tab row each one was read from (blank rows are skipped). */
+async function readSettingsRows(gateway: SheetsGateway): Promise<SettingsRow[]> {
   const values = await gateway.getValues(SETTINGS_TAB, "A1:G50", "UNFORMATTED_VALUE");
-  const portions: PortionConfig[] = [];
+  const portions: SettingsRow[] = [];
   values.slice(1).forEach((row, offset) => {
     if (row.length === 0 || row[0] === undefined || row[0] === "") return;
     const sheetRow = offset + 2;
@@ -136,19 +139,26 @@ export async function readSettings(gateway: SheetsGateway): Promise<PortionConfi
       throw sheetStructure(`Settings row ${sheetRow}: hike % must be a number, 0 or more.`);
     }
     portions.push({
-      id: String(row[0]),
-      name: String(row[1] ?? row[0]),
-      tenantHeader: String(row[2] ?? ""),
-      countHeader: String(row[3] ?? ""),
-      amountHeader: String(row[4] ?? ""),
-      cycleLength: typeof cycle === "number" ? cycle : null,
-      hikePercent: typeof hike === "number" ? hike : DEFAULT_HIKE_PERCENT,
+      sheetRow,
+      portion: {
+        id: String(row[0]),
+        name: String(row[1] ?? row[0]),
+        tenantHeader: String(row[2] ?? ""),
+        countHeader: String(row[3] ?? ""),
+        amountHeader: String(row[4] ?? ""),
+        cycleLength: typeof cycle === "number" ? cycle : null,
+        hikePercent: typeof hike === "number" ? hike : DEFAULT_HIKE_PERCENT,
+      },
     });
   });
   if (portions.length === 0) {
     throw sheetStructure("The Settings tab has no portions.");
   }
   return portions;
+}
+
+export async function readSettings(gateway: SheetsGateway): Promise<PortionConfig[]> {
+  return (await readSettingsRows(gateway)).map((entry) => entry.portion);
 }
 
 export type SettingsUpdate = {
@@ -163,10 +173,10 @@ export async function updateSettings(
   gateway: SheetsGateway,
   updates: SettingsUpdate[],
 ): Promise<void> {
-  const current = await readSettings(gateway);
+  const current = await readSettingsRows(gateway);
   const writes = updates.map((update) => {
-    const index = current.findIndex((p) => p.id === update.id);
-    if (index === -1) throw validation(`Unknown portion "${update.id}".`);
+    const found = current.find((entry) => entry.portion.id === update.id);
+    if (!found) throw validation(`Unknown portion "${update.id}".`);
     const name = update.name.trim();
     if (name.length === 0 || name.length > 60) {
       throw validation("Portion name must be 1 to 60 characters.");
@@ -180,7 +190,7 @@ export async function updateSettings(
     if (!(Number.isFinite(update.hikePercent) && update.hikePercent >= 0 && update.hikePercent <= 100)) {
       throw validation("Hike % must be between 0 and 100.");
     }
-    const row = index + 2;
+    const row = found.sheetRow;
     return [
       { tab: SETTINGS_TAB, a1: `B${row}`, values: [[name]] },
       {
