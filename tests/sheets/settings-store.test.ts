@@ -111,6 +111,25 @@ describe("updateSettings", () => {
     expect(portions[0].cycleLength).toBe(11);
   });
 
+  it("writes to the row a portion really sits on, even after a blank row", async () => {
+    const fake = new FakeGateway({
+      [SETTINGS_TAB]: [
+        ["Portion"],
+        ["p1", "One", "Tenant", "Count", "Amount", 11, 5],
+        [],
+        ["p2", "Two", "Tenant2", "Count2", "Amount2", 11, 5],
+        ["p3", "Three", "Tenant3", "Count3", "Amount3", 11, 5],
+      ],
+    });
+    await updateSettings(fake, [{ id: "p3", name: "Attic", cycleLength: 6, hikePercent: 8 }]);
+    const grid = fake.tabs.get(SETTINGS_TAB)!;
+    expect(grid[4]).toEqual(["p3", "Attic", "Tenant3", "Count3", "Amount3", 6, 8]);
+    expect(grid[3]).toEqual(["p2", "Two", "Tenant2", "Count2", "Amount2", 11, 5]);
+    expect(grid[2]).toEqual([]);
+    const portions = await readSettings(fake);
+    expect(portions.map((p) => p.name)).toEqual(["One", "Two", "Attic"]);
+  });
+
   it("rejects bad values before writing anything", async () => {
     const fake = await seeded();
     const before = JSON.stringify([...fake.tabs.get(SETTINGS_TAB)!]);
