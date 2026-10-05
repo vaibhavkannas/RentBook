@@ -4,8 +4,10 @@ import { AppError } from "@/lib/errors";
 import { LOG_TAB } from "@/lib/sheets/settings-store";
 import {
   getMonthView,
+  getSettings,
   logPayment,
   retryLogRow,
+  saveSettings,
   type LogPaymentInput,
   type SheetsContext,
 } from "@/lib/sheets/service";
@@ -247,5 +249,135 @@ describe("logPayment: input validation", () => {
     await expectCode(pay(ctx, { portionId: "p1", amount: 0 }), "validation");
     expect(fake.tabs.get("Schedule")).toHaveLength(5);
     expect(fake.tabs.has("Settings")).toBe(false);
+  });
+});
+
+const AUG = { year: 2026, month: 8 };
+const SEP = { year: 2026, month: 9 };
+
+describe("logPayment: overwrite keeps what is recorded", () => {
+  it("keeps the tenant and a hand-corrected count, changing only the amount", async () => {
+    const { fake, ctx } = setup();
+    await pay(ctx, { portionId: "p3", amount: 9500, newTenantName: "Gita" });
+    fake.tabs.get("Schedule")![5][8] = 7; // the owner corrects the count by hand
+    const result = await pay(ctx, { portionId: "p3", amount: 9800, overwrite: true });
+    expect(result.entry).toEqual({ tenant: "Gita", count: 7, amount: 9800 });
+    expect(cell(fake, "Schedule", "H", 6)).toBe("Gita");
+    expect(cell(fake, "Schedule", "I", 6)).toBe(7);
+    expect(cell(fake, "Schedule", "J", 6)).toBe(9800);
+  });
+
+  it("replaces the tenant and restarts the count when a new tenant is given", async () => {
+    const { ctx } = setup();
+    await pay(ctx, { portionId: "p1" });
+    const result = await pay(ctx, {
+      portionId: "p1",
+      amount: 6000,
+      overwrite: true,
+      newTenantName: "Hari",
+    });
+    expect(result.entry).toEqual({ tenant: "Hari", count: 1, amount: 6000 });
+  });
+});
+
+describe("logPayment: incomplete data in the target row", () => {
+  function sepWithoutCount() {
+    const schedule = baseSchedule();
+    (schedule[4] as unknown[])[2] = undefined; // Sep p1 count blank, amount still 5450
+    return schedule;
+  }
+
+  it("refuses to replace a cell that has an amount but no valid count, unless confirmed", async () => {
+    const { fake, ctx } = setup(sepWithoutCount());
+    const error = await expectCode(
+      pay(ctx, { portionId: "p1", month: SEP, amount: 5000 }),
+      "conflict",
+    );
+    expect(error.message).toMatch(/incomplete data in row 5/);
+    expect(cell(fake, "Schedule", "D", 5)).toBe(5450);
+
+    const result = await pay(ctx, { portionId: "p1", month: SEP, amount: 5000, overwrite: true });
+    expect(result.entry).toEqual({ tenant: "Asha", count: 3, amount: 5000 });
+    expect(cell(fake, "Schedule", "C", 5)).toBe(3);
+    expect(cell(fake, "Schedule", "D", 5)).toBe(5000);
+  });
+});
+
+describe("logPayment: total style is read from the row being written", () => {
+  it("leaves a formula total alone in an older row when the newest row has a typed total", async () => {
+    const schedule = baseSchedule();
+    (schedule[4] as unknown[])[16] = 31350; // Sep total typed; Aug total stays a formula
+    const { fake, ctx } = setup(schedule);
+    await pay(ctx, { portionId: "p4", month: AUG, amount: 8000, newTenantName: "Farah" });
+    expect(cell(fake, "Schedule", "Q", 4)).toBe("=D4+G4+J4+M4+P4");
+  });
+
+  it("writes a typed total in an older row when the newest row has a formula", async () => {
+    const schedule = baseSchedule();
+    (schedule[3] as unknown[])[16] = 27150; // Aug total typed; Sep total stays a formula
+    const { fake, ctx } = setup(schedule);
+    await pay(ctx, { portionId: "p4", month: AUG, amount: 8000, newTenantName: "Farah" });
+    expect(cell(fake, "Schedule", "Q", 4)).toBe(35150);
+    expect(cell(fake, "Schedule", "Q", 5)).toBe("=D5+G5+J5+M5+P5");
+  });
+});
+
+describe("logPayment: month rows are added in order", () => {
+  it("refuses a month earlier than the last row and changes nothing", async () => {
+    const { fake, ctx } = setup();
+    const error = await expectCode(
+      pay(ctx, { portionId: "p1", month: { year: 2026, month: 7 }, newTenantName: "Zed" }),
+      "validation",
+    );
+    expect(error.message).toMatch(/2026-09 below it/);
+    expect(fake.tabs.get("Schedule")).toHaveLength(5);
+  });
+
+  it("allows skipping ahead, then refuses the skipped month", async () => {
+    const { fake, ctx } = setup();
+    await pay(ctx, { portionId: "p1", month: { year: 2026, month: 11 } });
+    expect(cell(fake, "Schedule", "A", 6)).toBe("Nov-26");
+    await expectCode(pay(ctx, { portionId: "p1", month: OCT }), "validation");
+    expect(fake.tabs.get("Schedule")).toHaveLength(6);
+  });
+});
+
+describe("logPayment: month validation", () => {
+  it.each([
+    [2026.5, 10],
+    [2026, 13],
+    [2026, 0],
+    [1999, 5],
+  ])("rejects year %s month %s before touching the sheet", async (year, month) => {
+    const { fake, ctx } = setup();
+    await expectCode(pay(ctx, { portionId: "p1", month: { year, month } }), "validation");
+    expect(fake.tabs.has("Settings")).toBe(false);
+    expect(fake.tabs.get("Schedule")).toHaveLength(5);
+  });
+});
+
+describe("settings through the service", () => {
+  it("getSettings creates the tabs on first use and returns the portions", async () => {
+    const { fake, ctx } = setup();
+    const portions = await getSettings(ctx);
+    expect(portions).toHaveLength(5);
+    expect(fake.tabs.has("Settings")).toBe(true);
+  });
+
+  it("saveSettings applies an update and returns the fresh list", async () => {
+    const { ctx } = setup();
+    const portions = await saveSettings(ctx, [
+      { id: "p2", name: "Rear room", cycleLength: null, hikePercent: 3 },
+    ]);
+    expect(portions[1]).toMatchObject({ id: "p2", name: "Rear room", cycleLength: null, hikePercent: 3 });
+    expect(portions[0].name).toBe("First floor, single bedroom");
+  });
+
+  it("saveSettings rejects bad values with a validation error", async () => {
+    const { ctx } = setup();
+    await expectCode(
+      saveSettings(ctx, [{ id: "p1", name: "", cycleLength: 11, hikePercent: 5 }]),
+      "validation",
+    );
   });
 });

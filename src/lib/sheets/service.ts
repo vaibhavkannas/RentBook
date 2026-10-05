@@ -13,7 +13,7 @@ import type {
   YearMonth,
 } from "@/lib/domain/types";
 import { compareYm, isValidIsoDay, ymKey } from "@/lib/domain/year-month";
-import { conflict, validation } from "@/lib/errors";
+import { conflict, sheetStructure, validation } from "@/lib/errors";
 import { colLetter } from "./a1";
 import type { SheetsGateway } from "./gateway";
 import { parseSchedule, type ScheduleLayout } from "./schedule";
@@ -63,17 +63,29 @@ export async function saveSettings(
   return readSettings(ctx.gateway);
 }
 
-async function totalIsFormula(ctx: SheetsContext, layout: ScheduleLayout): Promise<boolean> {
-  const a1 = `${colLetter(layout.totalCol)}${layout.lastDataRow}`;
+/** The sheet row for `month`. If a month appears twice, the lower row on the sheet wins. */
+function findMonthRow(rows: ScheduleRow[], month: YearMonth): ScheduleRow | undefined {
+  const matches = rows.filter((row) => compareYm(row.month, month) === 0);
+  return matches[matches.length - 1];
+}
+
+/** Whether the total cell on `row` holds a formula (read with the FORMULA render). */
+async function totalIsFormula(
+  ctx: SheetsContext,
+  layout: ScheduleLayout,
+  row: number,
+): Promise<boolean> {
+  const a1 = `${colLetter(layout.totalCol)}${row}`;
   const cells = await ctx.gateway.getValues(ctx.scheduleTab, a1, "FORMULA");
   const value = cells[0]?.[0];
   return typeof value === "string" && value.startsWith("=");
 }
 
 /**
- * Returns the sheet row for `month`, creating it below the last month row when
- * missing. The new row is cloned from the last month row (so formatting and
- * the total formula carry over) with every payment cell blanked.
+ * Returns the sheet row for `month`. A missing month is added below the last
+ * month row, cloned from it (so formatting and the total formula carry over)
+ * with every payment cell blanked. Months are only ever added in order: a
+ * month that is not later than the last month row is refused.
  */
 async function ensureMonthRow(
   ctx: SheetsContext,
@@ -81,8 +93,18 @@ async function ensureMonthRow(
   month: YearMonth,
   totalHasFormula: boolean,
 ): Promise<number> {
-  const existing = loaded.rows.filter((row) => compareYm(row.month, month) === 0);
-  if (existing.length > 0) return existing[existing.length - 1].rowNumber;
+  const existing = findMonthRow(loaded.rows, month);
+  if (existing) return existing.rowNumber;
+
+  const last = loaded.rows[loaded.rows.length - 1];
+  if (!last) {
+    throw sheetStructure("The Schedule tab has no month rows to copy the format from.");
+  }
+  if (compareYm(month, last.month) <= 0) {
+    throw validation(
+      `Can't add ${ymKey(month)}: the Schedule already has ${ymKey(last.month)} below it. Month rows are added in order.`,
+    );
+  }
 
   const { layout, portions } = loaded;
   const newRow = layout.lastDataRow + 1;
@@ -135,8 +157,19 @@ export type LogPaymentOptions = {
 const MAX_AMOUNT = 10_000_000;
 
 function validateInput(input: LogPaymentInput): string | undefined {
+  const { year, month } = input.month;
+  if (
+    !Number.isInteger(year) ||
+    year < 2000 ||
+    year > 2200 ||
+    !Number.isInteger(month) ||
+    month < 1 ||
+    month > 12
+  ) {
+    throw validation("Month must be a real month.");
+  }
   if (!Number.isInteger(input.amount) || input.amount < 1 || input.amount > MAX_AMOUNT) {
-    throw validation("Amount must be a whole number of rupees, more than 0.");
+    throw validation("Amount must be a whole number of rupees from 1 to 10,000,000.");
   }
   if (!isValidIsoDay(input.dateReceived)) {
     throw validation("Date received must be a real date.");
@@ -159,12 +192,33 @@ export async function logPayment(
   const portion = loaded.portions.find((p) => p.id === input.portionId);
   if (!portion) throw validation(`Unknown portion "${input.portionId}".`);
 
+  const monthRow = findMonthRow(loaded.rows, input.month);
   const existing = findEntryForMonth(loaded.rows, portion.id, input.month);
   if (existing && !input.overwrite) {
     throw conflict(
       `${portion.name} already has ₹${existing.amount} recorded for ${ymKey(input.month)}.`,
       { existingAmount: existing.amount, existingTenant: existing.tenant },
     );
+  }
+  if (!existing && monthRow && !input.overwrite) {
+    // A cell with an amount but no valid count is not a complete entry, yet it is not empty either.
+    const cols = loaded.layout.portionCols[portion.id];
+    const rowCells =
+      (
+        await ctx.gateway.getValues(
+          ctx.scheduleTab,
+          `A${monthRow.rowNumber}:ZZ${monthRow.rowNumber}`,
+          "UNFORMATTED_VALUE",
+        )
+      )[0] ?? [];
+    const hasData = [cols.tenant, cols.count, cols.amount].some(
+      (col) => rowCells[col] !== undefined && rowCells[col] !== "",
+    );
+    if (hasData) {
+      throw conflict(
+        `${portion.name} already has incomplete data in row ${monthRow.rowNumber} of the Schedule tab. Fix or clear it in the sheet first.`,
+      );
+    }
   }
 
   const prior = findPriorEntry(loaded.rows, portion.id, input.month);
@@ -173,6 +227,10 @@ export async function logPayment(
   if (newTenant !== undefined) {
     tenant = newTenant;
     count = 1;
+  } else if (existing) {
+    // Overwriting keeps the tenant and count already recorded; only the amount changes.
+    tenant = existing.tenant;
+    count = existing.count;
   } else if (prior) {
     tenant = prior.tenant;
     count = nextCount(prior.count, portion.cycleLength);
@@ -180,7 +238,10 @@ export async function logPayment(
     throw validation("This portion has no tenant yet. Enter a tenant name.");
   }
 
-  const totalHasFormula = await totalIsFormula(ctx, loaded.layout);
+  // The total's style (formula or typed value) is read from the row being written;
+  // for a new month that is the last month row, which the new row is cloned from.
+  const totalRow = monthRow ? monthRow.rowNumber : loaded.layout.lastDataRow;
+  const totalHasFormula = await totalIsFormula(ctx, loaded.layout, totalRow);
   const rowNumber = await ensureMonthRow(ctx, loaded, input.month, totalHasFormula);
   const cols = loaded.layout.portionCols[portion.id];
   const at = (col: number) => `${colLetter(col)}${rowNumber}`;
@@ -191,7 +252,6 @@ export async function logPayment(
     { tab: ctx.scheduleTab, a1: at(cols.amount), values: [[input.amount]] },
   ];
   if (!totalHasFormula) {
-    const monthRow = loaded.rows.find((row) => row.rowNumber === rowNumber);
     const others = loaded.portions
       .filter((p) => p.id !== portion.id)
       .map((p) => monthRow?.entries[p.id]?.amount);
