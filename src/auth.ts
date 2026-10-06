@@ -1,9 +1,9 @@
 import NextAuth from "next-auth";
 import Google from "next-auth/providers/google";
-import { isAllowedEmail } from "@/lib/server/env";
+import { isAllowedEmail, parseAllowedEmails } from "@/lib/server/env";
 
 /**
- * Google sign-in, restricted to ALLOWED_EMAIL. Reads AUTH_SECRET,
+ * Google sign-in, restricted to ALLOWED_EMAILS. Reads AUTH_SECRET,
  * AUTH_GOOGLE_ID and AUTH_GOOGLE_SECRET from the environment.
  */
 export const { handlers, auth, signIn, signOut } = NextAuth({
@@ -14,7 +14,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     signIn({ profile }) {
       return isAllowedEmail(
         profile?.email,
-        process.env.ALLOWED_EMAIL,
+        parseAllowedEmails(process.env),
         profile?.email_verified === true,
       );
     },

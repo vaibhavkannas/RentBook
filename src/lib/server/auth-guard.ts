@@ -1,17 +1,26 @@
 import { auth } from "@/auth";
-import { unauthorized } from "@/lib/errors";
-import { isAllowedEmail } from "./env";
+import { forbidden, unauthorized } from "@/lib/errors";
+import { isAllowedEmail, isOwnerEmail, parseAllowedEmails } from "./env";
 
-/** Returns the signed-in owner's email, or throws an `unauthorized` AppError. */
-export async function requireUser(): Promise<string> {
+export type Viewer = { email: string; isOwner: boolean };
+
+/** The signed-in person if they are on the allow-list, otherwise null. Checked on every call. */
+export async function getViewer(): Promise<Viewer | null> {
   const session = await auth();
   const email = session?.user?.email;
-  if (!isAllowedEmail(email, process.env.ALLOWED_EMAIL)) throw unauthorized();
-  return email!;
+  const allowed = parseAllowedEmails(process.env);
+  if (!email || !isAllowedEmail(email, allowed)) return null;
+  return { email: email.trim().toLowerCase(), isOwner: isOwnerEmail(email, allowed) };
 }
 
-/** Same check for pages: true when the visitor is the signed-in owner. */
-export async function isSignedIn(): Promise<boolean> {
-  const session = await auth();
-  return isAllowedEmail(session?.user?.email, process.env.ALLOWED_EMAIL);
+export async function requireUser(): Promise<Viewer> {
+  const viewer = await getViewer();
+  if (!viewer) throw unauthorized();
+  return viewer;
+}
+
+export async function requireOwner(): Promise<Viewer> {
+  const viewer = await requireUser();
+  if (!viewer.isOwner) throw forbidden();
+  return viewer;
 }

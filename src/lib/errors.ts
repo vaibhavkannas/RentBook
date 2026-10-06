@@ -2,6 +2,7 @@ export class AppError extends Error {
   constructor(
     readonly code:
       | "unauthorized"
+      | "forbidden"
       | "validation"
       | "conflict"
       | "sheet-structure"
@@ -16,6 +17,8 @@ export class AppError extends Error {
 
 export const unauthorized = () =>
   new AppError("unauthorized", "Sign in with the allowed Google account.");
+
+export const forbidden = () => new AppError("forbidden", "Only the owner can do that.");
 
 export const validation = (message: string) => new AppError("validation", message);
 

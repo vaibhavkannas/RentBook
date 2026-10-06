@@ -1,13 +1,13 @@
 import { redirect } from "next/navigation";
 import { signIn } from "@/auth";
-import { isSignedIn } from "@/lib/server/auth-guard";
+import { getViewer } from "@/lib/server/auth-guard";
 
 export default async function SignInPage({
   searchParams,
 }: {
   searchParams: Promise<{ error?: string }>;
 }) {
-  if (await isSignedIn()) redirect("/");
+  if (await getViewer()) redirect("/");
   const { error } = await searchParams;
 
   return (

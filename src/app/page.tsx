@@ -6,7 +6,7 @@ import type { MonthView } from "@/lib/domain/types";
 import { addMonths, currentYm, parseYmKey, todayIso, ymKey } from "@/lib/domain/year-month";
 import { AppError } from "@/lib/errors";
 import { formatMonthTitle, formatRupees } from "@/lib/format";
-import { isSignedIn } from "@/lib/server/auth-guard";
+import { getViewer } from "@/lib/server/auth-guard";
 import { getSheetsContext } from "@/lib/server/context";
 import { getMonthView } from "@/lib/sheets/service";
 
@@ -15,7 +15,7 @@ export default async function Home({
 }: {
   searchParams: Promise<{ month?: string }>;
 }) {
-  if (!(await isSignedIn())) redirect("/signin");
+  if (!(await getViewer())) redirect("/signin");
 
   const { month: param } = await searchParams;
   const now = new Date();

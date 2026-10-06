@@ -3,12 +3,14 @@ import { redirect } from "next/navigation";
 import SettingsForm from "@/components/SettingsForm";
 import type { PortionConfig } from "@/lib/domain/types";
 import { AppError } from "@/lib/errors";
-import { isSignedIn } from "@/lib/server/auth-guard";
+import { getViewer } from "@/lib/server/auth-guard";
 import { getSheetsContext } from "@/lib/server/context";
 import { getSettings } from "@/lib/sheets/service";
 
 export default async function SettingsPage() {
-  if (!(await isSignedIn())) redirect("/signin");
+  const viewer = await getViewer();
+  if (!viewer) redirect("/signin");
+  if (!viewer.isOwner) redirect("/");
 
   let portions: PortionConfig[] | null = null;
   let problem: string | null = null;

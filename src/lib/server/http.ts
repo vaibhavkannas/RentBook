@@ -3,6 +3,7 @@ import { AppError, validation } from "@/lib/errors";
 
 const STATUS: Record<AppError["code"], number> = {
   unauthorized: 401,
+  forbidden: 403,
   validation: 400,
   conflict: 409,
   "sheet-structure": 422,

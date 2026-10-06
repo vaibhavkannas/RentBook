@@ -1,5 +1,12 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { conflict, configError, sheetStructure, unauthorized, validation } from "@/lib/errors";
+import {
+  conflict,
+  configError,
+  forbidden,
+  sheetStructure,
+  unauthorized,
+  validation,
+} from "@/lib/errors";
 import { handle, parseJson } from "@/lib/server/http";
 import { logRetryBody, paymentBody, settingsBody } from "@/lib/server/schemas";
 
@@ -14,6 +21,7 @@ describe("handle", () => {
 
   it.each([
     [unauthorized(), 401, "unauthorized"],
+    [forbidden(), 403, "forbidden"],
     [validation("bad"), 400, "validation"],
     [conflict("dup", { existingAmount: 5 }), 409, "conflict"],
     [sheetStructure("moved"), 422, "sheet-structure"],
