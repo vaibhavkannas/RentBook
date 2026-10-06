@@ -9,6 +9,15 @@ function setup(ttlMs = 15_000) {
   return { cache, load, advance: (ms: number) => (clock += ms), set: (t: number) => (clock = t) };
 }
 
+/** Loads that finish only when the test says so, so several can be in flight at once. */
+function manual() {
+  let clock = 1_000;
+  const loads: Array<(n: number) => void> = [];
+  const load = () => new Promise<number>((resolve) => void loads.push(resolve));
+  const cache = createSnapshotCache(load, 15_000, () => clock);
+  return { cache, loads, set: (t: number) => (clock = t) };
+}
+
 describe("createSnapshotCache", () => {
   it("serves the cached value inside the lifetime and reloads after it", async () => {
     const { cache, load, advance } = setup();
@@ -45,6 +54,44 @@ describe("createSnapshotCache", () => {
     await first;
     expect((await cache.get()).n).toBe(2);
     expect(load).toHaveBeenCalledTimes(2);
+  });
+
+  it("a get right after invalidate starts a new load rather than joining one begun before the write", async () => {
+    const { cache, loads } = manual();
+    const before = cache.get();
+    cache.invalidate();
+    const after = cache.get();
+    expect(loads).toHaveLength(2);
+    loads[0](1);
+    loads[1](2);
+    expect(await before).toBe(1);
+    expect(await after).toBe(2);
+    // Only the load that began after the write is kept.
+    expect(await cache.get()).toBe(2);
+    expect(loads).toHaveLength(2);
+  });
+
+  it("does not join a load that began before the time the caller needs data from", async () => {
+    const { cache, loads, set } = manual();
+    const older = cache.get();
+    set(2_000);
+    const newer = cache.get(1_500);
+    expect(loads).toHaveLength(2);
+    loads[0](1);
+    loads[1](2);
+    expect(await older).toBe(1);
+    expect(await newer).toBe(2);
+  });
+
+  it("joins a load already in flight when it began late enough", async () => {
+    const { cache, loads, set } = manual();
+    const first = cache.get();
+    set(2_000);
+    const second = cache.get(500);
+    expect(loads).toHaveLength(1);
+    loads[0](1);
+    expect(await first).toBe(1);
+    expect(await second).toBe(1);
   });
 
   it("does not cache a failed load", async () => {

@@ -72,3 +72,42 @@ describe("cached month views", () => {
     expect((await getMonthView(ctx, OCT, { minFetchedAt: Date.now() + 1 })).cards[0].status).toBe("paid");
   });
 });
+
+describe("writes that fail part-way", () => {
+  const share = (fake: FakeGateway) =>
+    ({ gateway: fake, scheduleTab: "Schedule", totalHeader: TOTAL_HEADER }) as SheetsContext;
+
+  it("clear the cache when a log is refused, so the next view is fresh", async () => {
+    const { fake, ctx } = setup();
+    await getMonthView(ctx, OCT);
+    await logPayment(share(fake), { month: OCT, portionId: "p1", amount: 5450, dateReceived: "2026-10-05" }, OPTIONS);
+    await expect(
+      logPayment(ctx, { month: OCT, portionId: "p1", amount: 1, dateReceived: "2026-10-05" }, OPTIONS),
+    ).rejects.toMatchObject({ code: "conflict" });
+    expect((await getMonthView(ctx, OCT)).cards[0].status).toBe("paid");
+  });
+
+  it("clear the cache when an undo is refused, so the next view is fresh", async () => {
+    const { fake, ctx } = setup();
+    const other = share(fake);
+    await logPayment(other, { month: OCT, portionId: "p1", amount: 5450, dateReceived: "2026-10-05" }, OPTIONS);
+    expect((await getMonthView(ctx, OCT)).cards[0].status).toBe("paid");
+    await undoPayment(other, { month: OCT, portionId: "p1", expected: { tenant: "Asha", count: 4, amount: 5450 } }, OPTIONS);
+    await expect(
+      undoPayment(ctx, { month: OCT, portionId: "p1", expected: { tenant: "Asha", count: 4, amount: 5450 } }, OPTIONS),
+    ).rejects.toMatchObject({ code: "conflict" });
+    expect((await getMonthView(ctx, OCT)).cards[0].status).toBe("pending");
+  });
+
+  it("clear the cache when saving settings fails, so the next view is fresh", async () => {
+    const { fake, ctx } = setup();
+    await getMonthView(ctx, OCT);
+    await saveSettings(share(fake), [{ id: "p1", name: "Other", cycleLength: 11, hikePercent: 5 }]);
+    fake.failOn.add("updateValues");
+    await expect(
+      saveSettings(ctx, [{ id: "p1", name: "Mine", cycleLength: 11, hikePercent: 5 }]),
+    ).rejects.toThrow();
+    fake.failOn.delete("updateValues");
+    expect((await getMonthView(ctx, OCT)).cards[0].name).toBe("Other");
+  });
+});
