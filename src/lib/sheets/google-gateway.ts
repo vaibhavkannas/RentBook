@@ -21,11 +21,24 @@ export class GoogleSheetsGateway implements SheetsGateway {
   ) {}
 
   static fromServiceAccount(serviceAccountJson: string, spreadsheetId: string) {
-    let credentials: { client_email?: string };
+    let credentials: { client_email?: string; private_key?: string } | null;
     try {
       credentials = JSON.parse(serviceAccountJson);
     } catch {
-      throw configError("GOOGLE_SERVICE_ACCOUNT_JSON is not valid JSON.");
+      // The parse error is dropped on purpose: its text can quote part of the key.
+      throw configError(
+        "GOOGLE_SERVICE_ACCOUNT_JSON is not valid JSON. Paste the key file as one line, without surrounding quotes.",
+      );
+    }
+    if (
+      !credentials ||
+      typeof credentials !== "object" ||
+      typeof credentials.client_email !== "string" ||
+      typeof credentials.private_key !== "string"
+    ) {
+      throw configError(
+        "GOOGLE_SERVICE_ACCOUNT_JSON must be the service account key file, with client_email and private_key.",
+      );
     }
     const authClient = new googleAuth.GoogleAuth({ credentials, scopes: [SCOPE] });
     return new GoogleSheetsGateway(

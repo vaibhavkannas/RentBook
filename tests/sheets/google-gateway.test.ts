@@ -109,11 +109,29 @@ describe("GoogleSheetsGateway", () => {
         fields: "userEnteredValue",
       },
     });
-    expect(requests![3].updateCells!.rows![0].values![0]).toEqual({
-      userEnteredValue: { stringValue: "Oct-26" },
+    expect(requests![2].updateCells).toEqual({
+      range: { sheetId: 11, startRowIndex: 5, endRowIndex: 6, startColumnIndex: 2, endColumnIndex: 3 },
+      rows: [{ values: [{}] }],
+      fields: "userEnteredValue",
     });
-    expect(requests![4].updateCells!.rows![0].values![0]).toEqual({
-      userEnteredValue: { numberValue: 42 },
+    expect(requests![3].updateCells).toEqual({
+      range: { sheetId: 11, startRowIndex: 5, endRowIndex: 6, startColumnIndex: 0, endColumnIndex: 1 },
+      rows: [{ values: [{ userEnteredValue: { stringValue: "Oct-26" } }] }],
+      fields: "userEnteredValue",
+    });
+    expect(requests![4].updateCells).toEqual({
+      range: { sheetId: 11, startRowIndex: 5, endRowIndex: 6, startColumnIndex: 3, endColumnIndex: 4 },
+      rows: [{ values: [{ userEnteredValue: { numberValue: 42 } }] }],
+      fields: "userEnteredValue",
+    });
+  });
+
+  it("adds a tab with one addSheet request", async () => {
+    const { api, batchUpdate } = mockApi();
+    await new GoogleSheetsGateway(api, "sheet-id").addTab("Settings");
+    expect(batchUpdate).toHaveBeenCalledWith({
+      spreadsheetId: "sheet-id",
+      requestBody: { requests: [{ addSheet: { properties: { title: "Settings" } } }] },
     });
   });
 
@@ -145,7 +163,33 @@ describe("GoogleSheetsGateway", () => {
     expect((error as AppError).message).toContain("bot@proj.iam.gserviceaccount.com");
   });
 
-  it("rejects a service account key that is not JSON", () => {
-    expect(() => GoogleSheetsGateway.fromServiceAccount("{oops", "id")).toThrow(/not valid JSON/);
+  it("rejects a service account key that is not JSON, with a hint, without echoing the key", () => {
+    expect(() => GoogleSheetsGateway.fromServiceAccount("{oops", "id")).toThrow(
+      /not valid JSON.*without surrounding quotes/,
+    );
+    let message = "";
+    try {
+      GoogleSheetsGateway.fromServiceAccount('{"private_key": "SECRET-KEY-TEXT", oops', "id");
+    } catch (error) {
+      message = (error as Error).message;
+    }
+    expect(message).toMatch(/not valid JSON/);
+    expect(message).not.toContain("SECRET-KEY-TEXT");
+  });
+
+  it("rejects JSON that is not a service account key", () => {
+    for (const text of ["null", "42", '"text"', "{}", '{"client_email":"bot@proj.iam.gserviceaccount.com"}']) {
+      expect(() => GoogleSheetsGateway.fromServiceAccount(text, "id")).toThrow(
+        /client_email and private_key/,
+      );
+    }
+  });
+
+  it("accepts a key with client_email and private_key without calling Google", () => {
+    const key = JSON.stringify({
+      client_email: "bot@proj.iam.gserviceaccount.com",
+      private_key: "-----BEGIN PRIVATE KEY-----\nabc\n-----END PRIVATE KEY-----\n",
+    });
+    expect(GoogleSheetsGateway.fromServiceAccount(key, "id")).toBeInstanceOf(GoogleSheetsGateway);
   });
 });
