@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { PortionCard } from "@/lib/domain/types";
 import { formatRupees } from "@/lib/format";
 import { sheetKey } from "@/lib/month-nav";
 import PaymentSheet, { type SheetMode } from "./PaymentSheet";
+import UndoSheet from "./UndoSheet";
 
 type Props = {
   monthKey: string;
@@ -13,7 +14,15 @@ type Props = {
   defaultDate: string;
 };
 
-type Active = { mode: SheetMode; portionId: string | null } | null;
+/**
+ * The undo sheet keeps the paid card, month key and label as they were when Undo was tapped. After
+ * a successful undo the refreshed card is no longer paid, but the sheet may still have to show its
+ * "Retry log entry" step, and it must only ever undo the entry the person was shown.
+ */
+type Active =
+  | { mode: SheetMode; portionId: string | null }
+  | { mode: "undo"; portionId: string; card: PortionCard; monthKey: string; monthLabel: string }
+  | null;
 
 const PILL = {
   paid: "bg-success-bg text-success-ink",
@@ -29,6 +38,13 @@ const PILL_LABEL = {
 
 export default function PortionBoard({ monthKey, monthLabel, cards, defaultDate }: Props) {
   const [active, setActive] = useState<Active>(null);
+  const [toast, setToast] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!toast) return;
+    const timer = setTimeout(() => setToast(null), 4000);
+    return () => clearTimeout(timer);
+  }, [toast]);
 
   return (
     <>
@@ -86,13 +102,32 @@ export default function PortionBoard({ monthKey, monthLabel, cards, defaultDate 
                     </button>
                   )}
                   {card.status === "paid" && (
-                    <button
-                      type="button"
-                      onClick={() => setActive({ mode: "edit", portionId: card.portionId })}
-                      className="min-h-11 flex-1 rounded-xl border border-control px-4 font-medium"
-                    >
-                      Edit amount
-                    </button>
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => setActive({ mode: "edit", portionId: card.portionId })}
+                        className="min-h-11 flex-1 rounded-xl border border-control px-4 font-medium"
+                      >
+                        Edit amount
+                      </button>
+                      {card.undoBlockedReason === null && (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setActive({
+                              mode: "undo",
+                              portionId: card.portionId,
+                              card,
+                              monthKey,
+                              monthLabel,
+                            })
+                          }
+                          className="min-h-11 rounded-xl px-4 font-medium text-danger-ink underline"
+                        >
+                          Undo
+                        </button>
+                      )}
+                    </>
                   )}
                   {card.status === "needs-tenant" && (
                     <button
@@ -104,6 +139,10 @@ export default function PortionBoard({ monthKey, monthLabel, cards, defaultDate 
                     </button>
                   )}
                 </div>
+
+                {card.status === "paid" && card.undoBlockedReason && (
+                  <p className="mt-2 text-sm text-muted">{card.undoBlockedReason}</p>
+                )}
               </article>
             </li>
           );
@@ -120,17 +159,36 @@ export default function PortionBoard({ monthKey, monthLabel, cards, defaultDate 
         </button>
       </div>
 
-      {active && (
-        <PaymentSheet
-          key={sheetKey(monthKey, active.mode, active.portionId)}
-          mode={active.mode}
-          monthKey={monthKey}
-          monthLabel={monthLabel}
-          cards={cards}
-          initialPortionId={active.portionId}
-          defaultDate={defaultDate}
-          onClose={() => setActive(null)}
-        />
+      {active &&
+        (active.mode === "undo" ? (
+          <UndoSheet
+            key={sheetKey(active.monthKey, "undo", active.portionId)}
+            monthKey={active.monthKey}
+            monthLabel={active.monthLabel}
+            card={active.card}
+            onClose={() => setActive(null)}
+            onDone={setToast}
+          />
+        ) : (
+          <PaymentSheet
+            key={sheetKey(monthKey, active.mode, active.portionId)}
+            mode={active.mode}
+            monthKey={monthKey}
+            monthLabel={monthLabel}
+            cards={cards}
+            initialPortionId={active.portionId}
+            defaultDate={defaultDate}
+            onClose={() => setActive(null)}
+          />
+        ))}
+
+      {toast && (
+        <p
+          role="status"
+          className="fixed inset-x-4 bottom-4 z-50 mx-auto max-w-md rounded-xl bg-foreground px-4 py-3 text-center text-sm text-background"
+        >
+          {toast}
+        </p>
       )}
     </>
   );

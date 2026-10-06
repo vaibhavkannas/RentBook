@@ -16,7 +16,8 @@ export default async function Home({
 }: {
   searchParams: Promise<{ month?: string }>;
 }) {
-  if (!(await getViewer())) redirect("/signin");
+  const viewer = await getViewer();
+  if (!viewer) redirect("/signin");
 
   const { month: param } = await searchParams;
   const now = new Date();
@@ -80,20 +81,30 @@ export default async function Home({
         )}
       </MonthFrame>
 
-      <footer className="mt-6 flex items-center justify-between text-sm">
-        <Link href="/settings" className="grid min-h-11 place-items-center text-muted underline">
-          Portion settings
-        </Link>
-        <form
-          action={async () => {
-            "use server";
-            await signOut({ redirectTo: "/signin" });
-          }}
-        >
-          <button type="submit" className="min-h-11 text-muted underline">
-            Sign out
-          </button>
-        </form>
+      <footer className="mt-6 space-y-1 text-sm">
+        <p className="break-words text-muted">Signed in as {viewer.email}</p>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <Link href="/activity" className="grid min-h-11 place-items-center text-muted underline">
+              Activity
+            </Link>
+            {viewer.isOwner && (
+              <Link href="/settings" className="grid min-h-11 place-items-center text-muted underline">
+                Portion settings
+              </Link>
+            )}
+          </div>
+          <form
+            action={async () => {
+              "use server";
+              await signOut({ redirectTo: "/signin" });
+            }}
+          >
+            <button type="submit" className="min-h-11 text-muted underline">
+              Sign out
+            </button>
+          </form>
+        </div>
       </footer>
     </main>
   );
