@@ -139,14 +139,27 @@ Do not set `NODE_TLS_REJECT_UNAUTHORIZED=0`. It turns off certificate checking f
 
 Everyone on the list can log, edit and undo payments and read the Activity screen. Only the first address in `ALLOWED_EMAILS` (the owner) can change Portion settings.
 
+Try all of this on a test copy of the Sheet first (step 1), then repeat it for the live Sheet.
+
 1. In Google Cloud open the Google Auth Platform, then Audience, then Test users, then Add users, and add their Google address.
-2. Add the same address to `ALLOWED_EMAILS` in `.env.local` and in Vercel, then redeploy. Separate addresses with commas and keep the owner first.
+2. Set `ALLOWED_EMAILS` in `.env.local` and in Vercel, then redeploy. Separate addresses with commas, for example `owner@example.com, member@example.com`. The first address is the owner. If the deployment still has only the older `ALLOWED_EMAIL`, follow "Moving from `ALLOWED_EMAIL` to `ALLOWED_EMAILS`" below.
 3. They open the app, sign in, and click through the "unverified app" warning (Advanced, then continue).
 4. They need no access to the Sheet. The app writes as the service account.
 
 Gmail ignores dots and anything after a plus sign, so any spelling of the same Gmail address works in `ALLOWED_EMAILS`. Google Cloud may show the address in its own spelling in the Test users list.
 
 To remove someone, delete the address from `ALLOWED_EMAILS` and redeploy. They are locked out on their next request, even if their session is still valid. You can also remove them from Test users.
+
+### Moving from `ALLOWED_EMAIL` to `ALLOWED_EMAILS`
+
+Older deployments have a single `ALLOWED_EMAIL`. The app still reads it, but only when `ALLOWED_EMAILS` is empty or missing. If `ALLOWED_EMAILS` exists, it wins and `ALLOWED_EMAIL` is ignored. To move over without locking yourself out, in both `.env.local` and Vercel:
+
+1. Create `ALLOWED_EMAILS` with your own address first, because the first address is the owner and the only person who can change Portion settings.
+2. Add the new people after it, separated by commas.
+3. Delete `ALLOWED_EMAIL`.
+4. Redeploy on Vercel, and restart `npm run dev` locally.
+
+The first time the new version loads, it adds two new header columns, "Logged by" and "Action", to the Payments Log tab by itself. Older log rows keep those two cells empty and show without an action on the Activity screen. You do not need to edit the tab.
 
 ## 7. Deploy to Vercel
 
