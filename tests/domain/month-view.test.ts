@@ -103,9 +103,9 @@ describe("undoBlockedReason", () => {
     expect(view.cards[0].undoBlockedReason).toBe(LATER_ENTRY_REASON);
   });
 
-  it("is null for a card that is not paid", () => {
-    const rows = [rowFor(9, entry, 4)];
-    const view = deriveMonthView(rows, portions, { year: 2026, month: 10 });
+  it("is null for a card that is not paid, even when a later month has an entry", () => {
+    const rows = [rowFor(8, entry, 3), rowFor(9, null, 4), rowFor(10, entry, 5)];
+    const view = deriveMonthView(rows, portions, { year: 2026, month: 9 });
     expect(view.cards[0].status).toBe("pending");
     expect(view.cards[0].undoBlockedReason).toBeNull();
   });

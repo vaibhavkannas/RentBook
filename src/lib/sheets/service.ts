@@ -339,7 +339,7 @@ export async function undoPayment(
   const existing = monthRow?.entries[portion.id];
   if (!monthRow || !existing) {
     throw conflict(
-      `${portion.name} has no payment recorded for ${ymKey(input.month)} any more. Refresh the page.`,
+      `Nothing to undo. ${portion.name} has no payment recorded for ${ymKey(input.month)} any more. Refresh the page.`,
     );
   }
   const { tenant, count, amount } = input.expected;

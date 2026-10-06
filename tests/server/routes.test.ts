@@ -16,6 +16,7 @@ vi.mock("@/lib/sheets/service", async (importOriginal) => ({
   undoPayment,
 }));
 
+import { conflict } from "@/lib/errors";
 import { POST as postPayment } from "@/app/api/payments/route";
 import { POST as postUndo } from "@/app/api/payments/undo/route";
 import { PUT as putSettings } from "@/app/api/settings/route";
@@ -130,7 +131,30 @@ describe("POST /api/payments/undo", () => {
     undoPayment.mockResolvedValue({ removed: good.expected, logWritten: true, logRow: [] });
     const res = await postUndo(undoRequest(good));
     expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({
+      ok: true,
+      removed: good.expected,
+      logWritten: true,
+      logRow: [],
+    });
+    expect(undoPayment).toHaveBeenCalledOnce();
+    expect(undoPayment.mock.calls[0][1]).toEqual({
+      month: { year: 2026, month: 10 },
+      portionId: "p1",
+      expected: good.expected,
+    });
     expect(undoPayment.mock.calls[0][2]).toMatchObject({ loggedBy: "member@example.com" });
+  });
+
+  it("answers 409 when the service reports a conflict", async () => {
+    signedInAs("member@example.com");
+    undoPayment.mockRejectedValue(conflict("Changed by someone else."));
+    const res = await postUndo(undoRequest(good));
+    expect(res.status).toBe(409);
+    expect((await res.json()).error).toMatchObject({
+      code: "conflict",
+      message: "Changed by someone else.",
+    });
   });
 
   it("rejects a malformed body", async () => {

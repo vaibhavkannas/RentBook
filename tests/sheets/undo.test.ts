@@ -25,14 +25,28 @@ function setup(schedule: unknown[][] = baseSchedule()) {
 const pay = (ctx: SheetsContext, input: Partial<LogPaymentInput> & { portionId: string }) =>
   logPayment(ctx, { month: OCT, amount: 5450, dateReceived: "2026-10-05", ...input }, OPTIONS);
 
-async function code(promise: Promise<unknown>) {
+async function rejection(promise: Promise<unknown>) {
   const error = await promise.then(
     () => null,
     (e: unknown) => e,
   );
   expect(error).toBeInstanceOf(AppError);
-  return (error as AppError).code;
+  return error as AppError;
 }
+
+const code = async (promise: Promise<unknown>) => (await rejection(promise)).code;
+
+const UNDONE_ROW = [
+  "2026-10-05T04:30:00.000Z",
+  "2026-10",
+  "First floor, single bedroom",
+  "Asha",
+  5450,
+  4,
+  "",
+  "member@example.com",
+  "Undone",
+];
 
 const blank = (value: unknown) => value === undefined || value === "";
 
@@ -55,17 +69,8 @@ describe("undoPayment", () => {
     expect((await getMonthView(ctx, OCT)).cards[0].status).toBe("pending");
 
     const log = fake.tabs.get(LOG_TAB)!;
-    expect(log[log.length - 1]).toEqual([
-      "2026-10-05T04:30:00.000Z",
-      "2026-10",
-      "First floor, single bedroom",
-      "Asha",
-      5450,
-      4,
-      "",
-      "member@example.com",
-      "Undone",
-    ]);
+    expect(log[log.length - 1]).toEqual(UNDONE_ROW);
+    expect(result.logRow).toEqual(UNDONE_ROW);
   });
 
   it("rewrites a typed total without the undone amount", async () => {
@@ -85,31 +90,36 @@ describe("undoPayment", () => {
     expect(cell(fake, "Schedule", "Q", 6)).toBe(13300);
   });
 
-  it("refuses when the stored entry differs from what the person saw", async () => {
+  it.each([
+    ["tenant", { tenant: "Zed", count: 4, amount: 5450 }],
+    ["count", { tenant: "Asha", count: 5, amount: 5450 }],
+    ["amount", { tenant: "Asha", count: 4, amount: 9999 }],
+  ])("refuses when the stored %s differs from what the person saw", async (_field, expected) => {
     const { fake, ctx } = setup();
     await pay(ctx, { portionId: "p1" });
-    const before = structuredClone(fake.tabs.get("Schedule"));
+    const scheduleBefore = structuredClone(fake.tabs.get("Schedule"));
+    const logBefore = structuredClone(fake.tabs.get(LOG_TAB));
+
     const failure = await code(
-      undoPayment(
-        ctx,
-        { month: OCT, portionId: "p1", expected: { tenant: "Asha", count: 4, amount: 9999 } },
-        OPTIONS,
-      ),
+      undoPayment(ctx, { month: OCT, portionId: "p1", expected }, OPTIONS),
     );
+
     expect(failure).toBe("conflict");
-    expect(fake.tabs.get("Schedule")).toEqual(before);
+    expect(fake.tabs.get("Schedule")).toEqual(scheduleBefore);
+    expect(fake.tabs.get(LOG_TAB)).toEqual(logBefore);
   });
 
   it("refuses when there is nothing to undo", async () => {
     const { ctx } = setup();
-    const failure = await code(
+    const error = await rejection(
       undoPayment(
         ctx,
         { month: OCT, portionId: "p1", expected: { tenant: "Asha", count: 4, amount: 5450 } },
         OPTIONS,
       ),
     );
-    expect(failure).toBe("conflict");
+    expect(error.code).toBe("conflict");
+    expect(error.message).toMatch(/^Nothing to undo\./);
   });
 
   it("refuses to undo a month when a later month has an entry", async () => {
@@ -143,12 +153,49 @@ describe("undoPayment", () => {
     const { fake, ctx } = setup();
     await pay(ctx, { portionId: "p1" });
     fake.failOn.add("appendRow");
+    fake.calls = [];
     const result = await undoPayment(
       ctx,
       { month: OCT, portionId: "p1", expected: { tenant: "Asha", count: 4, amount: 5450 } },
       OPTIONS,
     );
     expect(result.logWritten).toBe(false);
+    expect(result.logRow).toEqual(UNDONE_ROW);
+    expect(fake.calls.filter((call) => call === "appendRow")).toHaveLength(3);
     expect(blank(cell(fake, "Schedule", "D", 6))).toBe(true);
+  });
+
+  it("rejects a month that is not a real month and changes nothing", async () => {
+    const { fake, ctx } = setup();
+    await pay(ctx, { portionId: "p1" });
+    const scheduleBefore = structuredClone(fake.tabs.get("Schedule"));
+    const failure = await code(
+      undoPayment(
+        ctx,
+        {
+          month: { year: 2026, month: 13 },
+          portionId: "p1",
+          expected: { tenant: "Asha", count: 4, amount: 5450 },
+        },
+        OPTIONS,
+      ),
+    );
+    expect(failure).toBe("validation");
+    expect(fake.tabs.get("Schedule")).toEqual(scheduleBefore);
+  });
+
+  it("rejects a portion that does not exist and changes nothing", async () => {
+    const { fake, ctx } = setup();
+    await pay(ctx, { portionId: "p1" });
+    const scheduleBefore = structuredClone(fake.tabs.get("Schedule"));
+    const failure = await code(
+      undoPayment(
+        ctx,
+        { month: OCT, portionId: "nope", expected: { tenant: "Asha", count: 4, amount: 5450 } },
+        OPTIONS,
+      ),
+    );
+    expect(failure).toBe("validation");
+    expect(fake.tabs.get("Schedule")).toEqual(scheduleBefore);
   });
 });
