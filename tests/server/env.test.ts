@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { isAllowedEmail, isOwnerEmail, parseAllowedEmails, readEnv } from "@/lib/server/env";
+import {
+  canonicalEmail,
+  isAllowedEmail,
+  isOwnerEmail,
+  parseAllowedEmails,
+  readEnv,
+} from "@/lib/server/env";
 
 describe("parseAllowedEmails", () => {
   it("splits on commas, spaces and semicolons, lower-cases, and removes duplicates", () => {
@@ -82,5 +88,44 @@ describe("isOwnerEmail", () => {
     expect(isOwnerEmail("member@example.com", allowed)).toBe(false);
     expect(isOwnerEmail(undefined, allowed)).toBe(false);
     expect(isOwnerEmail("owner@example.com", [])).toBe(false);
+  });
+});
+
+describe("canonicalEmail", () => {
+  it("lower-cases and trims", () => {
+    expect(canonicalEmail("  Owner@Example.com ")).toBe("owner@example.com");
+  });
+
+  it("ignores dots and +tags in Gmail and Googlemail addresses", () => {
+    expect(canonicalEmail("First.Last.S@gmail.com")).toBe("firstlasts@gmail.com");
+    expect(canonicalEmail("a.b+rent@googlemail.com")).toBe("ab@gmail.com");
+  });
+
+  it("keeps dots and +tags for other domains", () => {
+    expect(canonicalEmail("a.b+c@example.com")).toBe("a.b+c@example.com");
+  });
+
+  it("leaves text without an @ alone", () => {
+    expect(canonicalEmail(" Not An Email ")).toBe("not an email");
+  });
+});
+
+describe("Gmail variants in the allow-list", () => {
+  it("treats dot and plus variants as the same account", () => {
+    const allowed = ["firstlast.s@gmail.com", "owner@example.com"];
+    expect(isAllowedEmail("first.last.s@gmail.com", allowed)).toBe(true);
+    expect(isAllowedEmail("Firstlast.S+rent@gmail.com", allowed)).toBe(true);
+    expect(isAllowedEmail("owner.x@example.com", allowed)).toBe(false);
+  });
+
+  it("recognises the owner under a different spelling", () => {
+    expect(isOwnerEmail("first.last@gmail.com", ["firstlast@gmail.com", "b@example.com"])).toBe(true);
+    expect(isOwnerEmail("b@example.com", ["firstlast@gmail.com", "b@example.com"])).toBe(false);
+  });
+
+  it("keeps only the first spelling of the same Gmail account when parsing", () => {
+    expect(
+      parseAllowedEmails({ ALLOWED_EMAILS: "first.last@gmail.com, firstlast@gmail.com, x@example.com" }),
+    ).toEqual(["first.last@gmail.com", "x@example.com"]);
   });
 });

@@ -144,6 +144,8 @@ Everyone on the list can log, edit and undo payments and read the Activity scree
 3. They open the app, sign in, and click through the "unverified app" warning (Advanced, then continue).
 4. They need no access to the Sheet. The app writes as the service account.
 
+Gmail ignores dots and anything after a plus sign, so any spelling of the same Gmail address works in `ALLOWED_EMAILS`. Google Cloud may show the address in its own spelling in the Test users list.
+
 To remove someone, delete the address from `ALLOWED_EMAILS` and redeploy. They are locked out on their next request, even if their session is still valid. You can also remove them from Test users.
 
 ## 7. Deploy to Vercel

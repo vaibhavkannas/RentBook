@@ -5,7 +5,7 @@ export type AppEnv = {
   sheetId: string;
   scheduleTab: string;
   totalHeader: string;
-  /** Lower-cased, without duplicates. The first address is the owner. */
+  /** Lower-cased, without duplicates (Gmail dot and plus variants count as one). The first address is the owner. */
   allowedEmails: string[];
 };
 
@@ -21,7 +21,13 @@ export function parseAllowedEmails(env: Record<string, string | undefined>): str
     .split(/[\s,;]+/)
     .map((email) => email.trim().toLowerCase())
     .filter(Boolean);
-  return [...new Set(emails)];
+  const seen = new Set<string>();
+  return emails.filter((email) => {
+    const key = canonicalEmail(email);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 /** Reads and checks the environment. Lists every missing variable at once. */
@@ -41,7 +47,18 @@ export function readEnv(env: Record<string, string | undefined>): AppEnv {
   };
 }
 
-const norm = (value: string) => value.trim().toLowerCase();
+const GMAIL_DOMAINS = new Set(["gmail.com", "googlemail.com"]);
+
+/** Lower-case form used to compare addresses. Gmail ignores dots and "+tags", so they are removed. */
+export function canonicalEmail(email: string): string {
+  const value = email.trim().toLowerCase();
+  const at = value.lastIndexOf("@");
+  if (at === -1) return value;
+  const domain = value.slice(at + 1);
+  if (!GMAIL_DOMAINS.has(domain)) return value;
+  const local = value.slice(0, at).split("+")[0].replace(/\./g, "");
+  return `${local}@gmail.com`;
+}
 
 /** True only for a listed address that Google has verified. */
 export function isAllowedEmail(
@@ -52,8 +69,8 @@ export function isAllowedEmail(
   if (!email || allowedEmails.length === 0 || emailVerified === false || emailVerified === null) {
     return false;
   }
-  const wanted = norm(email);
-  return allowedEmails.some((allowed) => norm(allowed) === wanted);
+  const wanted = canonicalEmail(email);
+  return allowedEmails.some((allowed) => canonicalEmail(allowed) === wanted);
 }
 
 /** The owner is the first listed address. */
@@ -61,5 +78,5 @@ export function isOwnerEmail(
   email: string | null | undefined,
   allowedEmails: readonly string[],
 ): boolean {
-  return !!email && allowedEmails.length > 0 && norm(allowedEmails[0]) === norm(email);
+  return !!email && allowedEmails.length > 0 && canonicalEmail(allowedEmails[0]) === canonicalEmail(email);
 }
