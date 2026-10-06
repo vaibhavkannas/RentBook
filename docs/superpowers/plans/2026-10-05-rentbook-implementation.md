@@ -2,6 +2,8 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+> **Status note (2026-10-06):** this plan has been executed. Where it differs from the code in the repository, the repository wins: review and fix rounds changed several of the code blocks below (the test counts, Google error handling, the payment write path, the settings form, the UI components, the typecheck script). Treat the code blocks as the starting point, not the final state.
+
 **Goal:** Build a phone-first web app that records monthly rent receipts for five building portions and writes them into the owner's existing Google Sheet.
 
 **Architecture:** Next.js (App Router) on Vercel. Pure rent rules and a thin Sheets gateway sit behind server route handlers. The Google Sheet is the only datastore; a service account writes single cells and appends a month row cloned from the last one. Google sign-in (Auth.js) is restricted to one email.
@@ -117,6 +119,8 @@ npx create-next-app@16.3.8 . --ts --tailwind --eslint --app --src-dir --use-npm 
 ```
 
 Expected: "Success! Created RentBook" (or similar). `docs/` is still there. If the command refuses because the folder is not empty, stop and report; do not delete anything.
+
+If it refuses because the folder name has capital letters (npm package names must be lowercase and `RentBook` is not), run the same command with the same flags plus `--disable-git` in a new lowercase folder, then copy its files into the repo root. Do not delete anything.
 
 - [ ] **Step 3: Install dependencies**
 
@@ -5076,7 +5080,7 @@ Do this on the phone, against the deployed app pointing at the TEST COPY. Tick e
   - In Portion settings tick "Count never resets" on a portion, log it, and confirm the count keeps going past its old cycle length. Restore the setting.
 
 - [ ] **Step 7: Failure behavior**
-  - Turn on airplane mode, try to save: the sheet shows "Couldn't reach the server..." and nothing is written.
+  - Turn on airplane mode, try to save: the sheet shows "Couldn't confirm that the save went through..." and asks you to refresh before trying again.
   - Remove the service account's access to the copy, reload: the page shows the access message naming the service account email. Restore access.
 
 - [ ] **Step 8: Install on the phone**
@@ -5087,6 +5091,7 @@ Do this on the phone, against the deployed app pointing at the TEST COPY. Tick e
   - Take a fresh backup of the live Sheet (File, Make a copy).
   - Share the live Sheet with the service account. In Vercel, change `SHEET_ID` to the live Sheet's ID and, if the tab name differs, `SCHEDULE_TAB`. Redeploy.
   - Run `npm run recon` locally with `.env.local` pointed at the live Sheet and confirm "No problems found" before saving anything.
+  - Open Portion settings on the live Sheet and set each portion's cycle length (or "Count never resets") and hike percent before the first payment: the live Sheet gets a fresh `Settings` tab with default values, and the app cannot edit a payment count.
   - Log one real payment and check the Sheet. If anything looks wrong, remove the service account's access to the live Sheet and restore from the backup.
 
 - [ ] **Step 10: Merge**

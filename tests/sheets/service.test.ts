@@ -333,12 +333,16 @@ describe("logPayment: month rows are added in order", () => {
     expect(fake.tabs.get("Schedule")).toHaveLength(5);
   });
 
-  it("allows skipping ahead, then refuses the skipped month", async () => {
+  it("refuses to skip a month and changes nothing", async () => {
     const { fake, ctx } = setup();
-    await pay(ctx, { portionId: "p1", month: { year: 2026, month: 11 } });
-    expect(cell(fake, "Schedule", "A", 6)).toBe("Nov-26");
-    await expectCode(pay(ctx, { portionId: "p1", month: OCT }), "validation");
-    expect(fake.tabs.get("Schedule")).toHaveLength(6);
+    const error = await expectCode(
+      pay(ctx, { portionId: "p1", month: { year: 2026, month: 11 } }),
+      "validation",
+    );
+    expect(error.message).toMatch(/Log 2026-10 first/);
+    expect(fake.tabs.get("Schedule")).toHaveLength(5);
+    await pay(ctx, { portionId: "p1", month: OCT });
+    expect(cell(fake, "Schedule", "A", 6)).toBe("Oct-26");
   });
 });
 

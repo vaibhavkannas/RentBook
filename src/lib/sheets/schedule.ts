@@ -66,6 +66,20 @@ export function parseSchedule(
       amount: findColumn(headers, portion.amountHeader),
     };
   }
+  // Two Settings rows naming the same header would make two portions share cells.
+  const owner = new Map<number, string>([[monthCol, "Month"], [totalCol, totalHeader]]);
+  for (const portion of portions) {
+    const cols = portionCols[portion.id];
+    for (const col of [cols.tenant, cols.count, cols.amount]) {
+      const other = owner.get(col);
+      if (other !== undefined) {
+        throw sheetStructure(
+          `Portion "${portion.id}" and "${other}" both use the column headed "${String(headers[col])}". Fix the header names in the Settings tab.`,
+        );
+      }
+      owner.set(col, portion.id);
+    }
+  }
 
   const dataRows = values.slice(headerIndex + 1);
   let codec: MonthCodec | null = null;

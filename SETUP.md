@@ -69,6 +69,8 @@ Replace the path in the second command with the real location of your key file. 
 
 Check that `git status` does not list `.env.local`.
 
+Each portion needs its own header names on the Schedule header row: `Tenant`, `Count`, `Amount`, then `Tenant2`, `Count2`, `Amount2`, and so on. RentBook copies them into the `Settings` tab the first time it runs. If you rename a Schedule header later, copy the new name into the `Settings` tab as well.
+
 Install and check the Sheet before the first save. You need Node 22 or newer.
 
 ```powershell
@@ -77,6 +79,8 @@ npm run recon
 ```
 
 `npm run recon` only reads. Fix every problem it lists. Then run the app with `npm run dev` and open http://localhost:3000. Restart the dev server after any change to `.env.local`.
+
+Before the first save, open Portion settings in the app and set each portion's cycle length (or tick "Count never resets") and hike percent. The app cannot edit a payment count, so a wrong setting here writes a wrong count. Do the same again after you switch to the live Sheet, because it gets its own fresh `Settings` tab with default values.
 
 ## If sign-in fails
 

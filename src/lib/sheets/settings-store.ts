@@ -37,9 +37,9 @@ export const DEFAULT_PORTION_NAMES = [
 export const DEFAULT_CYCLE_LENGTH = 11;
 export const DEFAULT_HIKE_PERCENT = 5;
 
-const TENANT_HEADER = /^tenant\d*$/i;
-const COUNT_HEADER = /^count\d*$/i;
-const AMOUNT_HEADER = /^amount\d*$/i;
+const TENANT_HEADER = /^tenant\s*\d*$/i;
+const COUNT_HEADER = /^count\s*\d*$/i;
+const AMOUNT_HEADER = /^amount\s*\d*$/i;
 
 /**
  * Builds default portion settings from the Schedule header row: every
@@ -48,8 +48,23 @@ const AMOUNT_HEADER = /^amount\d*$/i;
 export function inferPortions(headerRow: unknown[]): PortionConfig[] {
   const cells = headerRow.map((cell) => String(cell ?? "").trim());
   const portions: PortionConfig[] = [];
+  const seen = new Set<string>();
   cells.forEach((header, index) => {
+    if (/^tenant/i.test(header) && !TENANT_HEADER.test(header)) {
+      throw sheetStructure(
+        `"${header}" looks like a Tenant column but is not named like one. Use Tenant, Tenant2, Tenant3 and so on.`,
+      );
+    }
     if (!TENANT_HEADER.test(header)) return;
+    for (const name of [header, cells[index + 1] ?? "", cells[index + 2] ?? ""]) {
+      const key = name.toLowerCase();
+      if (key && seen.has(key)) {
+        throw sheetStructure(
+          `Header "${name}" appears more than once in the Schedule tab. Give each portion its own headers, for example Tenant, Count, Amount, then Tenant2, Count2, Amount2.`,
+        );
+      }
+      seen.add(key);
+    }
     const count = cells[index + 1] ?? "";
     const amount = cells[index + 2] ?? "";
     if (!COUNT_HEADER.test(count) || !AMOUNT_HEADER.test(amount)) {

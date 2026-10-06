@@ -223,7 +223,7 @@ export default function PaymentSheet({
                     value={portionId}
                     onChange={(event) => setPortionId(event.target.value)}
                     required
-                    className="mt-1 min-h-12 w-full rounded-xl border border-control bg-surface px-3"
+                    className="mt-1 min-h-12 w-full rounded-xl border border-control bg-surface px-3 text-base"
                   >
                     <option value="" disabled>
                       Choose a portion
@@ -244,7 +244,7 @@ export default function PaymentSheet({
                     autoFocus
                     required
                     maxLength={60}
-                    className="mt-1 min-h-12 w-full rounded-xl border border-control bg-surface px-3"
+                    className="mt-1 min-h-12 w-full rounded-xl border border-control bg-surface px-3 text-base"
                   />
                 </label>
               </>
@@ -285,7 +285,7 @@ export default function PaymentSheet({
                 value={date}
                 onChange={(event) => setDate(event.target.value)}
                 required
-                className="mt-1 min-h-12 w-full rounded-xl border border-control bg-surface px-3"
+                className="mt-1 min-h-12 w-full rounded-xl border border-control bg-surface px-3 text-base"
               />
             </label>
 

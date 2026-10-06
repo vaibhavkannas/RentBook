@@ -12,7 +12,7 @@ import type {
   ScheduleRow,
   YearMonth,
 } from "@/lib/domain/types";
-import { compareYm, isValidIsoDay, ymKey } from "@/lib/domain/year-month";
+import { addMonths, compareYm, isValidIsoDay, ymKey } from "@/lib/domain/year-month";
 import { conflict, sheetStructure, validation } from "@/lib/errors";
 import { colLetter } from "./a1";
 import type { SheetsGateway } from "./gateway";
@@ -105,6 +105,12 @@ async function ensureMonthRow(
       `Can't add ${ymKey(month)}: the Schedule already has ${ymKey(last.month)} below it. Month rows are added in order.`,
     );
   }
+  const following = addMonths(last.month, 1);
+  if (compareYm(month, following) > 0) {
+    throw validation(
+      `Can't add ${ymKey(month)} yet: the Schedule's last month is ${ymKey(last.month)}. Log ${ymKey(following)} first, or add its row in the sheet.`,
+    );
+  }
 
   const { layout, portions } = loaded;
   const newRow = layout.lastDataRow + 1;
@@ -116,13 +122,23 @@ async function ensureMonthRow(
     );
   }
 
-  const clearCols = portions.flatMap((p) => {
-    const cols = layout.portionCols[p.id];
-    return [cols.tenant, cols.count, cols.amount];
+  // Blank every value the copy would carry over (portion cells, a typed total, notes,
+  // columns of portions missing from Settings); keep only formulas and the Month cell.
+  const source =
+    (await ctx.gateway.getValues(ctx.scheduleTab, `A${layout.lastDataRow}:ZZ${layout.lastDataRow}`, "FORMULA"))[0] ?? [];
+  const clearCols = new Set(
+    portions.flatMap((p) => {
+      const cols = layout.portionCols[p.id];
+      return [cols.tenant, cols.count, cols.amount];
+    }),
+  );
+  source.forEach((cell, col) => {
+    const isFormula = typeof cell === "string" && cell.startsWith("=");
+    if (col !== layout.monthCol && cell !== "" && cell !== undefined && !isFormula) clearCols.add(col);
   });
-  if (!totalHasFormula) clearCols.push(layout.totalCol);
+  if (!totalHasFormula) clearCols.add(layout.totalCol);
 
-  await ctx.gateway.cloneRow(ctx.scheduleTab, layout.lastDataRow, newRow, clearCols, [
+  await ctx.gateway.cloneRow(ctx.scheduleTab, layout.lastDataRow, newRow, [...clearCols], [
     { col: layout.monthCol, value: writeMonth(layout.codec, month) },
   ]);
   return newRow;
