@@ -17,7 +17,7 @@ type Active = { mode: SheetMode; portionId: string | null } | null;
 const PILL = {
   paid: "bg-success-bg text-success-ink",
   pending: "bg-warn-bg text-warn-ink",
-  "needs-tenant": "bg-line text-muted",
+  "needs-tenant": "bg-line text-foreground",
 } as const;
 
 const PILL_LABEL = {
@@ -88,7 +88,7 @@ export default function PortionBoard({ monthKey, monthLabel, cards, defaultDate 
                     <button
                       type="button"
                       onClick={() => setActive({ mode: "edit", portionId: card.portionId })}
-                      className="min-h-11 flex-1 rounded-xl border border-line px-4 font-medium"
+                      className="min-h-11 flex-1 rounded-xl border border-control px-4 font-medium"
                     >
                       Edit amount
                     </button>
@@ -113,7 +113,7 @@ export default function PortionBoard({ monthKey, monthLabel, cards, defaultDate 
         <button
           type="button"
           onClick={() => setActive({ mode: "new-tenant", portionId: null })}
-          className="min-h-11 w-full rounded-xl border border-line px-4 font-medium"
+          className="min-h-11 w-full rounded-xl border border-control px-4 font-medium"
         >
           New tenant
         </button>

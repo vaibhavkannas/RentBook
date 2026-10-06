@@ -1,11 +1,13 @@
 @import "tailwindcss";
 
 :root {
+  color-scheme: light dark;
   --background: #f6f5f1;
   --foreground: #1b1b18;
   --surface: #ffffff;
   --muted: #6b6a63;
   --line: #e4e2da;
+  --control: #8f8d84;
   --accent: #1f5f4a;
   --accent-ink: #ffffff;
   --success-bg: #e3f1e8;
@@ -23,6 +25,7 @@
     --surface: #1b1c19;
     --muted: #a3a299;
     --line: #2e2f2a;
+    --control: #6c6b63;
     --accent: #6fc2a0;
     --accent-ink: #0d1f18;
     --success-bg: #1e3a2a;
@@ -40,6 +43,7 @@
   --color-surface: var(--surface);
   --color-muted: var(--muted);
   --color-line: var(--line);
+  --color-control: var(--control);
   --color-accent: var(--accent);
   --color-accent-ink: var(--accent-ink);
   --color-success-bg: var(--success-bg);

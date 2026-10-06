@@ -33,7 +33,8 @@ async function postJson(url: string, method: string, payload: unknown): Promise<
   }
 }
 
-const OFFLINE = "Couldn't reach the server. Check your connection and try again.";
+const NO_CONFIRMATION =
+  "Couldn't confirm that the save went through. Check your connection and refresh the page before trying again.";
 
 export default function PaymentSheet({
   mode,
@@ -45,14 +46,15 @@ export default function PaymentSheet({
   onClose,
 }: Props) {
   const router = useRouter();
-  const [portionId, setPortionId] = useState(initialPortionId ?? cards[0].portionId);
-  const card = cards.find((c) => c.portionId === portionId)!;
+  // In the generic "New tenant" sheet the owner must choose the portion on purpose.
+  const [portionId, setPortionId] = useState(initialPortionId ?? "");
+  const card = cards.find((c) => c.portionId === portionId);
 
   const initialAmount =
     mode === "edit"
-      ? card.entry?.amount
+      ? card?.entry?.amount
       : mode === "log"
-        ? card.next?.suggestedAmount
+        ? card?.next?.suggestedAmount
         : undefined;
   const [amount, setAmount] = useState(initialAmount !== undefined ? String(initialAmount) : "");
   const [date, setDate] = useState(defaultDate);
@@ -74,6 +76,7 @@ export default function PaymentSheet({
     mode === "new-tenant" ? "New tenant" : mode === "edit" ? "Edit amount" : "Log payment";
 
   async function submit(overwrite: boolean) {
+    if (!card) return setError("Choose a portion first.");
     setBusy(true);
     setError(null);
     const body = await postJson("/api/payments", "POST", {
@@ -86,13 +89,13 @@ export default function PaymentSheet({
     });
     setBusy(false);
 
-    if (!body) return setError(OFFLINE);
+    if (!body) return setError(NO_CONFIRMATION);
     if (body.ok) {
       router.refresh();
       if (body.logWritten === false) return setPendingLog(body.logRow ?? []);
       return onClose();
     }
-    const failure = body.error!;
+    const failure = body.error ?? { code: "unknown", message: "Something went wrong. Try again." };
     if (failure.code === "conflict" && typeof failure.details?.existingAmount === "number") {
       return setConflict({
         amount: failure.details.existingAmount,
@@ -104,6 +107,7 @@ export default function PaymentSheet({
 
   async function retryLog() {
     setBusy(true);
+    setError(null);
     const body = await postJson("/api/payments/log-retry", "POST", { row: pendingLog });
     setBusy(false);
     if (body?.ok && body.logWritten) return onClose();
@@ -125,7 +129,7 @@ export default function PaymentSheet({
             </h2>
             <p className="text-sm text-muted">
               {monthLabel}
-              {mode !== "new-tenant" ? ` · ${card.name}` : ""}
+              {mode !== "new-tenant" && card ? ` · ${card.name}` : ""}
             </p>
           </div>
           <button
@@ -157,17 +161,32 @@ export default function PaymentSheet({
             >
               {busy ? "Retrying…" : "Retry log entry"}
             </button>
-            <button type="button" onClick={onClose} className="min-h-11 w-full text-muted">
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={busy}
+              className="min-h-11 w-full text-muted"
+            >
               Skip for now
             </button>
           </div>
         ) : conflict ? (
           <div className="mt-4 space-y-3">
             <p className="rounded-lg bg-warn-bg px-3 py-2 text-sm text-warn-ink">
-              {card.name} already has {formatRupees(conflict.amount)} recorded for {monthLabel}
+              {card?.name ?? "This portion"} already has {formatRupees(conflict.amount)} recorded for{" "}
+              {monthLabel}
               {conflict.tenant ? ` (${conflict.tenant})` : ""}. Replace it with{" "}
-              {formatRupees(Number(amount.replace(/[,\s₹]/g, "")))}?
+              {formatRupees(Number(amount.replace(/[,\s₹]/g, "")))}
+              {mode === "new-tenant"
+                ? ` and start ${tenantName.trim() || "the new tenant"} at payment 1`
+                : ""}
+              ?
             </p>
+            {error && (
+              <p role="alert" className="rounded-lg bg-danger-bg px-3 py-2 text-sm text-danger-ink">
+                {error}
+              </p>
+            )}
             <button
               type="button"
               onClick={() => submit(true)}
@@ -178,7 +197,10 @@ export default function PaymentSheet({
             </button>
             <button
               type="button"
-              onClick={() => setConflict(null)}
+              onClick={() => {
+                setConflict(null);
+                setError(null);
+              }}
               disabled={busy}
               className="min-h-11 w-full text-muted"
             >
@@ -200,8 +222,12 @@ export default function PaymentSheet({
                   <select
                     value={portionId}
                     onChange={(event) => setPortionId(event.target.value)}
-                    className="mt-1 min-h-12 w-full rounded-xl border border-line bg-surface px-3"
+                    required
+                    className="mt-1 min-h-12 w-full rounded-xl border border-control bg-surface px-3"
                   >
+                    <option value="" disabled>
+                      Choose a portion
+                    </option>
                     {cards.map((c) => (
                       <option key={c.portionId} value={c.portionId}>
                         {c.name}
@@ -218,25 +244,26 @@ export default function PaymentSheet({
                     autoFocus
                     required
                     maxLength={60}
-                    className="mt-1 min-h-12 w-full rounded-xl border border-line bg-surface px-3"
+                    className="mt-1 min-h-12 w-full rounded-xl border border-control bg-surface px-3"
                   />
                 </label>
               </>
             )}
 
-            {mode === "log" && card.next?.startsNewCycle && (
-              <p className="rounded-lg bg-success-bg px-3 py-2 text-sm text-success-ink">
-                New cycle starts at payment 1. Amount is prefilled with the hike
-                (was {formatRupees(card.next.previousAmount)}). Edit it if you agreed a different
-                rent.
+            {mode === "log" && card?.next?.startsNewCycle && (
+              <div className="space-y-2 rounded-lg bg-success-bg px-3 py-2 text-sm text-success-ink">
+                <p>
+                  New cycle starts at payment 1. Amount is prefilled with the hike (was{" "}
+                  {formatRupees(card.next.previousAmount)}). Edit it if you agreed a different rent.
+                </p>
                 <button
                   type="button"
                   onClick={() => setAmount(String(card.next!.previousAmount))}
-                  className="ml-2 underline"
+                  className="min-h-11 w-full rounded-lg border border-current px-3 font-medium"
                 >
                   Keep {formatRupees(card.next.previousAmount)}
                 </button>
-              </p>
+              </div>
             )}
 
             <label className="block text-sm">
@@ -247,7 +274,7 @@ export default function PaymentSheet({
                 inputMode="numeric"
                 autoFocus={mode !== "new-tenant"}
                 required
-                className="mt-1 min-h-12 w-full rounded-xl border border-line bg-surface px-3 text-lg"
+                className="mt-1 min-h-12 w-full rounded-xl border border-control bg-surface px-3 text-lg"
               />
             </label>
 
@@ -258,11 +285,11 @@ export default function PaymentSheet({
                 value={date}
                 onChange={(event) => setDate(event.target.value)}
                 required
-                className="mt-1 min-h-12 w-full rounded-xl border border-line bg-surface px-3"
+                className="mt-1 min-h-12 w-full rounded-xl border border-control bg-surface px-3"
               />
             </label>
 
-            {mode === "log" && card.next && (
+            {mode === "log" && card?.next && (
               <p className="text-sm text-muted">
                 {card.next.tenant} · Payment {card.next.count}
                 {card.cycleLength !== null ? ` of ${card.cycleLength}` : ""}. The count is set
