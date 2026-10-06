@@ -12,3 +12,17 @@ export function formatRupees(amount: number): string {
 export function formatMonthTitle(ym: YearMonth): string {
   return `${monthName(ym.month, true)} ${ym.year}`;
 }
+
+const savedAt = new Intl.DateTimeFormat("en-IN", {
+  timeZone: "Asia/Kolkata",
+  day: "numeric",
+  month: "short",
+  hour: "numeric",
+  minute: "2-digit",
+});
+
+/** "2026-10-05T04:30:00.000Z" -> "5 Oct, 10:00 am" (India time). */
+export function formatSavedAt(iso: string): string {
+  const date = new Date(iso);
+  return Number.isNaN(date.getTime()) ? iso : savedAt.format(date);
+}

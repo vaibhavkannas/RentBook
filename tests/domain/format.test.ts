@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatMonthTitle, formatRupees } from "@/lib/format";
+import { formatMonthTitle, formatRupees, formatSavedAt } from "@/lib/format";
 
 describe("format", () => {
   it("formats rupees with Indian digit grouping", () => {
@@ -9,5 +9,14 @@ describe("format", () => {
   });
   it("formats a month title", () => {
     expect(formatMonthTitle({ year: 2026, month: 10 })).toBe("October 2026");
+  });
+});
+
+describe("formatSavedAt", () => {
+  it("shows India time", () => {
+    expect(formatSavedAt("2026-10-05T04:30:00.000Z")).toMatch(/5 Oct.*10:00\s?am/i);
+  });
+  it("returns text that is not a date unchanged", () => {
+    expect(formatSavedAt("not a date")).toBe("not a date");
   });
 });

@@ -406,6 +406,47 @@ async function appendLogRow(
   return false;
 }
 
+export type ActivityItem = {
+  savedAt: string;
+  month: string;
+  portion: string;
+  tenant: string;
+  amount: number | null;
+  count: number | null;
+  dateReceived: string;
+  loggedBy: string;
+  action: LogAction;
+};
+
+const ACTIONS: readonly LogAction[] = ["Logged", "Edited", "Undone"];
+
+const text = (value: unknown) => (value === undefined || value === null ? "" : String(value));
+const num = (value: unknown) => (typeof value === "number" ? value : null);
+
+/** The latest Payments Log rows, newest first. Rows from before "Logged by" and "Action" existed read as Logged by nobody. */
+export async function readActivity(ctx: SheetsContext, limit = 50): Promise<ActivityItem[]> {
+  await ensureTabs(ctx.gateway, ctx.scheduleTab);
+  const values = await ctx.gateway.getValues(LOG_TAB, "A1:I", "UNFORMATTED_VALUE");
+  const items = values
+    .slice(1)
+    .filter((row) => row.some((cell) => cell !== undefined && cell !== ""))
+    .map((row): ActivityItem => {
+      const action = ACTIONS.find((candidate) => candidate === row[8]) ?? "Logged";
+      return {
+        savedAt: text(row[0]),
+        month: text(row[1]),
+        portion: text(row[2]),
+        tenant: text(row[3]),
+        amount: num(row[4]),
+        count: num(row[5]),
+        dateReceived: text(row[6]),
+        loggedBy: text(row[7]),
+        action,
+      };
+    });
+  return items.reverse().slice(0, limit);
+}
+
 /** Second chance for a Payments Log row that failed after the Schedule was saved. */
 export async function retryLogRow(
   ctx: SheetsContext,
