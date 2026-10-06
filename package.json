@@ -9,7 +9,8 @@
     "lint": "eslint",
     "test": "vitest run",
     "typecheck": "next typegen && tsc --noEmit",
-    "recon": "tsx --env-file=.env.local scripts/recon.ts"
+    "recon": "tsx --env-file=.env.local scripts/recon.ts",
+    "verify:testcopy": "tsx --env-file=.env.local scripts/verify-testcopy.ts"
   },
   "dependencies": {
     "@googleapis/sheets": "^18.1.0",

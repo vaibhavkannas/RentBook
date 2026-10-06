@@ -49,7 +49,7 @@ Copy `.env.example` to `.env.local` and fill it in. Put each value directly afte
 | --- | --- |
 | `AUTH_SECRET` | A random string. Use the first command below |
 | `AUTH_GOOGLE_ID` / `AUTH_GOOGLE_SECRET` | From step 5 |
-| `ALLOWED_EMAIL` | The one Google account that may use the app |
+| `ALLOWED_EMAILS` | The Google accounts allowed to sign in, separated by commas. The first one is the owner and is the only person who can change Portion settings. |
 | `GOOGLE_SERVICE_ACCOUNT_JSON` | The key file as one line. Use the second command below and paste |
 | `SHEET_ID` | From step 1 (the test copy) |
 | `SCHEDULE_TAB` | Name of the tab that holds the month rows. Defaults to `Schedule` if left out |
@@ -132,13 +132,24 @@ Do not set `NODE_TLS_REJECT_UNAUTHORIZED=0`. It turns off certificate checking f
 - "Access blocked" or "Error 403: access_denied": the Google account you signed in with is not listed under Test users (step 5).
 - "Error 400: redirect_uri_mismatch": the redirect URI must match exactly, including http or https, the host, the port, and no trailing slash. `npm run dev` moves to port 3001 when port 3000 is busy; add that URI too, or free port 3000.
 - "Error 401: invalid_client": the client ID or secret is wrong, or has stray spaces.
-- RentBook says "That Google account isn't allowed": `ALLOWED_EMAIL` does not match the account you used.
+- RentBook says "That Google account isn't allowed": the account you used is not listed in `ALLOWED_EMAILS`. Add it there (in `.env.local`, and in Vercel followed by a redeploy).
 - RentBook says "Can't load your Sheet": read the message under it. It names the problem, for example that the Sheets API is not enabled or the Sheet is not shared with the service account.
+
+## Adding another person
+
+Everyone on the list can log, edit and undo payments and read the Activity screen. Only the first address in `ALLOWED_EMAILS` (the owner) can change Portion settings.
+
+1. In Google Cloud open the Google Auth Platform, then Audience, then Test users, then Add users, and add their Google address.
+2. Add the same address to `ALLOWED_EMAILS` in `.env.local` and in Vercel, then redeploy. Separate addresses with commas and keep the owner first.
+3. They open the app, sign in, and click through the "unverified app" warning (Advanced, then continue).
+4. They need no access to the Sheet. The app writes as the service account.
+
+To remove someone, delete the address from `ALLOWED_EMAILS` and redeploy. They are locked out on their next request, even if their session is still valid. You can also remove them from Test users.
 
 ## 7. Deploy to Vercel
 
 1. Sign in at https://vercel.com with GitHub, choose Add New, then Project, and import `vaibhavkannas/RentBook`.
-2. Under Environment Variables add every name from step 6 (paste `GOOGLE_SERVICE_ACCOUNT_JSON` as one line, with no quotes). Use the test copy's `SHEET_ID` for the first deploy. Add them for Production and Preview.
+2. Under Environment Variables add every name from step 6: `AUTH_SECRET`, `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET`, `ALLOWED_EMAILS` (the owner first), `GOOGLE_SERVICE_ACCOUNT_JSON` (paste it as one line, with no quotes), `SHEET_ID`, `SCHEDULE_TAB` and `TOTAL_HEADER`. Use the test copy's `SHEET_ID` for the first deploy. Add them for Production and Preview. A deployment that still has the older single `ALLOWED_EMAIL` keeps working until `ALLOWED_EMAILS` is set.
 3. Deploy. A first import deploys the production branch (`main`). Work on a branch gets its own preview URL until its pull request is merged.
 4. Google does not accept wildcard redirect URIs. In Google Cloud, edit the OAuth client and add `https://<host>/api/auth/callback/google` for every host you sign in on: the preview URL now and the production URL later.
 5. Open the URL on your phone, sign in, and use the browser menu's Add to Home Screen.

@@ -1,7 +1,7 @@
 # RentBook enhancements, wave A
 
 Date: 2026-10-06
-Status: draft, awaiting owner review
+Status: approved by the owner; implemented per docs/superpowers/plans/2026-10-06-wave-a-implementation.md
 
 ## Purpose
 

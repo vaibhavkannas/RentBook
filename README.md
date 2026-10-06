@@ -5,7 +5,8 @@ A phone-first web app for recording monthly rent receipts for a building with fi
 - Month overview with one card per portion: tenant, payment count, rent, Paid or Pending.
 - Log a payment in a few taps. The count and the 5% hike suggestion are worked out for you, and you can edit the amount.
 - Per-portion cycle length (or "never resets") and hike percent.
-- Each payment also lands in a `Payments Log` tab with the date it was received.
+- Each payment also lands in a `Payments Log` tab with the date it was received and who logged it.
+- Undo a mistaken payment, see who did what on the Activity screen, and let several people sign in (the first one listed is the owner).
 
 ## Develop
 
@@ -21,6 +22,7 @@ npm run dev
 | `npm run typecheck` | TypeScript check |
 | `npm run lint` | ESLint |
 | `npm run recon` | Read-only check of your Google Sheet. Never writes |
+| `npm run verify:testcopy` | End-to-end log, edit, undo and Activity check against a test copy of the Sheet. Needs `TEST_SHEET_ID`; refuses to run on the real Sheet |
 
 ## Setup and deployment
 
