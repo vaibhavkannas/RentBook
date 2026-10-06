@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import type { PortionCard } from "@/lib/domain/types";
 import { formatRupees } from "@/lib/format";
+import { buildPaymentRequest } from "@/lib/payment-request";
 
 export type SheetMode = "log" | "edit" | "new-tenant";
 
@@ -50,9 +51,13 @@ export default function PaymentSheet({
   const [portionId, setPortionId] = useState(initialPortionId ?? "");
   const card = cards.find((c) => c.portionId === portionId);
 
+  // What the person saw when this sheet opened. An edit is checked against this, never against a
+  // card that a background refresh has since changed.
+  const [seenEntry] = useState(() => (mode === "edit" ? (card?.entry ?? undefined) : undefined));
+
   const initialAmount =
     mode === "edit"
-      ? card?.entry?.amount
+      ? seenEntry?.amount
       : mode === "log"
         ? card?.next?.suggestedAmount
         : undefined;
@@ -77,16 +82,20 @@ export default function PaymentSheet({
 
   async function submit(overwrite: boolean) {
     if (!card) return setError("Choose a portion first.");
-    setBusy(true);
-    setError(null);
-    const body = await postJson("/api/payments", "POST", {
-      month: monthKey,
+    const request = buildPaymentRequest({
+      mode,
+      monthKey,
       portionId,
       amount: Number(amount.replace(/[,\s₹]/g, "")),
       dateReceived: date,
-      newTenantName: mode === "new-tenant" ? tenantName : undefined,
-      overwrite: overwrite || mode === "edit" ? true : undefined,
+      tenantName,
+      confirmedReplace: overwrite,
+      seenEntry,
     });
+    if (!request.ok) return setError(request.message);
+    setBusy(true);
+    setError(null);
+    const body = await postJson("/api/payments", "POST", request.body);
     setBusy(false);
 
     if (!body) return setError(NO_CONFIRMATION);
@@ -102,6 +111,8 @@ export default function PaymentSheet({
         tenant: String(failure.details.existingTenant ?? ""),
       });
     }
+    // Someone else changed this payment, so the screen behind this sheet is out of date.
+    if (failure.code === "conflict") router.refresh();
     setError(failure.message);
   }
 

@@ -8,6 +8,7 @@ import {
   logPayment,
   retryLogRow,
   saveSettings,
+  undoPayment,
   type LogPaymentInput,
   type SheetsContext,
 } from "@/lib/sheets/service";
@@ -287,6 +288,81 @@ describe("logPayment: overwrite keeps what is recorded", () => {
       newTenantName: "Hari",
     });
     expect(result.entry).toEqual({ tenant: "Hari", count: 1, amount: 6000 });
+  });
+});
+
+describe("logPayment: an edit carries what the person saw", () => {
+  const ZED = { tenant: "Zed", count: 1, amount: 5100 };
+
+  async function zedLoggedAndUndone() {
+    const { fake, ctx } = setup();
+    await pay(ctx, { portionId: "p5", amount: ZED.amount, newTenantName: ZED.tenant });
+    await undoPayment(ctx, { month: OCT, portionId: "p5", expected: ZED }, OPTIONS);
+    return { fake, ctx };
+  }
+
+  it("edits the amount when the stored entry is what the person saw", async () => {
+    const { fake, ctx } = setup();
+    await pay(ctx, { portionId: "p1" });
+    const result = await pay(ctx, {
+      portionId: "p1",
+      amount: 6000,
+      overwrite: true,
+      expected: { tenant: "Asha", count: 4, amount: 5450 },
+    });
+    expect(result.entry).toEqual({ tenant: "Asha", count: 4, amount: 6000 });
+    expect(result.logRow[8]).toBe("Edited");
+    expect(cell(fake, "Schedule", "D", 6)).toBe(6000);
+  });
+
+  it("refuses a stale edit after someone undid the payment, and writes nothing", async () => {
+    const { fake, ctx } = await zedLoggedAndUndone();
+    const scheduleBefore = structuredClone(fake.tabs.get("Schedule"));
+    const logBefore = structuredClone(fake.tabs.get(LOG_TAB));
+
+    const error = await expectCode(
+      pay(ctx, { portionId: "p5", amount: 7100, overwrite: true, expected: ZED }),
+      "conflict",
+    );
+
+    expect(error.message).toMatch(/Refresh the page/);
+    expect(fake.tabs.get("Schedule")).toEqual(scheduleBefore);
+    expect(fake.tabs.get(LOG_TAB)).toEqual(logBefore);
+    expect((await getMonthView(ctx, OCT)).cards[4].status).toBe("pending");
+  });
+
+  it.each([
+    ["tenant", { tenant: "Esha", count: 1, amount: 5100 }],
+    ["count", { tenant: "Zed", count: 2, amount: 5100 }],
+    ["amount", { tenant: "Zed", count: 1, amount: 5000 }],
+  ])("refuses a stale edit when the stored %s differs, and writes nothing", async (_field, seen) => {
+    const { fake, ctx } = setup();
+    await pay(ctx, { portionId: "p5", amount: ZED.amount, newTenantName: ZED.tenant });
+    const scheduleBefore = structuredClone(fake.tabs.get("Schedule"));
+    const logBefore = structuredClone(fake.tabs.get(LOG_TAB));
+
+    await expectCode(
+      pay(ctx, { portionId: "p5", amount: 7100, overwrite: true, expected: seen }),
+      "conflict",
+    );
+
+    expect(fake.tabs.get("Schedule")).toEqual(scheduleBefore);
+    expect(fake.tabs.get(LOG_TAB)).toEqual(logBefore);
+  });
+
+  it("refuses an edit for a month that has no row yet instead of adding one", async () => {
+    const { fake, ctx } = setup();
+    await expectCode(
+      pay(ctx, {
+        portionId: "p1",
+        month: { year: 2026, month: 10 },
+        amount: 6000,
+        overwrite: true,
+        expected: { tenant: "Asha", count: 4, amount: 5450 },
+      }),
+      "conflict",
+    );
+    expect(fake.tabs.get("Schedule")).toHaveLength(5);
   });
 });
 

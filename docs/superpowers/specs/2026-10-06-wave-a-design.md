@@ -70,6 +70,8 @@ What undo writes:
 
 Route: `POST /api/payments/undo`.
 
+**Edit amount follows the same stale-screen rule.** The edit request carries the tenant, count and amount that were on the card when the sheet opened (`expected` on `POST /api/payments`). If the stored entry is missing or differs, for example because someone else undid or changed it, the app refuses with a conflict, writes nothing, and the screen reloads. Without this, an edit of an undone payment would recreate it under the portion's previous tenant. A confirmed "Replace amount" after a duplicate warning, and the service-level overwrite of an incomplete cell, do not carry an expected entry.
+
 ## Logged by and the Activity screen
 
 The Payments Log gets two columns, appended after the existing seven: `Logged by` (the signed-in email) and `Action` (`Logged`, `Edited` or `Undone`). Existing rows keep blank values there and show as "—" in the app.

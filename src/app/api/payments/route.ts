@@ -19,6 +19,7 @@ export async function POST(request: Request) {
         dateReceived: body.dateReceived,
         newTenantName: body.newTenantName,
         overwrite: body.overwrite,
+        expected: body.expected,
       },
       { now: new Date(), loggedBy: viewer.email },
     );

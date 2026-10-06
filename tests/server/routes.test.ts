@@ -119,6 +119,47 @@ describe("POST /api/payments", () => {
     expect(options.loggedBy).toBe("member@example.com");
   });
 
+  it("passes the entry the person saw on to the service, so an edit can be checked", async () => {
+    signedInAs("member@example.com");
+    const seen = { tenant: "Asha", count: 4, amount: 5450 };
+    const res = await postPayment(
+      new Request("http://localhost/api/payments", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          month: "2026-10",
+          portionId: "p1",
+          amount: 6000,
+          dateReceived: "2026-10-05",
+          overwrite: true,
+          expected: seen,
+        }),
+      }),
+    );
+    expect(res.status).toBe(200);
+    expect(logPayment.mock.calls[0][1]).toMatchObject({ overwrite: true, expected: seen });
+  });
+
+  it("rejects an entry that is not tenant, count and amount", async () => {
+    signedInAs("member@example.com");
+    const res = await postPayment(
+      new Request("http://localhost/api/payments", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          month: "2026-10",
+          portionId: "p1",
+          amount: 6000,
+          dateReceived: "2026-10-05",
+          overwrite: true,
+          expected: { tenant: "Asha" },
+        }),
+      }),
+    );
+    expect(res.status).toBe(400);
+    expect(logPayment).not.toHaveBeenCalled();
+  });
+
   it("marks the write time after a successful log, and not when the log fails", async () => {
     signedInAs("member@example.com");
     logPayment.mockRejectedValueOnce(conflict("Already recorded."));

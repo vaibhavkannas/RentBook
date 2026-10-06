@@ -92,6 +92,10 @@ function findMonthRow(rows: ScheduleRow[], month: YearMonth): ScheduleRow | unde
   return matches[matches.length - 1];
 }
 
+function sameEntry(a: PortionEntry, b: PortionEntry): boolean {
+  return a.tenant === b.tenant && a.count === b.count && a.amount === b.amount;
+}
+
 /** Whether the total cell on `row` holds a formula (read with the FORMULA render). */
 async function totalIsFormula(
   ctx: SheetsContext,
@@ -177,6 +181,11 @@ export type LogPaymentInput = {
   newTenantName?: string;
   /** Replace an amount that is already recorded for this month. */
   overwrite?: boolean;
+  /**
+   * What the person saw on screen when they chose to edit. The edit is refused if the Sheet
+   * no longer holds exactly this entry, so a stale screen cannot change or recreate a payment.
+   */
+  expected?: PortionEntry;
 };
 
 export type LogAction = "Logged" | "Edited" | "Undone";
@@ -253,6 +262,18 @@ async function logPaymentUnchecked(
 
   const monthRow = findMonthRow(loaded.rows, input.month);
   const existing = findEntryForMonth(loaded.rows, portion.id, input.month);
+  if (input.expected) {
+    if (!existing) {
+      throw conflict(
+        `Nothing to edit. ${portion.name} has no payment recorded for ${ymKey(input.month)} any more. Refresh the page.`,
+      );
+    }
+    if (!sameEntry(existing, input.expected)) {
+      throw conflict(
+        `${portion.name} for ${ymKey(input.month)} was changed by someone else. Refresh the page and try again.`,
+      );
+    }
+  }
   if (existing && !input.overwrite) {
     throw conflict(
       `${portion.name} already has ₹${existing.amount} recorded for ${ymKey(input.month)}.`,
@@ -387,8 +408,7 @@ async function undoPaymentUnchecked(
       `Nothing to undo. ${portion.name} has no payment recorded for ${ymKey(input.month)} any more. Refresh the page.`,
     );
   }
-  const { tenant, count, amount } = input.expected;
-  if (existing.tenant !== tenant || existing.count !== count || existing.amount !== amount) {
+  if (!sameEntry(existing, input.expected)) {
     throw conflict(
       `${portion.name} for ${ymKey(input.month)} was changed by someone else. Refresh the page and try again.`,
     );

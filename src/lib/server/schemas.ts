@@ -2,6 +2,9 @@ import { z } from "zod";
 
 const monthString = z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, "month must look like 2026-10");
 
+/** The tenant, count and amount the person saw on screen. */
+const seenEntry = z.object({ tenant: z.string(), count: z.number(), amount: z.number() });
+
 export const paymentBody = z.object({
   month: monthString,
   portionId: z.string().min(1).max(20),
@@ -9,12 +12,13 @@ export const paymentBody = z.object({
   dateReceived: z.string(),
   newTenantName: z.string().optional(),
   overwrite: z.boolean().optional(),
+  expected: seenEntry.optional(),
 });
 
 export const undoBody = z.object({
   month: monthString,
   portionId: z.string().min(1).max(20),
-  expected: z.object({ tenant: z.string(), count: z.number(), amount: z.number() }),
+  expected: seenEntry,
 });
 
 export const logRetryBody = z.object({
