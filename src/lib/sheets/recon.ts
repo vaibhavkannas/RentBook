@@ -1,9 +1,10 @@
+import type { ScheduleRow, YearMonth } from "@/lib/domain/types";
+import { compareYm, ymKey } from "@/lib/domain/year-month";
 import { AppError } from "@/lib/errors";
-import { ymKey } from "@/lib/domain/year-month";
 import { colLetter } from "./a1";
 import type { SheetsGateway } from "./gateway";
 import { findHeaderRowIndex, parseSchedule } from "./schedule";
-import { inferPortions, LOG_TAB, SETTINGS_TAB } from "./settings-store";
+import { inferPortions, LOG_TAB, readSettings, SETTINGS_TAB } from "./settings-store";
 
 export type ReconReport = {
   tabs: string[];
@@ -111,4 +112,45 @@ export async function describeSheet(
     report.problems.push(error instanceof AppError ? error.message : String(error));
   }
   return report;
+}
+
+/**
+ * The Schedule's month rows, read without writing anything. Unlike the app's own reads it does not
+ * create the Settings or Payments Log tab: when Settings is missing, the portions are worked out
+ * from the header row, as recon does.
+ */
+export async function readMonthRowsReadOnly(
+  gateway: SheetsGateway,
+  scheduleTab: string,
+  totalHeader: string,
+): Promise<ScheduleRow[]> {
+  const values = await gateway.getValues(scheduleTab, "A1:ZZ", "UNFORMATTED_VALUE");
+  const headerIndex = findHeaderRowIndex(values);
+  const portions = (await gateway.listTabs()).includes(SETTINGS_TAB)
+    ? await readSettings(gateway)
+    : headerIndex === -1
+      ? []
+      : inferPortions(values[headerIndex]);
+  return parseSchedule(values, portions, totalHeader).rows;
+}
+
+/**
+ * Why scripts/verify-testcopy.ts cannot run on this Schedule, or null when it can. The script
+ * logs a payment into a month row that must already exist (new month rows can only be added in
+ * order, so it cannot create 2040-04 itself) and that has no payment for the portion yet.
+ */
+export function testCopyProblem(
+  rows: ScheduleRow[],
+  month: YearMonth,
+  portionId: string,
+): string | null {
+  const matches = rows.filter((row) => compareYm(row.month, month) === 0);
+  const row = matches[matches.length - 1];
+  if (!row) {
+    return `The test copy's Schedule has no row for ${ymKey(month)}. Add a row for that month to the Schedule tab of the test copy by hand, leave ${portionId} empty in it, and run this again. New month rows can only be added in order, so the check cannot add it. Nothing was written.`;
+  }
+  if (row.entries[portionId]) {
+    return `The test copy's ${ymKey(month)} row already has a payment for ${portionId}. Clear that portion's Tenant, Count and Amount cells in the test copy and run this again. Nothing was written.`;
+  }
+  return null;
 }

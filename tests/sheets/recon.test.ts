@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { configError } from "@/lib/errors";
-import { describeSheet } from "@/lib/sheets/recon";
+import { describeSheet, readMonthRowsReadOnly, testCopyProblem } from "@/lib/sheets/recon";
+import { SETTINGS_TAB } from "@/lib/sheets/settings-store";
 import { FakeGateway } from "../support/fake-gateway";
 import { baseSchedule, TOTAL_HEADER } from "../support/fixtures";
 
@@ -80,5 +81,49 @@ describe("describeSheet", () => {
     const crowded = await describeSheet(new FakeGateway({ Schedule: schedule }), "Schedule", TOTAL_HEADER);
     expect(crowded.rowBelowTableEmpty).toBe(false);
     expect(crowded.problems[0]).toMatch(/Row 6/);
+  });
+});
+
+describe("readMonthRowsReadOnly", () => {
+  it("reads the month rows without writing or creating any tab, even with no Settings tab", async () => {
+    const fake = new FakeGateway({ Schedule: baseSchedule() });
+    const rows = await readMonthRowsReadOnly(fake, "Schedule", TOTAL_HEADER);
+    expect(rows.map((row) => row.month)).toEqual([
+      { year: 2026, month: 8 },
+      { year: 2026, month: 9 },
+    ]);
+    expect([...fake.tabs.keys()]).toEqual(["Schedule"]);
+    expect(fake.calls.every((call) => call === "listTabs" || call === "getValues")).toBe(true);
+  });
+
+  it("uses the Settings tab when there is one", async () => {
+    const fake = new FakeGateway({
+      Schedule: baseSchedule(),
+      [SETTINGS_TAB]: [["Portion"], ["p1", "Ground", "Tenant", "Count", "Amount", 11, 5]],
+    });
+    const rows = await readMonthRowsReadOnly(fake, "Schedule", TOTAL_HEADER);
+    expect(Object.keys(rows[1].entries)).toEqual(["p1"]);
+  });
+});
+
+describe("testCopyProblem", () => {
+  const rowsOf = async () =>
+    readMonthRowsReadOnly(new FakeGateway({ Schedule: baseSchedule() }), "Schedule", TOTAL_HEADER);
+
+  it("says so when the month has no row yet, and that nothing was written", async () => {
+    const problem = testCopyProblem(await rowsOf(), { year: 2040, month: 4 }, "p5");
+    expect(problem).toMatch(/no row for 2040-04/);
+    expect(problem).toMatch(/in order/);
+    expect(problem).toMatch(/Nothing was written/);
+  });
+
+  it("says so when the portion already has a payment in that month", async () => {
+    // baseSchedule has Esha's first payment for p5 in 2026-09.
+    const problem = testCopyProblem(await rowsOf(), { year: 2026, month: 9 }, "p5");
+    expect(problem).toMatch(/2026-09 row already has a payment for p5/);
+  });
+
+  it("is happy when the row exists and the portion has no payment in it", async () => {
+    expect(testCopyProblem(await rowsOf(), { year: 2026, month: 9 }, "p4")).toBeNull();
   });
 });

@@ -22,7 +22,7 @@ npm run dev
 | `npm run typecheck` | TypeScript check |
 | `npm run lint` | ESLint |
 | `npm run recon` | Read-only check of your Google Sheet. Never writes |
-| `npm run verify:testcopy` | End-to-end log, edit, undo and Activity check against a test copy of the Sheet. Needs `TEST_SHEET_ID`; refuses to run on the real Sheet |
+| `npm run verify:testcopy` | End-to-end log, edit, undo and Activity check against a test copy of the Sheet. Needs `TEST_SHEET_ID`; refuses to run on the real Sheet. The copy's Schedule must already have a row for 2040-04 with no payment for portion p5 (new month rows can only be added in order); the script checks this first and stops before writing if not |
 
 ## Setup and deployment
 

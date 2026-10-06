@@ -6,11 +6,17 @@
  *
  * It writes to the test copy: one payment is logged, edited and undone in the
  * month 2040-04 for portion p5, and three rows are added to its Payments Log.
+ *
+ * Before it can run, the test copy's Schedule tab must already have a row for 2040-04 with no
+ * payment for portion p5. New month rows can only be added in order, so the script cannot create
+ * that row itself. It checks this first, and stops with an explanation before writing anything
+ * when the row is missing or p5 already has a payment in it.
  */
 import { AppError } from "@/lib/errors";
 import { readEnv } from "@/lib/server/env";
 import { colLetter } from "@/lib/sheets/a1";
 import { GoogleSheetsGateway } from "@/lib/sheets/google-gateway";
+import { readMonthRowsReadOnly, testCopyProblem } from "@/lib/sheets/recon";
 import { parseSchedule } from "@/lib/sheets/schedule";
 import {
   getMonthView,
@@ -37,6 +43,19 @@ async function main() {
   }
 
   const gateway = GoogleSheetsGateway.fromServiceAccount(env.serviceAccountJson, testSheetId);
+
+  // Read-only: the month views below would create missing tabs, so look before anything can write.
+  const problem = testCopyProblem(
+    await readMonthRowsReadOnly(gateway, env.scheduleTab, env.totalHeader),
+    MONTH,
+    PORTION,
+  );
+  if (problem) {
+    console.error(problem);
+    process.exitCode = 1;
+    return;
+  }
+
   const raw: SheetsContext = { gateway, scheduleTab: env.scheduleTab, totalHeader: env.totalHeader };
   const ctx = withSnapshotCache({ ...raw });
   const options = { now: new Date(), loggedBy: WHO };
