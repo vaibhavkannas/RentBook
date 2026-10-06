@@ -6,9 +6,11 @@ const logPayment = vi.hoisted(() =>
   vi.fn<(...args: unknown[]) => Promise<{ logWritten: boolean }>>(async () => ({ logWritten: true })),
 );
 const undoPayment = vi.hoisted(() => vi.fn());
+const markWritten = vi.hoisted(() => vi.fn(async () => undefined));
 
 vi.mock("@/auth", () => ({ auth }));
 vi.mock("@/lib/server/context", () => ({ getSheetsContext: () => ({}) }));
+vi.mock("@/lib/server/freshness", () => ({ markWritten, readWrittenAt: vi.fn(async () => undefined) }));
 vi.mock("@/lib/sheets/service", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/sheets/service")>()),
   saveSettings,
@@ -40,6 +42,7 @@ beforeEach(() => {
   saveSettings.mockClear();
   logPayment.mockClear();
   undoPayment.mockReset();
+  markWritten.mockClear();
 });
 afterEach(() => {
   if (savedEnv === undefined) delete process.env.ALLOWED_EMAILS;
@@ -75,6 +78,16 @@ describe("PUT /api/settings", () => {
     expect(res.status).toBe(200);
     expect(saveSettings).toHaveBeenCalledOnce();
   });
+
+  it("marks the write time after a successful save, and not when the owner is refused", async () => {
+    signedInAs("member@example.com");
+    await putSettings(settingsRequest());
+    expect(markWritten).not.toHaveBeenCalled();
+
+    signedInAs("owner@example.com");
+    await putSettings(settingsRequest());
+    expect(markWritten).toHaveBeenCalledOnce();
+  });
 });
 
 describe("POST /api/payments", () => {
@@ -104,6 +117,16 @@ describe("POST /api/payments", () => {
     expect(logPayment).toHaveBeenCalledOnce();
     const options = logPayment.mock.calls[0][2] as { loggedBy: string };
     expect(options.loggedBy).toBe("member@example.com");
+  });
+
+  it("marks the write time after a successful log, and not when the log fails", async () => {
+    signedInAs("member@example.com");
+    logPayment.mockRejectedValueOnce(conflict("Already recorded."));
+    expect((await postPayment(paymentRequest())).status).toBe(409);
+    expect(markWritten).not.toHaveBeenCalled();
+
+    await postPayment(paymentRequest());
+    expect(markWritten).toHaveBeenCalledOnce();
   });
 });
 
@@ -155,6 +178,14 @@ describe("POST /api/payments/undo", () => {
       code: "conflict",
       message: "Changed by someone else.",
     });
+    expect(markWritten).not.toHaveBeenCalled();
+  });
+
+  it("marks the write time after a successful undo", async () => {
+    signedInAs("member@example.com");
+    undoPayment.mockResolvedValue({ removed: good.expected, logWritten: true, logRow: [] });
+    await postUndo(undoRequest(good));
+    expect(markWritten).toHaveBeenCalledOnce();
   });
 
   it("rejects a malformed body", async () => {

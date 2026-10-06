@@ -26,28 +26,45 @@ import {
   updateSettings,
   type SettingsUpdate,
 } from "./settings-store";
+import { createSnapshotCache, type SnapshotCache } from "./snapshot-cache";
 
-export type SheetsContext = {
-  gateway: SheetsGateway;
-  scheduleTab: string;
-  totalHeader: string;
-};
-
-type Loaded = {
+export type Snapshot = {
   portions: PortionConfig[];
   layout: ScheduleLayout;
   rows: ScheduleRow[];
 };
 
-async function load(ctx: SheetsContext): Promise<Loaded> {
+export type SheetsContext = {
+  gateway: SheetsGateway;
+  scheduleTab: string;
+  totalHeader: string;
+  /** Short-lived copy of the Settings and Schedule reads. Page views use it; writes never do. */
+  cache?: SnapshotCache<Snapshot>;
+};
+
+async function load(ctx: SheetsContext): Promise<Snapshot> {
   await ensureTabs(ctx.gateway, ctx.scheduleTab);
-  const portions = await readSettings(ctx.gateway);
-  const values = await ctx.gateway.getValues(ctx.scheduleTab, "A1:ZZ", "UNFORMATTED_VALUE");
+  const [portions, values] = await Promise.all([
+    readSettings(ctx.gateway),
+    ctx.gateway.getValues(ctx.scheduleTab, "A1:ZZ", "UNFORMATTED_VALUE"),
+  ]);
   return { portions, ...parseSchedule(values, portions, ctx.totalHeader) };
 }
 
-export async function getMonthView(ctx: SheetsContext, month: YearMonth): Promise<MonthView> {
-  const { portions, rows } = await load(ctx);
+export const SNAPSHOT_TTL_MS = 15_000;
+
+/** Adds the page-view cache to a context. */
+export function withSnapshotCache(ctx: SheetsContext, ttlMs = SNAPSHOT_TTL_MS): SheetsContext {
+  ctx.cache = createSnapshotCache(() => load(ctx), ttlMs);
+  return ctx;
+}
+
+export async function getMonthView(
+  ctx: SheetsContext,
+  month: YearMonth,
+  options: { minFetchedAt?: number } = {},
+): Promise<MonthView> {
+  const { portions, rows } = ctx.cache ? await ctx.cache.get(options.minFetchedAt) : await load(ctx);
   return deriveMonthView(rows, portions, month);
 }
 
@@ -60,9 +77,13 @@ export async function saveSettings(
   ctx: SheetsContext,
   updates: SettingsUpdate[],
 ): Promise<PortionConfig[]> {
-  await ensureTabs(ctx.gateway, ctx.scheduleTab);
-  await updateSettings(ctx.gateway, updates);
-  return readSettings(ctx.gateway);
+  try {
+    await ensureTabs(ctx.gateway, ctx.scheduleTab);
+    await updateSettings(ctx.gateway, updates);
+    return await readSettings(ctx.gateway);
+  } finally {
+    ctx.cache?.invalidate();
+  }
 }
 
 /** The sheet row for `month`. If a month appears twice, the lower row on the sheet wins. */
@@ -91,7 +112,7 @@ async function totalIsFormula(
  */
 async function ensureMonthRow(
   ctx: SheetsContext,
-  loaded: Loaded,
+  loaded: Snapshot,
   month: YearMonth,
   totalHasFormula: boolean,
 ): Promise<number> {
@@ -213,6 +234,18 @@ export async function logPayment(
   input: LogPaymentInput,
   options: LogPaymentOptions,
 ): Promise<LogPaymentResult> {
+  try {
+    return await logPaymentUnchecked(ctx, input, options);
+  } finally {
+    ctx.cache?.invalidate();
+  }
+}
+
+async function logPaymentUnchecked(
+  ctx: SheetsContext,
+  input: LogPaymentInput,
+  options: LogPaymentOptions,
+): Promise<LogPaymentResult> {
   const newTenant = validateInput(input);
   const loaded = await load(ctx);
   const portion = loaded.portions.find((p) => p.id === input.portionId);
@@ -323,6 +356,18 @@ export type UndoPaymentResult = {
  * latest entry can be undone, and only if the Sheet still matches `expected`.
  */
 export async function undoPayment(
+  ctx: SheetsContext,
+  input: UndoPaymentInput,
+  options: LogPaymentOptions,
+): Promise<UndoPaymentResult> {
+  try {
+    return await undoPaymentUnchecked(ctx, input, options);
+  } finally {
+    ctx.cache?.invalidate();
+  }
+}
+
+async function undoPaymentUnchecked(
   ctx: SheetsContext,
   input: UndoPaymentInput,
   options: LogPaymentOptions,
