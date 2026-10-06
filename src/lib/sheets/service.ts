@@ -156,7 +156,10 @@ export type LogPaymentInput = {
   overwrite?: boolean;
 };
 
-export type LogRow = [string, string, string, string, number, number, string];
+export type LogAction = "Logged" | "Edited" | "Undone";
+
+/** Saved at, month, portion, tenant, amount, count, date received, logged by, action. */
+export type LogRow = [string, string, string, string, number, number, string, string, LogAction];
 
 export type LogPaymentResult = {
   entry: PortionEntry;
@@ -167,6 +170,8 @@ export type LogPaymentResult = {
 
 export type LogPaymentOptions = {
   now: Date;
+  /** Email of the signed-in person. */
+  loggedBy: string;
   retryDelayMs?: number;
 };
 
@@ -279,6 +284,7 @@ export async function logPayment(
   }
   await ctx.gateway.updateValues(writes);
 
+  const action: LogAction = existing ? "Edited" : "Logged";
   const logRow: LogRow = [
     options.now.toISOString(),
     ymKey(input.month),
@@ -287,6 +293,8 @@ export async function logPayment(
     input.amount,
     count,
     input.dateReceived,
+    options.loggedBy,
+    action,
   ];
   const logWritten = await appendLogRow(ctx.gateway, logRow, options.retryDelayMs ?? 400);
   return { entry: { tenant, count, amount: input.amount }, logWritten, logRow };

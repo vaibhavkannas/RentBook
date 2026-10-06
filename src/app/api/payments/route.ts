@@ -7,7 +7,7 @@ import { logPayment } from "@/lib/sheets/service";
 
 export async function POST(request: Request) {
   return handle(async () => {
-    await requireUser();
+    const viewer = await requireUser();
     const body = await parseJson(request, paymentBody);
     const result = await logPayment(
       getSheetsContext(),
@@ -19,7 +19,7 @@ export async function POST(request: Request) {
         newTenantName: body.newTenantName,
         overwrite: body.overwrite,
       },
-      { now: new Date() },
+      { now: new Date(), loggedBy: viewer.email },
     );
     return { ...result };
   });

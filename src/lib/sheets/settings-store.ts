@@ -24,6 +24,8 @@ export const LOG_HEADERS = [
   "Amount",
   "Count",
   "Date received",
+  "Logged by",
+  "Action",
 ];
 
 export const DEFAULT_PORTION_NAMES = [
@@ -130,6 +132,14 @@ export async function ensureTabs(gateway: SheetsGateway, scheduleTab: string): P
   if (!tabs.includes(LOG_TAB)) {
     await gateway.addTab(LOG_TAB);
     await gateway.updateValues([{ tab: LOG_TAB, a1: "A1", values: [LOG_HEADERS] }]);
+  } else {
+    // An older Payments Log has only the first seven columns. Add the two new headers once.
+    const header = (await gateway.getValues(LOG_TAB, "A1:I1", "FORMATTED_VALUE"))[0] ?? [];
+    if (header.length === 0) {
+      await gateway.updateValues([{ tab: LOG_TAB, a1: "A1", values: [LOG_HEADERS] }]);
+    } else if (header[7] !== LOG_HEADERS[7] || header[8] !== LOG_HEADERS[8]) {
+      await gateway.updateValues([{ tab: LOG_TAB, a1: "H1:I1", values: [LOG_HEADERS.slice(7)] }]);
+    }
   }
   bootstrapped.add(gateway);
 }

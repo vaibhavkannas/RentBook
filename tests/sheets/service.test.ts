@@ -23,12 +23,10 @@ function setup(schedule: unknown[][] = baseSchedule()) {
   return { fake, ctx };
 }
 
+const OPTIONS = { now: NOW, retryDelayMs: 0, loggedBy: "owner@example.com" };
+
 const pay = (ctx: SheetsContext, input: Partial<LogPaymentInput> & { portionId: string }) =>
-  logPayment(
-    ctx,
-    { month: OCT, amount: 5450, dateReceived: "2026-10-05", ...input },
-    { now: NOW, retryDelayMs: 0 },
-  );
+  logPayment(ctx, { month: OCT, amount: 5450, dateReceived: "2026-10-05", ...input }, OPTIONS);
 
 async function expectCode(promise: Promise<unknown>, code: string) {
   const error = await promise.then(
@@ -82,6 +80,8 @@ describe("logPayment: first payment of a new month", () => {
       5450,
       4,
       "2026-10-03",
+      "owner@example.com",
+      "Logged",
     ]);
   });
 
@@ -129,6 +129,16 @@ describe("logPayment: duplicates", () => {
     expect(result.entry).toEqual({ tenant: "Asha", count: 4, amount: 6000 });
     expect(cell(fake, "Schedule", "C", 6)).toBe(4);
     expect(cell(fake, "Schedule", "D", 6)).toBe(6000);
+  });
+
+  it("records Edited when an existing amount is replaced", async () => {
+    const { fake, ctx } = setup();
+    await pay(ctx, { portionId: "p1" });
+    await pay(ctx, { portionId: "p1", amount: 6000, overwrite: true });
+    const log = fake.tabs.get(LOG_TAB)!;
+    const last = log[log.length - 1];
+    expect(last[7]).toBe("owner@example.com");
+    expect(last[8]).toBe("Edited");
   });
 });
 

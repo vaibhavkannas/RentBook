@@ -77,9 +77,15 @@ describe("parseJson", () => {
   });
 
   it("validates the log retry row shape and settings payload", async () => {
-    const row = ["t", "2026-10", "P", "A", 1, 1, "2026-10-05"];
-    expect((await parseJson(req(JSON.stringify({ row })), logRetryBody)).row).toHaveLength(7);
+    const row = ["t", "2026-10", "P", "A", 1, 1, "2026-10-05", "owner@example.com", "Logged"];
+    expect((await parseJson(req(JSON.stringify({ row })), logRetryBody)).row).toHaveLength(9);
     await expect(parseJson(req(JSON.stringify({ row: ["x"] })), logRetryBody)).rejects.toThrow();
+    await expect(
+      parseJson(req(JSON.stringify({ row: row.slice(0, 7) })), logRetryBody),
+    ).rejects.toThrow();
+    await expect(
+      parseJson(req(JSON.stringify({ row: [...row.slice(0, 8), "Deleted"] })), logRetryBody),
+    ).rejects.toThrow();
     await expect(parseJson(req(JSON.stringify({ portions: [] })), settingsBody)).rejects.toThrow();
   });
 });

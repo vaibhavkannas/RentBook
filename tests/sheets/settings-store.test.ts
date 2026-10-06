@@ -6,6 +6,7 @@ import {
   LOG_HEADERS,
   LOG_TAB,
   readSettings,
+  SETTINGS_HEADERS,
   SETTINGS_TAB,
   updateSettings,
 } from "@/lib/sheets/settings-store";
@@ -69,8 +70,45 @@ describe("ensureTabs", () => {
   });
 });
 
+describe("ensureTabs: Payments Log header upgrade", () => {
+  const oldHeaders = ["Saved at", "Month", "Portion", "Tenant", "Amount", "Count", "Date received"];
+  const row = ["2026-09-05T00:00:00.000Z", "2026-09", "First floor, single bedroom", "Asha", 5450, 3, "2026-09-05"];
+
+  async function run(logRows: unknown[][]) {
+    const fake = new FakeGateway({
+      Schedule: baseSchedule(),
+      [SETTINGS_TAB]: [[...SETTINGS_HEADERS]],
+      [LOG_TAB]: logRows,
+    });
+    await ensureTabs(fake, "Schedule");
+    return fake;
+  }
+
+  it("has nine log headers ending in Logged by and Action", () => {
+    expect(LOG_HEADERS).toHaveLength(9);
+    expect(LOG_HEADERS.slice(7)).toEqual(["Logged by", "Action"]);
+  });
+
+  it("adds Logged by and Action to an old header row and leaves data rows alone", async () => {
+    const fake = await run([oldHeaders, row]);
+    expect(fake.tabs.get(LOG_TAB)![0]).toEqual(LOG_HEADERS);
+    expect(fake.tabs.get(LOG_TAB)![1]).toEqual(row);
+  });
+
+  it("writes nothing when the headers are already current", async () => {
+    const fake = await run([[...LOG_HEADERS]]);
+    const writes = fake.calls.filter((c) => c === "updateValues").length;
+    expect(writes).toBe(0);
+  });
+
+  it("writes the whole header row into an empty Payments Log tab", async () => {
+    const fake = await run([]);
+    expect(fake.tabs.get(LOG_TAB)![0]).toEqual(LOG_HEADERS);
+  });
+});
+
 describe("readSettings", () => {
-  const withRow = (row: unknown[]) =>
+  const withRow =(row: unknown[]) =>
     new FakeGateway({ [SETTINGS_TAB]: [["Portion"], row] });
 
   it("reads a blank cycle length as never resets", async () => {

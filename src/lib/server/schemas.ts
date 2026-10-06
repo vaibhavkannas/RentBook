@@ -18,6 +18,8 @@ export const logRetryBody = z.object({
     z.number(),
     z.number(),
     z.string(),
+    z.string(),
+    z.enum(["Logged", "Edited", "Undone"]),
   ]),
 });
 

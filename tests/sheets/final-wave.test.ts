@@ -15,7 +15,11 @@ function setup(schedule: unknown[][]) {
 }
 
 const pay = (ctx: SheetsContext, portionId: string, amount = 5450) =>
-  logPayment(ctx, { month: OCT, portionId, amount, dateReceived: "2026-10-05" }, { now: new Date(), retryDelayMs: 0 });
+  logPayment(
+    ctx,
+    { month: OCT, portionId, amount, dateReceived: "2026-10-05" },
+    { now: new Date(), retryDelayMs: 0, loggedBy: "owner@example.com" },
+  );
 
 describe("header mapping never guesses", () => {
   it("accepts 'Tenant 2' style headers and finds all five portions", () => {
