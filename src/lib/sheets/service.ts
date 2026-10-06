@@ -16,6 +16,7 @@ import type {
 } from "@/lib/domain/types";
 import { addMonths, compareYm, isValidIsoDay, ymKey } from "@/lib/domain/year-month";
 import { conflict, sheetStructure, validation } from "@/lib/errors";
+import { formatMonthTitle } from "@/lib/format";
 import { colLetter } from "./a1";
 import type { CellWrite, SheetsGateway } from "./gateway";
 import { parseSchedule, type ScheduleLayout } from "./schedule";
@@ -265,12 +266,12 @@ async function logPaymentUnchecked(
   if (input.expected) {
     if (!existing) {
       throw conflict(
-        `Nothing to edit. ${portion.name} has no payment recorded for ${ymKey(input.month)} any more. Refresh the page.`,
+        `Nothing to edit. ${portion.name} has no payment recorded for ${formatMonthTitle(input.month)} any more. Refresh the page.`,
       );
     }
     if (!sameEntry(existing, input.expected)) {
       throw conflict(
-        `${portion.name} for ${ymKey(input.month)} was changed by someone else. Refresh the page and try again.`,
+        `${portion.name} for ${formatMonthTitle(input.month)} was changed by someone else. Refresh the page and try again.`,
       );
     }
   }
@@ -405,12 +406,12 @@ async function undoPaymentUnchecked(
   const existing = monthRow?.entries[portion.id];
   if (!monthRow || !existing) {
     throw conflict(
-      `Nothing to undo. ${portion.name} has no payment recorded for ${ymKey(input.month)} any more. Refresh the page.`,
+      `Nothing to undo. ${portion.name} has no payment recorded for ${formatMonthTitle(input.month)} any more. Refresh the page.`,
     );
   }
   if (!sameEntry(existing, input.expected)) {
     throw conflict(
-      `${portion.name} for ${ymKey(input.month)} was changed by someone else. Refresh the page and try again.`,
+      `${portion.name} for ${formatMonthTitle(input.month)} was changed by someone else. Refresh the page and try again.`,
     );
   }
   if (hasLaterEntry(loaded.rows, portion.id, input.month)) {
@@ -480,7 +481,8 @@ export type ActivityItem = {
   count: number | null;
   dateReceived: string;
   loggedBy: string;
-  action: LogAction;
+  /** Null for a row with no recognised action, such as one from before the Action column existed. */
+  action: LogAction | null;
 };
 
 const ACTIONS: readonly LogAction[] = ["Logged", "Edited", "Undone"];
@@ -488,7 +490,7 @@ const ACTIONS: readonly LogAction[] = ["Logged", "Edited", "Undone"];
 const text = (value: unknown) => (value === undefined || value === null ? "" : String(value));
 const num = (value: unknown) => (typeof value === "number" ? value : null);
 
-/** The latest Payments Log rows, newest first. Rows from before "Logged by" and "Action" existed read as Logged by nobody. */
+/** The latest Payments Log rows, newest first. Rows from before "Logged by" and "Action" existed have no logged-by and no action. */
 export async function readActivity(ctx: SheetsContext, limit = 50): Promise<ActivityItem[]> {
   await ensureTabs(ctx.gateway, ctx.scheduleTab);
   const values = await ctx.gateway.getValues(LOG_TAB, "A1:I", "UNFORMATTED_VALUE");
@@ -496,7 +498,7 @@ export async function readActivity(ctx: SheetsContext, limit = 50): Promise<Acti
     .slice(1)
     .filter((row) => row.some((cell) => cell !== undefined && cell !== ""))
     .map((row): ActivityItem => {
-      const action = ACTIONS.find((candidate) => candidate === row[8]) ?? "Logged";
+      const action = ACTIONS.find((candidate) => candidate === row[8]) ?? null;
       return {
         savedAt: text(row[0]),
         month: text(row[1]),

@@ -325,7 +325,9 @@ describe("logPayment: an edit carries what the person saw", () => {
       "conflict",
     );
 
-    expect(error.message).toMatch(/Refresh the page/);
+    expect(error.message).toBe(
+      "Nothing to edit. Third floor, hall and kitchen has no payment recorded for October 2026 any more. Refresh the page.",
+    );
     expect(fake.tabs.get("Schedule")).toEqual(scheduleBefore);
     expect(fake.tabs.get(LOG_TAB)).toEqual(logBefore);
     expect((await getMonthView(ctx, OCT)).cards[4].status).toBe("pending");
@@ -341,11 +343,14 @@ describe("logPayment: an edit carries what the person saw", () => {
     const scheduleBefore = structuredClone(fake.tabs.get("Schedule"));
     const logBefore = structuredClone(fake.tabs.get(LOG_TAB));
 
-    await expectCode(
+    const error = await expectCode(
       pay(ctx, { portionId: "p5", amount: 7100, overwrite: true, expected: seen }),
       "conflict",
     );
 
+    expect(error.message).toBe(
+      "Third floor, hall and kitchen for October 2026 was changed by someone else. Refresh the page and try again.",
+    );
     expect(fake.tabs.get("Schedule")).toEqual(scheduleBefore);
     expect(fake.tabs.get(LOG_TAB)).toEqual(logBefore);
   });

@@ -37,11 +37,41 @@ describe("readActivity", () => {
     expect(await readActivity(ctx, 3)).toHaveLength(3);
   });
 
-  it("treats rows from before the new columns as Logged by nobody", async () => {
+  it("returns at most 50 rows when no limit is given, newest first", async () => {
+    const sixty = Array.from({ length: 60 }, (_, i) => [
+      `2026-10-05T04:30:${String(i).padStart(2, "0")}.000Z`,
+      "2026-10",
+      "First floor, single bedroom",
+      "Asha",
+      5450,
+      i + 1,
+      "2026-10-05",
+      "owner@example.com",
+      "Logged",
+    ]);
+    const { ctx } = setup(sixty);
+    const items = await readActivity(ctx);
+    expect(items).toHaveLength(50);
+    expect(items[0].count).toBe(60);
+    expect(items[49].count).toBe(11);
+    expect(items.map((i) => i.count)).toEqual(Array.from({ length: 50 }, (_, i) => 60 - i));
+  });
+
+  it("treats rows from before the new columns as logged by nobody, with no action", async () => {
     const { ctx } = setup([row(1, [])]);
     const [item] = await readActivity(ctx);
     expect(item.loggedBy).toBe("");
-    expect(item.action).toBe("Logged");
+    expect(item.action).toBeNull();
+  });
+
+  it("gives a blank or unknown Action no action instead of calling it Logged", async () => {
+    const { ctx } = setup([
+      row(1, ["a@example.com", ""]),
+      row(2, ["b@example.com", "Archived"]),
+      row(3, ["c@example.com", "Logged"]),
+    ]);
+    const items = await readActivity(ctx);
+    expect(items.map((i) => i.action)).toEqual(["Logged", null, null]);
   });
 
   it("keeps Edited and Undone actions and ignores blank rows", async () => {

@@ -16,7 +16,7 @@ export class AppError extends Error {
 }
 
 export const unauthorized = () =>
-  new AppError("unauthorized", "Sign in with the allowed Google account.");
+  new AppError("unauthorized", "Sign in with an allowed Google account.");
 
 export const forbidden = () => new AppError("forbidden", "Only the owner can do that.");
 

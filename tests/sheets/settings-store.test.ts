@@ -95,6 +95,12 @@ describe("ensureTabs: Payments Log header upgrade", () => {
     expect(fake.tabs.get(LOG_TAB)![1]).toEqual(row);
   });
 
+  it("completes a half-upgraded header that has Logged by but no Action", async () => {
+    const fake = await run([[...oldHeaders, "Logged by"], row]);
+    expect(fake.tabs.get(LOG_TAB)![0]).toEqual(LOG_HEADERS);
+    expect(fake.tabs.get(LOG_TAB)![1]).toEqual(row);
+  });
+
   it("writes nothing when the headers are already current", async () => {
     const fake = await run([[...LOG_HEADERS]]);
     const writes = fake.calls.filter((c) => c === "updateValues").length;
@@ -108,7 +114,7 @@ describe("ensureTabs: Payments Log header upgrade", () => {
 });
 
 describe("readSettings", () => {
-  const withRow =(row: unknown[]) =>
+  const withRow = (row: unknown[]) =>
     new FakeGateway({ [SETTINGS_TAB]: [["Portion"], row] });
 
   it("reads a blank cycle length as never resets", async () => {

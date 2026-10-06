@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { signOut } from "@/auth";
+import LoadProblem from "@/components/LoadProblem";
 import MonthFrame from "@/components/MonthFrame";
 import PortionBoard from "@/components/PortionBoard";
 import type { MonthView } from "@/lib/domain/types";
@@ -43,15 +44,7 @@ export default async function Home({
   return (
     <main className="mx-auto min-h-dvh max-w-md px-4 pb-10 pt-4">
       <MonthFrame monthKey={ymKey(month)} currentKey={ymKey(currentYm(now))}>
-        {problem && (
-          <div role="alert" className="mt-4 rounded-2xl bg-danger-bg p-4 text-danger-ink">
-            <p className="font-medium">Can&apos;t load your Sheet</p>
-            <p className="mt-1 text-sm">{problem}</p>
-            <Link href={`/?month=${ymKey(month)}`} className="mt-3 inline-block min-h-11 rounded-xl border border-current px-4 py-2.5 text-sm font-medium">
-              Try again
-            </Link>
-          </div>
-        )}
+        {problem && <LoadProblem message={problem} retryHref={`/?month=${ymKey(month)}`} />}
 
         {view && (
           <>

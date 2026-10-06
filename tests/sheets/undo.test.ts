@@ -54,6 +54,7 @@ describe("undoPayment", () => {
   it("clears the portion's cells, keeps a formula total, and logs Undone", async () => {
     const { fake, ctx } = setup();
     await pay(ctx, { portionId: "p1" });
+    fake.calls = [];
 
     const result = await undoPayment(
       ctx,
@@ -61,6 +62,8 @@ describe("undoPayment", () => {
       OPTIONS,
     );
 
+    // All the cleared cells go out in a single write.
+    expect(fake.calls.filter((call) => call === "updateValues")).toHaveLength(1);
     expect(result).toMatchObject({ removed: { tenant: "Asha", count: 4, amount: 5450 }, logWritten: true });
     expect(blank(cell(fake, "Schedule", "B", 6))).toBe(true);
     expect(blank(cell(fake, "Schedule", "C", 6))).toBe(true);
@@ -88,6 +91,11 @@ describe("undoPayment", () => {
       OPTIONS,
     );
     expect(cell(fake, "Schedule", "Q", 6)).toBe(13300);
+    expect(blank(cell(fake, "Schedule", "B", 6))).toBe(true);
+    expect(blank(cell(fake, "Schedule", "C", 6))).toBe(true);
+    expect(blank(cell(fake, "Schedule", "D", 6))).toBe(true);
+    // The other portion's entry is untouched.
+    expect(cell(fake, "Schedule", "G", 6)).toBe(13300);
   });
 
   it.each([
@@ -100,11 +108,14 @@ describe("undoPayment", () => {
     const scheduleBefore = structuredClone(fake.tabs.get("Schedule"));
     const logBefore = structuredClone(fake.tabs.get(LOG_TAB));
 
-    const failure = await code(
+    const error = await rejection(
       undoPayment(ctx, { month: OCT, portionId: "p1", expected }, OPTIONS),
     );
 
-    expect(failure).toBe("conflict");
+    expect(error.code).toBe("conflict");
+    expect(error.message).toBe(
+      "First floor, single bedroom for October 2026 was changed by someone else. Refresh the page and try again.",
+    );
     expect(fake.tabs.get("Schedule")).toEqual(scheduleBefore);
     expect(fake.tabs.get(LOG_TAB)).toEqual(logBefore);
   });
@@ -119,7 +130,9 @@ describe("undoPayment", () => {
       ),
     );
     expect(error.code).toBe("conflict");
-    expect(error.message).toMatch(/^Nothing to undo\./);
+    expect(error.message).toBe(
+      "Nothing to undo. First floor, single bedroom has no payment recorded for October 2026 any more. Refresh the page.",
+    );
   });
 
   it("refuses to undo a month when a later month has an entry", async () => {

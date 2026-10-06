@@ -1,5 +1,5 @@
 import type { YearMonth } from "@/lib/domain/types";
-import { monthName } from "@/lib/domain/year-month";
+import { monthName, parseYmKey } from "@/lib/domain/year-month";
 
 const rupees = new Intl.NumberFormat("en-IN", { maximumFractionDigits: 0 });
 
@@ -11,6 +11,12 @@ export function formatRupees(amount: number): string {
 /** { year: 2026, month: 10 } -> "October 2026". */
 export function formatMonthTitle(ym: YearMonth): string {
   return `${monthName(ym.month, true)} ${ym.year}`;
+}
+
+/** "2026-10" -> "October 2026". Text that is not a month key is returned unchanged. */
+export function formatMonthKey(key: string): string {
+  const ym = parseYmKey(key);
+  return ym ? formatMonthTitle(ym) : key;
 }
 
 const savedAt = new Intl.DateTimeFormat("en-IN", {

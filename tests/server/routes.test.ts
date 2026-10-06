@@ -6,6 +6,9 @@ const logPayment = vi.hoisted(() =>
   vi.fn<(...args: unknown[]) => Promise<{ logWritten: boolean }>>(async () => ({ logWritten: true })),
 );
 const undoPayment = vi.hoisted(() => vi.fn());
+const retryLogRow = vi.hoisted(() =>
+  vi.fn<(...args: unknown[]) => Promise<boolean>>(async () => true),
+);
 const markWritten = vi.hoisted(() => vi.fn(async () => undefined));
 
 vi.mock("@/auth", () => ({ auth }));
@@ -16,9 +19,11 @@ vi.mock("@/lib/sheets/service", async (importOriginal) => ({
   saveSettings,
   logPayment,
   undoPayment,
+  retryLogRow,
 }));
 
-import { conflict } from "@/lib/errors";
+import { conflict, validation } from "@/lib/errors";
+import { POST as postRetry } from "@/app/api/payments/log-retry/route";
 import { POST as postPayment } from "@/app/api/payments/route";
 import { POST as postUndo } from "@/app/api/payments/undo/route";
 import { PUT as putSettings } from "@/app/api/settings/route";
@@ -42,6 +47,7 @@ beforeEach(() => {
   saveSettings.mockClear();
   logPayment.mockClear();
   undoPayment.mockReset();
+  retryLogRow.mockClear();
   markWritten.mockClear();
 });
 afterEach(() => {
@@ -160,14 +166,29 @@ describe("POST /api/payments", () => {
     expect(logPayment).not.toHaveBeenCalled();
   });
 
-  it("marks the write time after a successful log, and not when the log fails", async () => {
+  it("marks the write time after a successful log, and not when the log is refused for another reason", async () => {
     signedInAs("member@example.com");
-    logPayment.mockRejectedValueOnce(conflict("Already recorded."));
-    expect((await postPayment(paymentRequest())).status).toBe(409);
+    logPayment.mockRejectedValueOnce(validation("Amount must be a whole number."));
+    expect((await postPayment(paymentRequest())).status).toBe(400);
     expect(markWritten).not.toHaveBeenCalled();
 
     await postPayment(paymentRequest());
     expect(markWritten).toHaveBeenCalledOnce();
+  });
+
+  it("marks the write time when the log hits a conflict, so the refresh skips the cache", async () => {
+    signedInAs("member@example.com");
+    logPayment.mockRejectedValueOnce(conflict("Already recorded."));
+    const res = await postPayment(paymentRequest());
+    expect(res.status).toBe(409);
+    expect((await res.json()).error.code).toBe("conflict");
+    expect(markWritten).toHaveBeenCalledOnce();
+  });
+
+  it("answers 401 with the sign-in message for a visitor who is not signed in", async () => {
+    signedInAs(null);
+    const res = await postPayment(paymentRequest());
+    expect((await res.json()).error.message).toBe("Sign in with an allowed Google account.");
   });
 });
 
@@ -190,6 +211,15 @@ describe("POST /api/payments/undo", () => {
     expect(undoPayment).not.toHaveBeenCalled();
   });
 
+  it("rejects a visitor who is not signed in at all", async () => {
+    signedInAs(null);
+    const res = await postUndo(undoRequest(good));
+    expect(res.status).toBe(401);
+    expect((await res.json()).error.code).toBe("unauthorized");
+    expect(undoPayment).not.toHaveBeenCalled();
+    expect(markWritten).not.toHaveBeenCalled();
+  });
+
   it("lets any listed member undo and records who did it", async () => {
     signedInAs("member@example.com");
     undoPayment.mockResolvedValue({ removed: good.expected, logWritten: true, logRow: [] });
@@ -210,7 +240,7 @@ describe("POST /api/payments/undo", () => {
     expect(undoPayment.mock.calls[0][2]).toMatchObject({ loggedBy: "member@example.com" });
   });
 
-  it("answers 409 when the service reports a conflict", async () => {
+  it("answers 409 when the service reports a conflict, and marks the write time for the refresh", async () => {
     signedInAs("member@example.com");
     undoPayment.mockRejectedValue(conflict("Changed by someone else."));
     const res = await postUndo(undoRequest(good));
@@ -219,6 +249,13 @@ describe("POST /api/payments/undo", () => {
       code: "conflict",
       message: "Changed by someone else.",
     });
+    expect(markWritten).toHaveBeenCalledOnce();
+  });
+
+  it("does not mark the write time when the undo fails for another reason", async () => {
+    signedInAs("member@example.com");
+    undoPayment.mockRejectedValue(validation("Unknown portion."));
+    expect((await postUndo(undoRequest(good))).status).toBe(400);
     expect(markWritten).not.toHaveBeenCalled();
   });
 
@@ -232,5 +269,50 @@ describe("POST /api/payments/undo", () => {
   it("rejects a malformed body", async () => {
     signedInAs("member@example.com");
     expect((await postUndo(undoRequest({ month: "nope" }))).status).toBe(400);
+  });
+});
+
+describe("POST /api/payments/log-retry", () => {
+  const row = [
+    "2026-10-05T04:30:00.000Z",
+    "2026-10",
+    "First floor, single bedroom",
+    "Asha",
+    5450,
+    4,
+    "",
+    "forged@example.com",
+    "Undone",
+  ];
+  const retryRequest = () =>
+    new Request("http://localhost/api/payments/log-retry", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ row }),
+    });
+
+  it("rejects a visitor who is not signed in", async () => {
+    signedInAs(null);
+    const res = await postRetry(retryRequest());
+    expect(res.status).toBe(401);
+    expect(retryLogRow).not.toHaveBeenCalled();
+  });
+
+  it("rejects a signed-in address that is not on the list", async () => {
+    signedInAs("stranger@example.com");
+    const res = await postRetry(retryRequest());
+    expect(res.status).toBe(401);
+    expect(retryLogRow).not.toHaveBeenCalled();
+  });
+
+  it("writes the signed-in email as who logged it, whatever the request says", async () => {
+    signedInAs("Member@Example.com");
+    const res = await postRetry(retryRequest());
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ ok: true, logWritten: true });
+    expect(retryLogRow).toHaveBeenCalledOnce();
+    const sent = retryLogRow.mock.calls[0][1] as unknown[];
+    expect(sent[7]).toBe("member@example.com");
+    expect(sent).toEqual([...row.slice(0, 7), "member@example.com", "Undone"]);
   });
 });
