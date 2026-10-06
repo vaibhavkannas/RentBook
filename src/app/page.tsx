@@ -1,69 +1,109 @@
-import Image from "next/image";
+import Link from "next/link";
+import { redirect } from "next/navigation";
+import { signOut } from "@/auth";
+import PortionBoard from "@/components/PortionBoard";
+import type { MonthView } from "@/lib/domain/types";
+import { addMonths, currentYm, parseYmKey, todayIso, ymKey } from "@/lib/domain/year-month";
+import { AppError } from "@/lib/errors";
+import { formatMonthTitle, formatRupees } from "@/lib/format";
+import { isSignedIn } from "@/lib/server/auth-guard";
+import { getSheetsContext } from "@/lib/server/context";
+import { getMonthView } from "@/lib/sheets/service";
 
-export default function Home() {
+export default async function Home({
+  searchParams,
+}: {
+  searchParams: Promise<{ month?: string }>;
+}) {
+  if (!(await isSignedIn())) redirect("/signin");
+
+  const { month: param } = await searchParams;
+  const now = new Date();
+  const month = (param ? parseYmKey(param) : null) ?? currentYm(now);
+
+  let view: MonthView | null = null;
+  let problem: string | null = null;
+  try {
+    view = await getMonthView(getSheetsContext(), month);
+  } catch (error) {
+    if (error instanceof AppError) {
+      problem = error.message;
+    } else {
+      console.error(error);
+      problem = "Couldn't reach Google Sheets. Try again.";
+    }
+  }
+
+  const prev = ymKey(addMonths(month, -1));
+  const next = ymKey(addMonths(month, 1));
+  const title = formatMonthTitle(month);
+  const progress =
+    view && view.expected > 0 ? Math.min(100, Math.round((view.received / view.expected) * 100)) : 0;
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert h-5 w-[100px]"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the{" "}
-            <code className="rounded bg-black/[.06] px-1.5 py-0.5 font-mono text-[0.9em] dark:bg-white/[.08]">
-              page.tsx
-            </code>{" "}
-            file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+    <main className="mx-auto min-h-dvh max-w-md px-4 pb-10 pt-4">
+      <nav className="flex items-center justify-between">
+        <Link href={`/?month=${prev}`} aria-label="Previous month" className="grid min-h-11 min-w-11 place-items-center rounded-lg text-xl">
+          ‹
+        </Link>
+        <h1 className="text-lg font-semibold">{title}</h1>
+        <Link href={`/?month=${next}`} aria-label="Next month" className="grid min-h-11 min-w-11 place-items-center rounded-lg text-xl">
+          ›
+        </Link>
+      </nav>
+
+      {problem && (
+        <div role="alert" className="mt-4 rounded-2xl bg-danger-bg p-4 text-danger-ink">
+          <p className="font-medium">Can&apos;t load your Sheet</p>
+          <p className="mt-1 text-sm">{problem}</p>
+          <Link href={`/?month=${ymKey(month)}`} className="mt-3 inline-block min-h-11 rounded-xl border border-current px-4 py-2.5 text-sm font-medium">
+            Try again
+          </Link>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert h-[14px] w-4"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={14}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
-    </div>
+      )}
+
+      {view && (
+        <>
+          <section className="mt-3 rounded-2xl bg-surface p-4 ring-1 ring-line" aria-label="Month summary">
+            <div className="flex items-baseline justify-between text-sm text-muted">
+              <span>Received</span>
+              <span>
+                {view.paidCount} of {view.cards.length} portions
+              </span>
+            </div>
+            <p className="mt-0.5 text-2xl font-semibold">
+              {formatRupees(view.received)}{" "}
+              <span className="text-sm font-normal text-muted">of {formatRupees(view.expected)}</span>
+            </p>
+            <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-line" role="presentation">
+              <div className="h-full bg-accent" style={{ width: `${progress}%` }} />
+            </div>
+          </section>
+
+          <PortionBoard
+            monthKey={ymKey(month)}
+            monthLabel={title}
+            cards={view.cards}
+            defaultDate={todayIso(now)}
+          />
+        </>
+      )}
+
+      <footer className="mt-6 flex items-center justify-between text-sm">
+        <Link href="/settings" className="grid min-h-11 place-items-center text-muted underline">
+          Portion settings
+        </Link>
+        <form
+          action={async () => {
+            "use server";
+            await signOut({ redirectTo: "/signin" });
+          }}
+        >
+          <button type="submit" className="min-h-11 text-muted underline">
+            Sign out
+          </button>
+        </form>
+      </footer>
+    </main>
   );
 }
