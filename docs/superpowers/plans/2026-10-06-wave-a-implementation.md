@@ -2524,9 +2524,119 @@ Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>"
 
 ---
 
-### Task 9: Verify, review, merge and deploy (run by the lead, not a subagent)
+### Task 9: Gmail address normalisation
 
-This task has no new code. The lead runs it after Tasks 1 to 8 are reviewed.
+Why: Gmail ignores dots and anything after a `+` in the part before the `@`, and Google may report the address differently from how a person typed it (for example `First.Last@gmail.com` and `firstlast@gmail.com` are one account). An exact string match would lock such a person out at sign-in.
+
+**Files:**
+- Modify: `src/lib/server/env.ts`, `SETUP.md`
+- Test: `tests/server/env.test.ts`
+
+**Interfaces:**
+- Produces (`env.ts`): `canonicalEmail(email: string): string`. `isAllowedEmail` and `isOwnerEmail` compare canonical forms of both sides. `parseAllowedEmails` still returns lower-cased, trimmed addresses as written, but drops a later address whose canonical form equals an earlier one (the first spelling wins, so the owner stays first).
+
+- [ ] **Step 1: Write the failing tests**
+
+Add to `tests/server/env.test.ts` (import `canonicalEmail`):
+
+```ts
+describe("canonicalEmail", () => {
+  it("lower-cases and trims", () => {
+    expect(canonicalEmail("  Owner@Example.com ")).toBe("owner@example.com");
+  });
+
+  it("ignores dots and +tags in Gmail and Googlemail addresses", () => {
+    expect(canonicalEmail("First.Last.S@gmail.com")).toBe("firstlasts@gmail.com");
+    expect(canonicalEmail("a.b+rent@googlemail.com")).toBe("ab@gmail.com");
+  });
+
+  it("keeps dots and +tags for other domains", () => {
+    expect(canonicalEmail("a.b+c@example.com")).toBe("a.b+c@example.com");
+  });
+
+  it("leaves text without an @ alone", () => {
+    expect(canonicalEmail(" Not An Email ")).toBe("not an email");
+  });
+});
+
+describe("Gmail variants in the allow-list", () => {
+  it("treats dot and plus variants as the same account", () => {
+    const allowed = ["firstlast.s@gmail.com", "owner@example.com"];
+    expect(isAllowedEmail("first.last.s@gmail.com", allowed)).toBe(true);
+    expect(isAllowedEmail("Firstlast.S+rent@gmail.com", allowed)).toBe(true);
+    expect(isAllowedEmail("owner.x@example.com", allowed)).toBe(false);
+  });
+
+  it("recognises the owner under a different spelling", () => {
+    expect(isOwnerEmail("first.last@gmail.com", ["firstlast@gmail.com", "b@example.com"])).toBe(true);
+    expect(isOwnerEmail("b@example.com", ["firstlast@gmail.com", "b@example.com"])).toBe(false);
+  });
+
+  it("keeps only the first spelling of the same Gmail account when parsing", () => {
+    expect(
+      parseAllowedEmails({ ALLOWED_EMAILS: "first.last@gmail.com, firstlast@gmail.com, x@example.com" }),
+    ).toEqual(["first.last@gmail.com", "x@example.com"]);
+  });
+});
+```
+
+- [ ] **Step 2: Run to confirm failure**
+
+Run: `npx vitest run tests/server/env.test.ts`
+Expected: FAIL (`canonicalEmail` is not exported).
+
+- [ ] **Step 3: Implement**
+
+In `src/lib/server/env.ts` add above `isAllowedEmail`:
+
+```ts
+const GMAIL_DOMAINS = new Set(["gmail.com", "googlemail.com"]);
+
+/** Lower-case form used to compare addresses. Gmail ignores dots and "+tags", so they are removed. */
+export function canonicalEmail(email: string): string {
+  const value = email.trim().toLowerCase();
+  const at = value.lastIndexOf("@");
+  if (at === -1) return value;
+  const domain = value.slice(at + 1);
+  if (!GMAIL_DOMAINS.has(domain)) return value;
+  const local = value.slice(0, at).split("+")[0].replace(/\./g, "");
+  return `${local}@gmail.com`;
+}
+```
+
+Remove the old `norm` helper and make `isAllowedEmail` and `isOwnerEmail` compare `canonicalEmail(...)` of both sides. In `parseAllowedEmails` replace the `[...new Set(emails)]` de-duplication with one that keeps the first spelling per canonical form:
+
+```ts
+  const seen = new Set<string>();
+  return emails.filter((email) => {
+    const key = canonicalEmail(email);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+```
+
+`SETUP.md`: in the "Adding another person" section add one sentence: "Gmail ignores dots and anything after a plus sign, so any spelling of the same Gmail address works in `ALLOWED_EMAILS`. Google Cloud may show the address in its own spelling in the Test users list."
+
+- [ ] **Step 4: Run everything**
+
+Run: `npm test && npm run typecheck && npm run lint`
+Expected: all pass.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add -A
+git commit -m "fix: treat Gmail dot and plus variants as the same account
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>"
+```
+
+---
+
+### Task 10: Verify, review, merge and deploy (run by the lead, not a subagent)
+
+This task has no new code. The lead runs it after Tasks 1 to 9 are reviewed.
 
 - [ ] **Step 1: Full verification on the branch.** `npm ci` is not needed. Run `npm test`, `npm run typecheck`, `npm run lint`, `npm run build`. All pass. Count the tests; the number must be higher than 171.
 - [ ] **Step 2: Real Google check on the TEST COPY.** From the commented old `SHEET_ID` line in `.env.local`, take the test copy's id (do not print it). Run `NODE_OPTIONS=--use-system-ca TEST_SHEET_ID=<id> npm run verify:testcopy`. Every line must say PASS. The script refuses to run if the id equals the real `SHEET_ID`.
