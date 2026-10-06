@@ -63,6 +63,19 @@ describe("cached month views", () => {
     ).rejects.toMatchObject({ code: "conflict" });
   });
 
+  it("a log decides on fresh data, not on the cached snapshot", async () => {
+    const { fake, ctx } = setup();
+    await getMonthView(ctx, OCT); // warm the cache: October has no payment
+    const other = { gateway: fake, scheduleTab: "Schedule", totalHeader: TOTAL_HEADER } as SheetsContext;
+    await logPayment(other, { month: OCT, portionId: "p1", amount: 5450, dateReceived: "2026-10-05" }, OPTIONS);
+    const result = await logPayment(
+      ctx,
+      { month: OCT, portionId: "p1", amount: 6000, dateReceived: "2026-10-06", overwrite: true },
+      OPTIONS,
+    );
+    expect(result.logRow[8]).toBe("Edited");
+  });
+
   it("a caller can demand data newer than a given time", async () => {
     const { fake, ctx } = setup();
     await getMonthView(ctx, OCT);
@@ -70,6 +83,29 @@ describe("cached month views", () => {
     await logPayment(other, { month: OCT, portionId: "p1", amount: 5450, dateReceived: "2026-10-05" }, OPTIONS);
     expect((await getMonthView(ctx, OCT)).cards[0].status).toBe("pending");
     expect((await getMonthView(ctx, OCT, { minFetchedAt: Date.now() + 1 })).cards[0].status).toBe("paid");
+  });
+});
+
+describe("a single page view read", () => {
+  it("fetches the Settings and the Schedule at the same time", async () => {
+    const fake = new FakeGateway({ Schedule: baseSchedule() });
+    const ctx = { gateway: fake, scheduleTab: "Schedule", totalHeader: TOTAL_HEADER } as SheetsContext;
+    await getMonthView(ctx, OCT); // creates the missing tabs, so the next read is a plain one
+    let active = 0;
+    let peak = 0;
+    const original = fake.getValues.bind(fake);
+    fake.getValues = async (...args) => {
+      active += 1;
+      peak = Math.max(peak, active);
+      try {
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        return await original(...args);
+      } finally {
+        active -= 1;
+      }
+    };
+    await getMonthView(ctx, OCT);
+    expect(peak).toBe(2);
   });
 });
 

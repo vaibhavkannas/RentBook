@@ -24,7 +24,8 @@ describe("createSnapshotCache", () => {
     expect((await cache.get()).n).toBe(1);
     advance(14_999);
     expect((await cache.get()).n).toBe(1);
-    advance(2);
+    advance(1);
+    // Exactly 15,000 ms after the load began, the value has expired.
     expect((await cache.get()).n).toBe(2);
     expect(load).toHaveBeenCalledTimes(2);
   });

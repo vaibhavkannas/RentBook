@@ -8,8 +8,7 @@ import { AppError } from "@/lib/errors";
 import { formatMonthTitle, formatRupees } from "@/lib/format";
 import { getViewer } from "@/lib/server/auth-guard";
 import { getSheetsContext } from "@/lib/server/context";
-import { readWrittenAt } from "@/lib/server/freshness";
-import { getMonthView } from "@/lib/sheets/service";
+import { loadMonthView } from "@/lib/server/freshness";
 
 export default async function Home({
   searchParams,
@@ -25,8 +24,7 @@ export default async function Home({
   let view: MonthView | null = null;
   let problem: string | null = null;
   try {
-    const writtenAt = await readWrittenAt();
-    view = await getMonthView(getSheetsContext(), month, { minFetchedAt: writtenAt });
+    view = await loadMonthView(getSheetsContext(), month);
   } catch (error) {
     if (error instanceof AppError) {
       problem = error.message;

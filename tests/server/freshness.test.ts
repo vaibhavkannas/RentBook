@@ -10,7 +10,10 @@ const jar = vi.hoisted(() => {
 });
 vi.mock("next/headers", () => ({ cookies: async () => jar }));
 
-import { markWritten, readWrittenAt } from "@/lib/server/freshness";
+import { loadMonthView, markWritten, readWrittenAt } from "@/lib/server/freshness";
+import { logPayment, withSnapshotCache, type SheetsContext } from "@/lib/sheets/service";
+import { FakeGateway } from "../support/fake-gateway";
+import { baseSchedule, TOTAL_HEADER } from "../support/fixtures";
 
 beforeEach(() => {
   jar.store.clear();
@@ -30,6 +33,19 @@ describe("freshness cookie", () => {
       "123456",
       expect.objectContaining({ httpOnly: true, sameSite: "lax", path: "/", maxAge: 120 }),
     );
+  });
+
+  it("does not throw when the cookie cannot be set, because the Sheet was already written", async () => {
+    const logged = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    try {
+      jar.set.mockImplementationOnce(() => {
+        throw new Error("cookies can only be set in a Route Handler or Server Function");
+      });
+      await expect(markWritten(123_456)).resolves.toBeUndefined();
+      expect(logged).toHaveBeenCalled();
+    } finally {
+      logged.mockRestore();
+    }
   });
 
   it("returns undefined when absent or not a number", async () => {
@@ -56,5 +72,43 @@ describe("freshness cookie", () => {
     jar.store.set("rb-wrote", "10000");
     expect(await readWrittenAt(6_000)).toBe(10_000);
     expect(await readWrittenAt(4_999)).toBeUndefined();
+  });
+});
+
+describe("loadMonthView", () => {
+  const OCT = { year: 2026, month: 10 };
+  const OPTIONS = { now: new Date("2026-10-05T04:30:00Z"), retryDelayMs: 0, loggedBy: "owner@example.com" };
+
+  /** A cached context, plus a second context on the same Sheet that stands in for another server instance. */
+  function setup() {
+    const fake = new FakeGateway({ Schedule: baseSchedule() });
+    const ctx = withSnapshotCache({ gateway: fake, scheduleTab: "Schedule", totalHeader: TOTAL_HEADER } as SheetsContext);
+    const other = { gateway: fake, scheduleTab: "Schedule", totalHeader: TOTAL_HEADER } as SheetsContext;
+    const logElsewhere = () =>
+      logPayment(other, { month: OCT, portionId: "p1", amount: 5450, dateReceived: "2026-10-05" }, OPTIONS);
+    return { ctx, logElsewhere };
+  }
+
+  it("serves the cached view to someone who has not written", async () => {
+    const { ctx, logElsewhere } = setup();
+    await loadMonthView(ctx, OCT);
+    await logElsewhere();
+    expect((await loadMonthView(ctx, OCT)).cards[0].status).toBe("pending");
+  });
+
+  it("reloads when this person wrote after the cached copy was read", async () => {
+    const { ctx, logElsewhere } = setup();
+    await loadMonthView(ctx, OCT);
+    await logElsewhere();
+    await markWritten(Date.now() + 1);
+    expect((await loadMonthView(ctx, OCT)).cards[0].status).toBe("paid");
+  });
+
+  it("keeps the cached view when this person wrote before it was read", async () => {
+    const { ctx, logElsewhere } = setup();
+    await markWritten(Date.now() - 10_000);
+    await loadMonthView(ctx, OCT);
+    await logElsewhere();
+    expect((await loadMonthView(ctx, OCT)).cards[0].status).toBe("pending");
   });
 });

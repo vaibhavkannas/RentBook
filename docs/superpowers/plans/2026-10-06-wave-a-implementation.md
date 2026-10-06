@@ -1322,7 +1322,7 @@ Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>"
 **Interfaces:**
 - Produces (`snapshot-cache.ts`): `type SnapshotCache<T> = { get(minFetchedAt?: number): Promise<T>; invalidate(): void }`; `createSnapshotCache<T>(load: () => Promise<T>, ttlMs: number, now?: () => number): SnapshotCache<T>`.
 - Produces (`service.ts`): `SheetsContext` gains optional `cache?: SnapshotCache<Snapshot>`; `type Snapshot = { portions: PortionConfig[]; layout: ScheduleLayout; rows: ScheduleRow[] }`; `withSnapshotCache(ctx: SheetsContext, ttlMs?: number): SheetsContext`; `getMonthView(ctx, month, options?: { minFetchedAt?: number })`.
-- Produces (`freshness.ts`): `markWritten(now?: number): Promise<void>`, `readWrittenAt(): Promise<number | undefined>`.
+- Produces (`freshness.ts`): `markWritten(now?: number): Promise<void>` (best-effort: logs and swallows a cookie failure, because the Sheet is already written), `readWrittenAt(now?: number): Promise<number | undefined>` (ignores zero, negative and future values), `loadMonthView(ctx, month): Promise<MonthView>` (the page's read, which passes the cookie time as `minFetchedAt`).
 
 - [ ] **Step 1: Read the docs**
 
