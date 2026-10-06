@@ -21,6 +21,7 @@ export default function MonthFrame({ monthKey, currentKey, children }: Props) {
   const [target, setTarget] = useState(monthKey);
   const [pickerOpen, setPickerOpen] = useState(false);
   const touchStart = useRef<{ x: number; y: number } | null>(null);
+  const titleRef = useRef<HTMLButtonElement>(null);
 
   // While a navigation is loading, show the month that was asked for.
   const shownKey = pending ? target : monthKey;
@@ -62,7 +63,8 @@ export default function MonthFrame({ monthKey, currentKey, children }: Props) {
 
   return (
     <div onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
-      <nav aria-label="Month" className="flex items-center justify-between">
+      {/* The arrows stay level with the title row; the nav grows only while the Today pill is shown. */}
+      <nav aria-label="Month" className="flex items-start justify-between">
         <button
           type="button"
           aria-label="Previous month"
@@ -72,8 +74,9 @@ export default function MonthFrame({ monthKey, currentKey, children }: Props) {
           ‹
         </button>
         <div className="flex flex-col items-center">
-          <h1 className="text-lg font-semibold">
+          <h1 className="flex text-lg font-semibold">
             <button
+              ref={titleRef}
               type="button"
               aria-haspopup="dialog"
               onClick={() => setPickerOpen(true)}
@@ -82,18 +85,19 @@ export default function MonthFrame({ monthKey, currentKey, children }: Props) {
               {title} <span aria-hidden="true">▾</span>
             </button>
           </h1>
-          {/* Always rendered so the nav keeps its height; hidden on the current month. */}
-          <button
-            type="button"
-            onClick={() => go(currentKey)}
-            disabled={atCurrent}
-            aria-hidden={atCurrent || undefined}
-            className={`-mt-1 min-h-11 rounded-full px-3 text-sm font-medium text-accent underline ${
-              atCurrent ? "invisible" : ""
-            }`}
-          >
-            Today
-          </button>
+          {!atCurrent && (
+            <button
+              type="button"
+              onClick={() => {
+                go(currentKey);
+                // The pill disappears on the current month, so keep focus somewhere that stays.
+                titleRef.current?.focus();
+              }}
+              className="-mt-1 min-h-11 rounded-full px-3 text-sm font-medium text-accent underline"
+            >
+              Today
+            </button>
+          )}
         </div>
         <button
           type="button"
@@ -109,10 +113,13 @@ export default function MonthFrame({ monthKey, currentKey, children }: Props) {
         {pending ? `Loading ${title}` : ""}
       </p>
 
+      {/* Pulse fades between full and half opacity, so no static opacity may sit under it. */}
       <div
         aria-busy={pending}
         inert={pending}
-        className={`transition-opacity ${pending ? "pointer-events-none opacity-50 motion-safe:animate-pulse" : ""}`}
+        className={`transition-opacity ${
+          pending ? "pointer-events-none motion-safe:animate-pulse motion-reduce:opacity-50" : ""
+        }`}
       >
         {children}
       </div>

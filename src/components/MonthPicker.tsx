@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { parseYmKey } from "@/lib/domain/year-month";
-import { monthPickerCells, trapTabIndex } from "@/lib/month-nav";
+import { monthPickerCells, shouldCloseOnBackdrop, trapTabIndex } from "@/lib/month-nav";
 
 type Props = {
   shownKey: string;
@@ -14,6 +14,8 @@ type Props = {
 export default function MonthPicker({ shownKey, currentKey, onPick, onClose }: Props) {
   const [year, setYear] = useState(() => parseYmKey(shownKey)!.year);
   const panelRef = useRef<HTMLDivElement>(null);
+  // Where the latest press began and ended, so a drag from the panel onto the backdrop is not a tap on it.
+  const press = useRef({ downOnBackdrop: false, upOnBackdrop: false });
 
   // Move focus into the dialog on open and hand it back to whatever opened it on close.
   useEffect(() => {
@@ -42,7 +44,21 @@ export default function MonthPicker({ shownKey, currentKey, onPick, onClose }: P
   }, [onClose]);
 
   return (
-    <div className="fixed inset-0 z-40 flex items-end justify-center bg-black/40" onClick={onClose}>
+    <div
+      className="fixed inset-0 z-40 flex items-end justify-center bg-black/40"
+      onPointerDown={(event) => {
+        press.current = { downOnBackdrop: event.target === event.currentTarget, upOnBackdrop: false };
+      }}
+      onPointerUp={(event) => {
+        press.current.upOnBackdrop = event.target === event.currentTarget;
+      }}
+      onClick={(event) => {
+        const { downOnBackdrop, upOnBackdrop } = press.current;
+        press.current = { downOnBackdrop: false, upOnBackdrop: false };
+        const clickOnBackdrop = event.target === event.currentTarget;
+        if (shouldCloseOnBackdrop({ downOnBackdrop, upOnBackdrop, clickOnBackdrop })) onClose();
+      }}
+    >
       <div
         ref={panelRef}
         role="dialog"
@@ -50,7 +66,6 @@ export default function MonthPicker({ shownKey, currentKey, onPick, onClose }: P
         aria-label="Choose month"
         tabIndex={-1}
         className="w-full max-w-md rounded-t-2xl bg-surface p-5 focus:outline-none"
-        onClick={(event) => event.stopPropagation()}
       >
         <div className="flex items-center justify-between">
           <button
@@ -80,7 +95,7 @@ export default function MonthPicker({ shownKey, currentKey, onPick, onClose }: P
               <button
                 key={cell.key}
                 type="button"
-                aria-current={shown ? "date" : undefined}
+                aria-pressed={shown}
                 onClick={() => onPick(cell.key)}
                 className={`min-h-12 rounded-xl border px-3 font-medium ${
                   shown

@@ -3,6 +3,7 @@ import {
   monthHref,
   monthPickerCells,
   sheetKey,
+  shouldCloseOnBackdrop,
   shouldStartSwipe,
   swipeDirection,
   trapTabIndex,
@@ -103,5 +104,28 @@ describe("sheetKey", () => {
   });
   it("is stable for the same inputs", () => {
     expect(sheetKey("2026-10", "log", "p1")).toBe(sheetKey("2026-10", "log", "p1"));
+  });
+});
+
+describe("shouldCloseOnBackdrop", () => {
+  it("closes when the press went down and up on the backdrop itself", () => {
+    expect(
+      shouldCloseOnBackdrop({ downOnBackdrop: true, upOnBackdrop: true, clickOnBackdrop: true }),
+    ).toBe(true);
+  });
+  it("does not close for a drag that started inside the panel and ended on the backdrop", () => {
+    expect(
+      shouldCloseOnBackdrop({ downOnBackdrop: false, upOnBackdrop: true, clickOnBackdrop: true }),
+    ).toBe(false);
+  });
+  it("does not close for a drag that started on the backdrop and ended inside the panel", () => {
+    expect(
+      shouldCloseOnBackdrop({ downOnBackdrop: true, upOnBackdrop: false, clickOnBackdrop: true }),
+    ).toBe(false);
+  });
+  it("does not close for a click that landed on something inside the panel", () => {
+    expect(
+      shouldCloseOnBackdrop({ downOnBackdrop: true, upOnBackdrop: true, clickOnBackdrop: false }),
+    ).toBe(false);
   });
 });

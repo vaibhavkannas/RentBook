@@ -1,9 +1,9 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { PortionCard } from "@/lib/domain/types";
-import { formatRupees } from "@/lib/format";
+import { undoConfirmationText, undoToastText, UNDO_CONFLICT_MESSAGE } from "@/lib/undo-copy";
 
 type Props = {
   monthKey: string;
@@ -42,7 +42,26 @@ export default function UndoSheet({ monthKey, monthLabel, card, onClose, onDone 
   const entry = card.entry!;
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /** The Sheet no longer matches what this sheet was opened on, so it must not offer the undo again. */
+  const [conflicted, setConflicted] = useState(false);
   const [pendingLog, setPendingLog] = useState<unknown[] | null>(null);
+  const logPending = pendingLog !== null;
+  const safeButton = useRef<HTMLButtonElement>(null);
+  const toastText = undoToastText(card.name);
+
+  // Remember what opened the sheet and give focus back to it on close, if it is still on the page.
+  // This must stay above the focus effect below, which moves focus into the sheet.
+  useEffect(() => {
+    const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    return () => {
+      if (opener?.isConnected) opener.focus();
+    };
+  }, []);
+
+  // Focus the safe choice: Keep, then Close once the card changed, or Retry after a log failure.
+  useEffect(() => {
+    safeButton.current?.focus();
+  }, [conflicted, logPending]);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -65,10 +84,13 @@ export default function UndoSheet({ monthKey, monthLabel, card, onClose, onDone 
     if (body.ok) {
       router.refresh();
       if (body.logWritten === false) return setPendingLog(body.logRow ?? []);
-      onDone("Payment undone");
+      onDone(toastText);
       return onClose();
     }
-    if (body.error?.code === "conflict") router.refresh();
+    if (body.error?.code === "conflict") {
+      router.refresh();
+      return setConflicted(true);
+    }
     setError(body.error?.message ?? "Something went wrong. Try again.");
   }
 
@@ -78,7 +100,7 @@ export default function UndoSheet({ monthKey, monthLabel, card, onClose, onDone 
     const body = await post("/api/payments/log-retry", { row: pendingLog });
     setBusy(false);
     if (body?.ok && body.logWritten) {
-      onDone("Payment undone");
+      onDone(toastText);
       return onClose();
     }
     setError("The log entry still didn't save. The undo itself is safe in your Schedule.");
@@ -90,6 +112,7 @@ export default function UndoSheet({ monthKey, monthLabel, card, onClose, onDone 
         role="dialog"
         aria-modal="true"
         aria-labelledby="undo-title"
+        aria-describedby="undo-description"
         className="max-h-dvh w-full max-w-md overflow-y-auto rounded-t-2xl bg-surface p-5"
       >
         <h2 id="undo-title" className="text-lg font-semibold">
@@ -101,7 +124,7 @@ export default function UndoSheet({ monthKey, monthLabel, card, onClose, onDone 
 
         {pendingLog ? (
           <div className="mt-4 space-y-3">
-            <p className="rounded-lg bg-warn-bg px-3 py-2 text-sm text-warn-ink">
+            <p id="undo-description" className="rounded-lg bg-warn-bg px-3 py-2 text-sm text-warn-ink">
               The payment was undone in your Schedule, but the Payments Log entry didn&apos;t save.
             </p>
             {error && (
@@ -110,6 +133,7 @@ export default function UndoSheet({ monthKey, monthLabel, card, onClose, onDone 
               </p>
             )}
             <button
+              ref={safeButton}
               type="button"
               onClick={retryLog}
               disabled={busy}
@@ -120,7 +144,7 @@ export default function UndoSheet({ monthKey, monthLabel, card, onClose, onDone 
             <button
               type="button"
               onClick={() => {
-                onDone("Payment undone");
+                onDone(toastText);
                 onClose();
               }}
               disabled={busy}
@@ -131,31 +155,42 @@ export default function UndoSheet({ monthKey, monthLabel, card, onClose, onDone 
           </div>
         ) : (
           <div className="mt-4 space-y-3">
-            <p className="text-sm">
-              This clears {entry.tenant}&apos;s payment {entry.count} of {formatRupees(entry.amount)} for{" "}
-              {card.name} in {monthLabel}. The Payments Log keeps a record.
-            </p>
+            {conflicted ? (
+              <p
+                id="undo-description"
+                role="alert"
+                className="rounded-lg bg-danger-bg px-3 py-2 text-sm text-danger-ink"
+              >
+                {UNDO_CONFLICT_MESSAGE}
+              </p>
+            ) : (
+              <p id="undo-description" className="text-sm">
+                {undoConfirmationText(entry, card.name, monthLabel)}
+              </p>
+            )}
             {error && (
               <p role="alert" className="rounded-lg bg-danger-bg px-3 py-2 text-sm text-danger-ink">
                 {error}
               </p>
             )}
+            {!conflicted && (
+              <button
+                type="button"
+                onClick={undo}
+                disabled={busy}
+                className="min-h-12 w-full rounded-xl bg-danger-bg px-4 font-medium text-danger-ink"
+              >
+                {busy ? "Undoing…" : "Undo payment"}
+              </button>
+            )}
             <button
-              type="button"
-              onClick={undo}
-              disabled={busy}
-              className="min-h-12 w-full rounded-xl bg-danger-bg px-4 font-medium text-danger-ink"
-            >
-              {busy ? "Undoing…" : "Undo payment"}
-            </button>
-            <button
+              ref={safeButton}
               type="button"
               onClick={onClose}
               disabled={busy}
-              autoFocus
               className="min-h-11 w-full text-muted"
             >
-              Keep
+              {conflicted ? "Close" : "Keep"}
             </button>
           </div>
         )}

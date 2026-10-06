@@ -50,3 +50,16 @@ export function trapTabIndex(count: number, activeIndex: number, shiftKey: boole
 export function sheetKey(monthKey: string, mode: string, portionId: string | null): string {
   return `${monthKey}-${mode}-${portionId}`;
 }
+
+/**
+ * Whether a click on a dialog's dimmed backdrop should close it. Only a press that began and ended
+ * on the backdrop itself counts: a drag that starts inside the panel (for example while selecting
+ * text) and is released over the backdrop produces a click on the backdrop but must not close it.
+ */
+export function shouldCloseOnBackdrop(press: {
+  downOnBackdrop: boolean;
+  upOnBackdrop: boolean;
+  clickOnBackdrop: boolean;
+}): boolean {
+  return press.downOnBackdrop && press.upOnBackdrop && press.clickOnBackdrop;
+}
