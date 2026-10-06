@@ -80,7 +80,52 @@ npm run recon
 
 `npm run recon` only reads. Fix every problem it lists. Then run the app with `npm run dev` and open http://localhost:3000. Restart the dev server after any change to `.env.local`.
 
+On Windows PowerShell, use `npm.cmd` in place of `npm`, and run it from the project folder. On a company laptop you may also need the certificate setting below. See "Windows and company-network problems".
+
 Before the first save, open Portion settings in the app and set each portion's cycle length (or tick "Count never resets") and hike percent. The app cannot edit a payment count, so a wrong setting here writes a wrong count. Do the same again after you switch to the live Sheet, because it gets its own fresh `Settings` tab with default values.
+
+## Windows and company-network problems
+
+These only affect running commands on your own computer. Vercel is not affected.
+
+### `npm.ps1 cannot be loaded because running scripts is disabled`
+
+PowerShell blocks the `npm.ps1` wrapper. Use the `.cmd` version, which needs no policy change:
+
+```powershell
+npm.cmd install
+npm.cmd run recon
+npm.cmd run dev
+```
+
+### `Could not read package.json ... C:\Windows\System32\package.json`
+
+The command ran in the wrong folder. A PowerShell opened as administrator starts in `C:\WINDOWS\system32`. You do not need administrator rights for any step here. Change to the project first:
+
+```powershell
+cd D:\Repos\RentBook
+```
+
+### `self-signed certificate in certificate chain`
+
+Some company networks inspect HTTPS traffic and re-sign it with a company certificate. Windows trusts that certificate. Node does not, so requests to Google fail, and `npm run recon` reports `request to https://oauth2.googleapis.com/token failed`. Tell Node to use the Windows certificate store (needs Node 22.15 or newer):
+
+```powershell
+$env:NODE_OPTIONS = "--use-system-ca"
+npm.cmd run recon
+```
+
+The setting lasts for that PowerShell window. To keep it for every future window, run this once and then open a new PowerShell:
+
+```powershell
+setx NODE_OPTIONS "--use-system-ca"
+```
+
+Set `NODE_OPTIONS` in the shell, not in `.env.local`. Node reads it at start-up, before it loads `.env.local`.
+
+If that is not enough, export your company's root certificate as a `.pem` file and point Node at it with `NODE_EXTRA_CA_CERTS` (for example `$env:NODE_EXTRA_CA_CERTS = "C:\certs\company-root.pem"`). Ask your IT team for the file.
+
+Do not set `NODE_TLS_REJECT_UNAUTHORIZED=0`. It turns off certificate checking for every request the app makes, including the ones that carry your service account credentials. Your company's network can also see the traffic that passes through it, so use a home network if that matters to you.
 
 ## If sign-in fails
 
