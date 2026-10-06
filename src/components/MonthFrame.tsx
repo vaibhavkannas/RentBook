@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { useRef, useState, useTransition, type ReactNode, type TouchEvent } from "react";
 import { addMonths, parseYmKey, ymKey } from "@/lib/domain/year-month";
 import { formatMonthTitle } from "@/lib/format";
-import { monthHref, swipeDirection } from "@/lib/month-nav";
+import { monthHref, shouldStartSwipe, swipeDirection } from "@/lib/month-nav";
 import MonthPicker from "./MonthPicker";
 
 type Props = {
@@ -26,6 +26,7 @@ export default function MonthFrame({ monthKey, currentKey, children }: Props) {
   const shownKey = pending ? target : monthKey;
   const shown = parseYmKey(shownKey)!;
   const title = formatMonthTitle(shown);
+  const atCurrent = shownKey === currentKey;
 
   function go(key: string) {
     setPickerOpen(false);
@@ -35,8 +36,14 @@ export default function MonthFrame({ monthKey, currentKey, children }: Props) {
     });
   }
 
+  // Any open dialog (the payment sheet or the month picker) blocks swiping, including a drag that
+  // starts on its dimmed backdrop, which sits outside the dialog panel.
+  function dialogIsOpen() {
+    return pickerOpen || document.querySelector('[role="dialog"]') !== null;
+  }
+
   function onTouchStart(event: TouchEvent) {
-    if ((event.target as HTMLElement).closest('[role="dialog"]')) {
+    if (!shouldStartSwipe(event.touches.length, dialogIsOpen())) {
       touchStart.current = null;
       return;
     }
@@ -47,7 +54,7 @@ export default function MonthFrame({ monthKey, currentKey, children }: Props) {
   function onTouchEnd(event: TouchEvent) {
     const start = touchStart.current;
     touchStart.current = null;
-    if (!start) return;
+    if (!start || dialogIsOpen()) return;
     const touch = event.changedTouches[0];
     const direction = swipeDirection(touch.clientX - start.x, touch.clientY - start.y);
     if (direction) go(ymKey(addMonths(shown, direction === "next" ? 1 : -1)));
@@ -55,7 +62,7 @@ export default function MonthFrame({ monthKey, currentKey, children }: Props) {
 
   return (
     <div onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
-      <nav className="flex items-center justify-between">
+      <nav aria-label="Month" className="flex items-center justify-between">
         <button
           type="button"
           aria-label="Previous month"
@@ -75,15 +82,18 @@ export default function MonthFrame({ monthKey, currentKey, children }: Props) {
               {title} <span aria-hidden="true">▾</span>
             </button>
           </h1>
-          {shownKey !== currentKey && (
-            <button
-              type="button"
-              onClick={() => go(currentKey)}
-              className="-mt-1 min-h-11 rounded-full px-3 text-sm font-medium text-accent underline"
-            >
-              Today
-            </button>
-          )}
+          {/* Always rendered so the nav keeps its height; hidden on the current month. */}
+          <button
+            type="button"
+            onClick={() => go(currentKey)}
+            disabled={atCurrent}
+            aria-hidden={atCurrent || undefined}
+            className={`-mt-1 min-h-11 rounded-full px-3 text-sm font-medium text-accent underline ${
+              atCurrent ? "invisible" : ""
+            }`}
+          >
+            Today
+          </button>
         </div>
         <button
           type="button"
@@ -102,7 +112,7 @@ export default function MonthFrame({ monthKey, currentKey, children }: Props) {
       <div
         aria-busy={pending}
         inert={pending}
-        className={`transition-opacity ${pending ? "pointer-events-none animate-pulse opacity-50" : ""}`}
+        className={`transition-opacity ${pending ? "pointer-events-none opacity-50 motion-safe:animate-pulse" : ""}`}
       >
         {children}
       </div>

@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { parseYmKey } from "@/lib/domain/year-month";
-import { monthPickerCells } from "@/lib/month-nav";
+import { monthPickerCells, trapTabIndex } from "@/lib/month-nav";
 
 type Props = {
   shownKey: string;
@@ -13,10 +13,29 @@ type Props = {
 
 export default function MonthPicker({ shownKey, currentKey, onPick, onClose }: Props) {
   const [year, setYear] = useState(() => parseYmKey(shownKey)!.year);
+  const panelRef = useRef<HTMLDivElement>(null);
+
+  // Move focus into the dialog on open and hand it back to whatever opened it on close.
+  useEffect(() => {
+    const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    panelRef.current?.focus();
+    return () => opener?.focus();
+  }, []);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
+      if (event.key === "Escape") return onClose();
+      if (event.key !== "Tab") return;
+      const buttons = Array.from(panelRef.current?.querySelectorAll<HTMLElement>("button") ?? []);
+      const next = trapTabIndex(
+        buttons.length,
+        buttons.indexOf(document.activeElement as HTMLElement),
+        event.shiftKey,
+      );
+      if (next !== null) {
+        event.preventDefault();
+        buttons[next].focus();
+      }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -25,10 +44,12 @@ export default function MonthPicker({ shownKey, currentKey, onPick, onClose }: P
   return (
     <div className="fixed inset-0 z-40 flex items-end justify-center bg-black/40" onClick={onClose}>
       <div
+        ref={panelRef}
         role="dialog"
         aria-modal="true"
         aria-label="Choose month"
-        className="w-full max-w-md rounded-t-2xl bg-surface p-5"
+        tabIndex={-1}
+        className="w-full max-w-md rounded-t-2xl bg-surface p-5 focus:outline-none"
         onClick={(event) => event.stopPropagation()}
       >
         <div className="flex items-center justify-between">
@@ -70,6 +91,7 @@ export default function MonthPicker({ shownKey, currentKey, onPick, onClose }: P
                 }`}
               >
                 {cell.label}
+                {current && <span className="sr-only"> (this month)</span>}
               </button>
             );
           })}

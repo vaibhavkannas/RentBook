@@ -3,6 +3,7 @@
 import { useState } from "react";
 import type { PortionCard } from "@/lib/domain/types";
 import { formatRupees } from "@/lib/format";
+import { sheetKey } from "@/lib/month-nav";
 import PaymentSheet, { type SheetMode } from "./PaymentSheet";
 
 type Props = {
@@ -121,7 +122,7 @@ export default function PortionBoard({ monthKey, monthLabel, cards, defaultDate 
 
       {active && (
         <PaymentSheet
-          key={`${active.mode}-${active.portionId}`}
+          key={sheetKey(monthKey, active.mode, active.portionId)}
           mode={active.mode}
           monthKey={monthKey}
           monthLabel={monthLabel}
