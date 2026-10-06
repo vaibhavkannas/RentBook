@@ -34,7 +34,7 @@ export async function describeSheet(
   totalHeader: string,
 ): Promise<ReconReport> {
   const report: ReconReport = {
-    tabs: await gateway.listTabs(),
+    tabs: [],
     hasSettingsTab: false,
     hasLogTab: false,
     headerRow: null,
@@ -51,6 +51,12 @@ export async function describeSheet(
     rowBelowTableEmpty: null,
     problems: [],
   };
+  try {
+    report.tabs = await gateway.listTabs();
+  } catch (error) {
+    report.problems.push(error instanceof AppError ? error.message : String(error));
+    return report;
+  }
   report.hasSettingsTab = report.tabs.includes(SETTINGS_TAB);
   report.hasLogTab = report.tabs.includes(LOG_TAB);
   if (!report.tabs.includes(scheduleTab)) {

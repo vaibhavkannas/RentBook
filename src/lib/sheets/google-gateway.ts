@@ -84,15 +84,22 @@ export class GoogleSheetsGateway implements SheetsGateway {
   }
 
   async getValues(tab: string, a1: string, render: ValueRender) {
-    const { data } = await this.call(() =>
-      this.api.spreadsheets.values.get({
+    try {
+      const { data } = await this.api.spreadsheets.values.get({
         spreadsheetId: this.spreadsheetId,
         range: `${quote(tab)}!${a1}`,
         valueRenderOption: render,
         dateTimeRenderOption: "SERIAL_NUMBER",
-      }),
-    );
-    return (data.values ?? []) as unknown[][];
+      });
+      return (data.values ?? []) as unknown[][];
+    } catch (error) {
+      // Google rejects a range that starts below the last row of the grid. Nothing
+      // is stored there, so it reads as empty (the "row under the table" check
+      // relies on this when the table fills the whole grid).
+      const message = error instanceof Error ? error.message : "";
+      if (/exceeds grid limits/i.test(message)) return [];
+      throw translateGoogleError(error, this.serviceAccountEmail);
+    }
   }
 
   async updateValues(writes: CellWrite[]) {

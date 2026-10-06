@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { configError } from "@/lib/errors";
 import { describeSheet } from "@/lib/sheets/recon";
 import { FakeGateway } from "../support/fake-gateway";
 import { baseSchedule, TOTAL_HEADER } from "../support/fixtures";
@@ -23,7 +24,39 @@ describe("describeSheet", () => {
     expect(report.rowBelowTableEmpty).toBe(true);
     expect(report.hasSettingsTab).toBe(false);
     expect([...fake.tabs.keys()]).toEqual(["Schedule"]);
-    expect(fake.calls.filter((c) => ["addTab", "updateValues", "cloneRow", "appendRow"].includes(c))).toEqual([]);
+    expect(fake.calls.length).toBeGreaterThan(0);
+    expect(fake.calls.every((call) => call === "listTabs" || call === "getValues")).toBe(true);
+  });
+
+  it("puts a failure to list the tabs into problems instead of throwing", async () => {
+    const fake = new FakeGateway({ Schedule: baseSchedule() });
+    fake.failOn.add("listTabs");
+    const plain = await describeSheet(fake, "Schedule", TOTAL_HEADER);
+    expect(plain.problems).toEqual(["Error: listTabs failed"]);
+    expect(plain.tabs).toEqual([]);
+
+    const denied = new FakeGateway({ Schedule: baseSchedule() });
+    denied.listTabs = async () => {
+      throw configError("Google denied access. Share the Sheet with the service account as Editor.");
+    };
+    const report = await describeSheet(denied, "Schedule", TOTAL_HEADER);
+    expect(report.problems).toEqual([
+      "Google denied access. Share the Sheet with the service account as Editor.",
+    ]);
+  });
+
+  it("flags a Sheet with no header row", async () => {
+    const fake = new FakeGateway({ Schedule: [["Just a title"]] });
+    const report = await describeSheet(fake, "Schedule", TOTAL_HEADER);
+    expect(report.problems[0]).toMatch(/No header row containing "Month"/);
+    expect(report.headerRow).toBeNull();
+  });
+
+  it("reports an unreadable Tenant/Count/Amount grouping by name", async () => {
+    const schedule = baseSchedule();
+    (schedule[2] as string[])[2] = "Cnt";
+    const report = await describeSheet(new FakeGateway({ Schedule: schedule }), "Schedule", TOTAL_HEADER);
+    expect(report.problems[0]).toMatch(/must be followed by a Count and an Amount/);
   });
 
   it("reports date-cell months", async () => {

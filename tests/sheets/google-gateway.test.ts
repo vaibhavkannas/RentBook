@@ -4,7 +4,9 @@ import { AppError } from "@/lib/errors";
 import { GoogleSheetsGateway } from "@/lib/sheets/google-gateway";
 
 /** A stand-in for the Google client that records the requests it receives. */
-function mockApi(overrides: { rowCount?: number; failWith?: unknown } = {}) {
+function mockApi(
+  overrides: { rowCount?: number; failWith?: unknown; valuesGetFailWith?: unknown } = {},
+) {
   const fail = async () => {
     throw overrides.failWith;
   };
@@ -18,7 +20,10 @@ function mockApi(overrides: { rowCount?: number; failWith?: unknown } = {}) {
           ],
         },
       }));
-  const valuesGet = vi.fn(async () => ({ data: { values: [["a", 1]] } }));
+  const valuesGet = vi.fn(async () => {
+    if (overrides.valuesGetFailWith) throw overrides.valuesGetFailWith;
+    return { data: { values: [["a", 1]] } };
+  });
   const valuesBatchUpdate = vi.fn(async () => ({}));
   const valuesAppend = vi.fn(async () => ({}));
   const batchUpdate = vi.fn(async () => ({}));
@@ -55,6 +60,34 @@ describe("GoogleSheetsGateway", () => {
     expect(valuesGet).toHaveBeenLastCalledWith(
       expect.objectContaining({ range: "'Owner''s rent'!A1" }),
     );
+  });
+
+  it("reads a range that starts below the last row of the grid as empty", async () => {
+    const { api } = mockApi({
+      valuesGetFailWith: Object.assign(
+        new Error("Range ('Schedule'!A6:ZZ6) exceeds grid limits. Max rows: 5, max columns: 26"),
+        { status: 400, code: 400 },
+      ),
+    });
+    expect(await new GoogleSheetsGateway(api, "sheet-id").getValues("Schedule", "A6:ZZ6", "FORMULA")).toEqual([]);
+  });
+
+  it("still translates other read failures", async () => {
+    const { api } = mockApi({
+      valuesGetFailWith: Object.assign(new Error("Unable to parse range: Schedule!A1"), {
+        status: 400,
+        code: 400,
+        config: { url: "https://sheets.googleapis.com/v4/spreadsheets/sheet-id/values/x" },
+      }),
+    });
+    const error = await new GoogleSheetsGateway(api, "sheet-id")
+      .getValues("Schedule", "A1", "FORMULA")
+      .then(
+        () => null,
+        (e: unknown) => e as Error,
+      );
+    expect(error?.message).toBe("Google Sheets request failed (HTTP 400): Unable to parse range: Schedule!A1");
+    expect("config" in (error as object)).toBe(false);
   });
 
   it("writes with RAW so text is never read as a formula", async () => {
