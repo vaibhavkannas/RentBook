@@ -3,10 +3,9 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import type { PortionConfig } from "@/lib/domain/types";
+import { parseSettingsRows, type SettingsRowInput } from "@/lib/settings-input";
 
-type Row = { id: string; name: string; cycle: string; never: boolean; hike: string };
-
-const toRow = (p: PortionConfig): Row => ({
+const toRow = (p: PortionConfig): SettingsRowInput => ({
   id: p.id,
   name: p.name,
   cycle: p.cycleLength === null ? "11" : String(p.cycleLength),
@@ -14,33 +13,37 @@ const toRow = (p: PortionConfig): Row => ({
   hike: String(p.hikePercent),
 });
 
+type SaveBody = { ok: boolean; error?: { message: string }; portions?: PortionConfig[] };
+
 export default function SettingsForm({ portions }: { portions: PortionConfig[] }) {
   const router = useRouter();
   const [rows, setRows] = useState(() => portions.map(toRow));
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
 
-  const update = (id: string, patch: Partial<Row>) =>
+  const update = (id: string, patch: Partial<SettingsRowInput>) => {
+    setMessage(null);
     setRows((current) => current.map((row) => (row.id === id ? { ...row, ...patch } : row)));
+  };
 
   async function save() {
+    const parsed = parseSettingsRows(rows);
+    if (!parsed.ok) {
+      setMessage({ kind: "error", text: parsed.message });
+      return;
+    }
     setBusy(true);
     setMessage(null);
     try {
       const res = await fetch("/api/settings", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          portions: rows.map((row) => ({
-            id: row.id,
-            name: row.name,
-            cycleLength: row.never ? null : Number(row.cycle),
-            hikePercent: Number(row.hike),
-          })),
-        }),
+        body: JSON.stringify({ portions: parsed.portions }),
       });
-      const body = (await res.json()) as { ok: boolean; error?: { message: string } };
+      const body = (await res.json()) as SaveBody;
       if (body.ok) {
+        // Show what was really stored, so the screen can never disagree with the Sheet.
+        if (body.portions) setRows(body.portions.map(toRow));
         setMessage({ kind: "ok", text: "Saved" });
         router.refresh();
       } else {
@@ -63,6 +66,7 @@ export default function SettingsForm({ portions }: { portions: PortionConfig[] }
     >
       {rows.map((row) => (
         <fieldset key={row.id} className="space-y-2 rounded-2xl border border-line bg-surface p-4">
+          <legend className="sr-only">Settings for {row.name || row.id}</legend>
           <label className="block text-sm">
             <span className="text-muted">Name</span>
             <input
@@ -70,7 +74,7 @@ export default function SettingsForm({ portions }: { portions: PortionConfig[] }
               onChange={(event) => update(row.id, { name: event.target.value })}
               required
               maxLength={60}
-              className="mt-1 min-h-12 w-full rounded-xl border border-control bg-surface px-3"
+              className="mt-1 min-h-12 w-full rounded-xl border border-control bg-surface px-3 text-base"
             />
           </label>
 
@@ -82,7 +86,7 @@ export default function SettingsForm({ portions }: { portions: PortionConfig[] }
                 onChange={(event) => update(row.id, { cycle: event.target.value })}
                 inputMode="numeric"
                 disabled={row.never}
-                className="mt-1 min-h-12 w-full rounded-xl border border-control bg-surface px-3 disabled:opacity-50"
+                className="mt-1 min-h-12 w-full rounded-xl border border-control bg-surface px-3 text-base disabled:opacity-50"
               />
             </label>
             <label className="block text-sm">
@@ -91,7 +95,7 @@ export default function SettingsForm({ portions }: { portions: PortionConfig[] }
                 value={row.hike}
                 onChange={(event) => update(row.id, { hike: event.target.value })}
                 inputMode="decimal"
-                className="mt-1 min-h-12 w-full rounded-xl border border-control bg-surface px-3"
+                className="mt-1 min-h-12 w-full rounded-xl border border-control bg-surface px-3 text-base"
               />
             </label>
           </div>
