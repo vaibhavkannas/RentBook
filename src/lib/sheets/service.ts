@@ -3,6 +3,8 @@ import {
   deriveMonthView,
   findEntryForMonth,
   findPriorEntry,
+  hasLaterEntry,
+  LATER_ENTRY_REASON,
 } from "@/lib/domain/month-view";
 import { nextCount, sumAmounts } from "@/lib/domain/rent-rules";
 import type {
@@ -15,7 +17,7 @@ import type {
 import { addMonths, compareYm, isValidIsoDay, ymKey } from "@/lib/domain/year-month";
 import { conflict, sheetStructure, validation } from "@/lib/errors";
 import { colLetter } from "./a1";
-import type { SheetsGateway } from "./gateway";
+import type { CellWrite, SheetsGateway } from "./gateway";
 import { parseSchedule, type ScheduleLayout } from "./schedule";
 import {
   ensureTabs,
@@ -177,8 +179,7 @@ export type LogPaymentOptions = {
 
 const MAX_AMOUNT = 10_000_000;
 
-function validateInput(input: LogPaymentInput): string | undefined {
-  const { year, month } = input.month;
+function validateMonth({ year, month }: YearMonth): void {
   if (
     !Number.isInteger(year) ||
     year < 2000 ||
@@ -189,6 +190,10 @@ function validateInput(input: LogPaymentInput): string | undefined {
   ) {
     throw validation("Month must be a real month.");
   }
+}
+
+function validateInput(input: LogPaymentInput): string | undefined {
+  validateMonth(input.month);
   if (!Number.isInteger(input.amount) || input.amount < 1 || input.amount > MAX_AMOUNT) {
     throw validation("Amount must be a whole number of rupees from 1 to 10,000,000.");
   }
@@ -298,6 +303,87 @@ export async function logPayment(
   ];
   const logWritten = await appendLogRow(ctx.gateway, logRow, options.retryDelayMs ?? 400);
   return { entry: { tenant, count, amount: input.amount }, logWritten, logRow };
+}
+
+export type UndoPaymentInput = {
+  month: YearMonth;
+  portionId: string;
+  /** What the person saw on screen. The undo is refused if the Sheet no longer matches. */
+  expected: PortionEntry;
+};
+
+export type UndoPaymentResult = {
+  removed: PortionEntry;
+  logWritten: boolean;
+  logRow: LogRow;
+};
+
+/**
+ * Clears one portion's tenant, count and amount for a month. Only the portion's
+ * latest entry can be undone, and only if the Sheet still matches `expected`.
+ */
+export async function undoPayment(
+  ctx: SheetsContext,
+  input: UndoPaymentInput,
+  options: LogPaymentOptions,
+): Promise<UndoPaymentResult> {
+  validateMonth(input.month);
+  const loaded = await load(ctx);
+  const portion = loaded.portions.find((p) => p.id === input.portionId);
+  if (!portion) throw validation(`Unknown portion "${input.portionId}".`);
+
+  const matching = loaded.rows.filter(
+    (row) => compareYm(row.month, input.month) === 0 && row.entries[portion.id],
+  );
+  const monthRow = matching[matching.length - 1];
+  const existing = monthRow?.entries[portion.id];
+  if (!monthRow || !existing) {
+    throw conflict(
+      `${portion.name} has no payment recorded for ${ymKey(input.month)} any more. Refresh the page.`,
+    );
+  }
+  const { tenant, count, amount } = input.expected;
+  if (existing.tenant !== tenant || existing.count !== count || existing.amount !== amount) {
+    throw conflict(
+      `${portion.name} for ${ymKey(input.month)} was changed by someone else. Refresh the page and try again.`,
+    );
+  }
+  if (hasLaterEntry(loaded.rows, portion.id, input.month)) {
+    throw conflict(LATER_ENTRY_REASON);
+  }
+
+  const cols = loaded.layout.portionCols[portion.id];
+  const at = (col: number) => `${colLetter(col)}${monthRow.rowNumber}`;
+  const writes: CellWrite[] = [
+    { tab: ctx.scheduleTab, a1: at(cols.tenant), values: [[""]] },
+    { tab: ctx.scheduleTab, a1: at(cols.count), values: [[""]] },
+    { tab: ctx.scheduleTab, a1: at(cols.amount), values: [[""]] },
+  ];
+  if (!(await totalIsFormula(ctx, loaded.layout, monthRow.rowNumber))) {
+    const others = loaded.portions
+      .filter((p) => p.id !== portion.id)
+      .map((p) => monthRow.entries[p.id]?.amount);
+    writes.push({
+      tab: ctx.scheduleTab,
+      a1: at(loaded.layout.totalCol),
+      values: [[sumAmounts(others)]],
+    });
+  }
+  await ctx.gateway.updateValues(writes);
+
+  const logRow: LogRow = [
+    options.now.toISOString(),
+    ymKey(input.month),
+    portion.name,
+    existing.tenant,
+    existing.amount,
+    existing.count,
+    "",
+    options.loggedBy,
+    "Undone",
+  ];
+  const logWritten = await appendLogRow(ctx.gateway, logRow, options.retryDelayMs ?? 400);
+  return { removed: existing, logWritten, logRow };
 }
 
 const LOG_ATTEMPTS = 3;

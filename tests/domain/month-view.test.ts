@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { deriveMonthView, findPriorEntry } from "@/lib/domain/month-view";
+import {
+  deriveMonthView,
+  findPriorEntry,
+  hasLaterEntry,
+  LATER_ENTRY_REASON,
+} from "@/lib/domain/month-view";
 import { parseSchedule } from "@/lib/sheets/schedule";
 import { baseSchedule, PORTIONS, TOTAL_HEADER } from "../support/fixtures";
 
@@ -73,5 +78,41 @@ describe("findPriorEntry", () => {
   it("ignores the selected month and later months", () => {
     expect(findPriorEntry(rows, "p1", { year: 2026, month: 9 })?.count).toBe(2);
     expect(findPriorEntry(rows, "p1", { year: 2026, month: 8 })).toBeNull();
+  });
+});
+
+describe("undoBlockedReason", () => {
+  const portions = PORTIONS.slice(0, 1);
+  const entry = { tenant: "Asha", count: 1, amount: 5000 };
+  const rowFor = (month: number, e: typeof entry | null, rowNumber: number) => ({
+    rowNumber,
+    month: { year: 2026, month },
+    entries: { p1: e },
+  });
+
+  it("is null when the paid month is the portion's latest entry", () => {
+    const rows = [rowFor(9, entry, 4), rowFor(10, entry, 5)];
+    const view = deriveMonthView(rows, portions, { year: 2026, month: 10 });
+    expect(view.cards[0].status).toBe("paid");
+    expect(view.cards[0].undoBlockedReason).toBeNull();
+  });
+
+  it("explains why when a later month has an entry", () => {
+    const rows = [rowFor(9, entry, 4), rowFor(10, entry, 5)];
+    const view = deriveMonthView(rows, portions, { year: 2026, month: 9 });
+    expect(view.cards[0].undoBlockedReason).toBe(LATER_ENTRY_REASON);
+  });
+
+  it("is null for a card that is not paid", () => {
+    const rows = [rowFor(9, entry, 4)];
+    const view = deriveMonthView(rows, portions, { year: 2026, month: 10 });
+    expect(view.cards[0].status).toBe("pending");
+    expect(view.cards[0].undoBlockedReason).toBeNull();
+  });
+
+  it("hasLaterEntry ignores earlier months and empty later rows", () => {
+    const rows = [rowFor(8, entry, 3), rowFor(9, entry, 4), rowFor(10, null, 5)];
+    expect(hasLaterEntry(rows, "p1", { year: 2026, month: 9 })).toBe(false);
+    expect(hasLaterEntry(rows, "p1", { year: 2026, month: 8 })).toBe(true);
   });
 });

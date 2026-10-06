@@ -5,6 +5,7 @@ const saveSettings = vi.hoisted(() => vi.fn(async () => []));
 const logPayment = vi.hoisted(() =>
   vi.fn<(...args: unknown[]) => Promise<{ logWritten: boolean }>>(async () => ({ logWritten: true })),
 );
+const undoPayment = vi.hoisted(() => vi.fn());
 
 vi.mock("@/auth", () => ({ auth }));
 vi.mock("@/lib/server/context", () => ({ getSheetsContext: () => ({}) }));
@@ -12,9 +13,11 @@ vi.mock("@/lib/sheets/service", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/sheets/service")>()),
   saveSettings,
   logPayment,
+  undoPayment,
 }));
 
 import { POST as postPayment } from "@/app/api/payments/route";
+import { POST as postUndo } from "@/app/api/payments/undo/route";
 import { PUT as putSettings } from "@/app/api/settings/route";
 
 const settingsRequest = () =>
@@ -35,6 +38,7 @@ beforeEach(() => {
   process.env.ALLOWED_EMAILS = "owner@example.com, member@example.com";
   saveSettings.mockClear();
   logPayment.mockClear();
+  undoPayment.mockReset();
 });
 afterEach(() => {
   if (savedEnv === undefined) delete process.env.ALLOWED_EMAILS;
@@ -99,5 +103,38 @@ describe("POST /api/payments", () => {
     expect(logPayment).toHaveBeenCalledOnce();
     const options = logPayment.mock.calls[0][2] as { loggedBy: string };
     expect(options.loggedBy).toBe("member@example.com");
+  });
+});
+
+describe("POST /api/payments/undo", () => {
+  const undoRequest = (body: unknown) =>
+    new Request("http://localhost/api/payments/undo", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+  const good = {
+    month: "2026-10",
+    portionId: "p1",
+    expected: { tenant: "Asha", count: 4, amount: 5450 },
+  };
+
+  it("rejects visitors who are not on the list", async () => {
+    signedInAs("stranger@example.com");
+    expect((await postUndo(undoRequest(good))).status).toBe(401);
+    expect(undoPayment).not.toHaveBeenCalled();
+  });
+
+  it("lets any listed member undo and records who did it", async () => {
+    signedInAs("member@example.com");
+    undoPayment.mockResolvedValue({ removed: good.expected, logWritten: true, logRow: [] });
+    const res = await postUndo(undoRequest(good));
+    expect(res.status).toBe(200);
+    expect(undoPayment.mock.calls[0][2]).toMatchObject({ loggedBy: "member@example.com" });
+  });
+
+  it("rejects a malformed body", async () => {
+    signedInAs("member@example.com");
+    expect((await postUndo(undoRequest({ month: "nope" }))).status).toBe(400);
   });
 });

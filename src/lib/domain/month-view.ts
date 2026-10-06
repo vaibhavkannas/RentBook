@@ -42,6 +42,18 @@ export function findPriorEntry(
   return best ? best.entries[portionId] : null;
 }
 
+export const LATER_ENTRY_REASON =
+  "Later months have entries for this portion. Undo those first.";
+
+/** True when a month after `month` has an entry for the portion. */
+export function hasLaterEntry(
+  rows: ScheduleRow[],
+  portionId: string,
+  month: YearMonth,
+): boolean {
+  return rows.some((row) => compareYm(row.month, month) > 0 && row.entries[portionId]);
+}
+
 export function nextPayment(
   prior: PortionEntry,
   portion: PortionConfig,
@@ -72,6 +84,8 @@ export function deriveMonthView(
       status: entry ? "paid" : next ? "pending" : "needs-tenant",
       entry,
       next,
+      undoBlockedReason:
+        entry && hasLaterEntry(rows, portion.id, month) ? LATER_ENTRY_REASON : null,
     };
   });
 

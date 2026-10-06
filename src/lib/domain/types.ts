@@ -37,6 +37,8 @@ export type PortionCard = {
   status: CardStatus;
   entry: PortionEntry | null;
   next: NextPayment | null;
+  /** For a paid card that cannot be undone, the reason. Null otherwise. */
+  undoBlockedReason: string | null;
 };
 
 export type MonthView = {
