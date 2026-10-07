@@ -16,7 +16,7 @@ import type {
   YearMonth,
 } from "@/lib/domain/types";
 import { addMonths, compareYm, isValidIsoDay, ymKey } from "@/lib/domain/year-month";
-import { conflict, sheetStructure, validation } from "@/lib/errors";
+import { AppError, conflict, sheetStructure, validation } from "@/lib/errors";
 import { formatMonthTitle } from "@/lib/format";
 import { colLetter } from "./a1";
 import type { CellWrite, SheetsGateway } from "./gateway";
@@ -36,8 +36,14 @@ export type Snapshot = {
   portions: PortionConfig[];
   layout: ScheduleLayout;
   rows: ScheduleRow[];
-  /** Every row of the Tenants tab. */
+  /** Every row of the Tenants tab. Empty when the tab has a problem (see `tenantsProblem`). */
   tenancies: Tenancy[];
+  /**
+   * Set when the Tenants tab cannot be used, for example because a header was changed: what is wrong, in
+   * words. Everything else in the snapshot is still good, so rent logging and the month views keep working;
+   * the tenancy writes refuse and the tenant page shows this.
+   */
+  tenantsProblem?: string;
 };
 
 export type SheetsContext = {
@@ -48,15 +54,35 @@ export type SheetsContext = {
   cache?: SnapshotCache<Snapshot>;
 };
 
-/** Reads Settings, the Schedule and the Tenants tab, all at the same time. Never cached. */
+/**
+ * The Tenants tab's rows, or none and what is wrong with the tab when its structure is wrong. Only a
+ * sheet-structure problem is turned into a message: any other failure is still a failure of the whole read.
+ */
+async function readTenanciesOrProblem(
+  gateway: SheetsGateway,
+): Promise<{ tenancies: Tenancy[]; tenantsProblem?: string }> {
+  try {
+    return { tenancies: await readTenancies(gateway) };
+  } catch (error) {
+    if (error instanceof AppError && error.code === "sheet-structure") {
+      return { tenancies: [], tenantsProblem: error.message };
+    }
+    throw error;
+  }
+}
+
+/**
+ * Reads Settings, the Schedule and the Tenants tab, all at the same time. Never cached. A problem with the
+ * Tenants tab alone does not fail the read: see `Snapshot.tenantsProblem`.
+ */
 export async function loadSnapshot(ctx: SheetsContext): Promise<Snapshot> {
   await ensureTabs(ctx.gateway, ctx.scheduleTab);
-  const [portions, values, tenancies] = await Promise.all([
+  const [portions, values, tenants] = await Promise.all([
     readSettings(ctx.gateway),
     ctx.gateway.getValues(ctx.scheduleTab, "A1:ZZ", "UNFORMATTED_VALUE"),
-    readTenancies(ctx.gateway),
+    readTenanciesOrProblem(ctx.gateway),
   ]);
-  return { portions, ...parseSchedule(values, portions, ctx.totalHeader), tenancies };
+  return { portions, ...parseSchedule(values, portions, ctx.totalHeader), ...tenants };
 }
 
 export const SNAPSHOT_TTL_MS = 15_000;
@@ -386,9 +412,12 @@ async function logPaymentUnchecked(
   if (newTenant !== undefined) {
     // The payment is already saved, so a tenancy failure is reported but never undoes it.
     try {
+      // Read the Tenants tab again right before writing to it. A wrong header (even one changed since this
+      // payment began) is a sheet-structure error here, and then nothing is written to the tab.
+      const tenancies = await readTenancies(ctx.gateway);
       await recordNewTenant(
         ctx.gateway,
-        loaded.tenancies,
+        tenancies,
         { portionId: portion.id, newTenancy, dateReceived: input.dateReceived },
         { now: options.now, updatedBy: options.loggedBy },
       );

@@ -102,14 +102,15 @@ describe("ensureTabs: Tenants tab", () => {
     expect(fake.calls).not.toContain("updateValues");
   });
 
-  it("refuses a Tenants tab with a wrong header, names it, and tries again next time", async () => {
+  it("does not refuse a Tenants tab with a wrong header: the rest of the app must keep working", async () => {
     const wrong = [...TENANT_HEADERS];
     wrong[4] = "Moved in";
     const fake = new FakeGateway({ Schedule: baseSchedule(), [TENANTS_TAB]: [wrong] });
-    await expect(ensureTabs(fake, "Schedule")).rejects.toThrow(/"Move-in date"/);
-    await expect(ensureTabs(fake, "Schedule")).rejects.toThrow(/"Move-in date"/);
-    fake.tabs.get(TENANTS_TAB)![0][4] = "Move-in date";
     await expect(ensureTabs(fake, "Schedule")).resolves.toBeUndefined();
+    // the Settings and Payments Log tabs were still created, and the Tenants tab was left exactly as it was
+    expect(fake.tabs.has(SETTINGS_TAB)).toBe(true);
+    expect(fake.tabs.has(LOG_TAB)).toBe(true);
+    expect(fake.tabs.get(TENANTS_TAB)).toEqual([wrong]);
   });
 });
 

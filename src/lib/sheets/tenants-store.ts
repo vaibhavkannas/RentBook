@@ -29,10 +29,9 @@ const LAST_COLUMN = colLetter(TENANT_HEADERS.length - 1);
 const ADVANCE_STATUSES: readonly string[] = ["Held", "Refunded", "Adjusted"] satisfies AdvanceStatus[];
 
 /**
- * Creates the Tenants tab with its headers when it is missing (or empty).
- * An existing tab must hold the fifteen headers in columns A to O, in order:
- * the first wrong or missing one is reported and nothing is written.
- * `existingTabs` is the tab list the caller already read.
+ * Creates the Tenants tab with its headers when it is missing, and writes the headers into a tab that is empty.
+ * It never refuses a tab for what its headers say: a wrong header must not stop the rest of the app. That is
+ * checked on every read (see readTenancies). `existingTabs` is the tab list the caller already read.
  */
 export async function ensureTenantsTab(
   gateway: SheetsGateway,
@@ -46,18 +45,25 @@ export async function ensureTenantsTab(
   const header = (await gateway.getValues(TENANTS_TAB, `A1:${LAST_COLUMN}1`, "FORMATTED_VALUE"))[0] ?? [];
   if (header.length === 0) {
     await gateway.updateValues([{ tab: TENANTS_TAB, a1: "A1", values: [TENANT_HEADERS] }]);
-    return;
   }
+}
+
+/**
+ * Compares row 1 with the fifteen headers (spaces around a header do not matter). Returns the first wrong or
+ * missing one in plain words, or null when columns A to O are right. Columns to the right of O are not looked at.
+ */
+function headerProblem(header: unknown[]): string | null {
   for (let index = 0; index < TENANT_HEADERS.length; index++) {
     const found = String(header[index] ?? "").trim();
     if (found !== TENANT_HEADERS[index]) {
-      throw sheetStructure(
+      return (
         `The Tenants tab must have "${TENANT_HEADERS[index]}" in column ${colLetter(index)} ` +
-          `(found ${found === "" ? "nothing" : `"${found}"`}). Columns A to ${LAST_COLUMN} must keep the ` +
-          `${TENANT_HEADERS.length} Tenants headers in their original order; extra columns may go to the right.`,
+        `(found ${found === "" ? "nothing" : `"${found}"`}). Columns A to ${LAST_COLUMN} must keep the ` +
+        `${TENANT_HEADERS.length} Tenants headers in their original order; extra columns may go to the right.`
       );
     }
   }
+  return null;
 }
 
 const isBlank = (cell: unknown) => cell === undefined || cell === null || String(cell).trim() === "";
@@ -73,9 +79,15 @@ const amount = (cell: unknown) => (typeof cell === "number" && Number.isFinite(c
 const status = (cell: unknown): AdvanceStatus | null =>
   typeof cell === "string" && ADVANCE_STATUSES.includes(cell) ? (cell as AdvanceStatus) : null;
 
-/** Every tenancy row, with its true 1-based row number. The header and fully blank rows are skipped. */
+/**
+ * Every tenancy row, with its true 1-based row number. The header and fully blank rows are skipped.
+ * Row 1 is compared with the headers on EVERY call, because everything else here (and every write) goes by
+ * column position: a wrong or missing header is a sheet-structure error that names it.
+ */
 export async function readTenancies(gateway: SheetsGateway): Promise<Tenancy[]> {
   const values = await gateway.getValues(TENANTS_TAB, `A1:${LAST_COLUMN}`, "UNFORMATTED_VALUE");
+  const problem = headerProblem(values[0] ?? []);
+  if (problem !== null) throw sheetStructure(problem);
   const tenancies: Tenancy[] = [];
   values.forEach((cells, index) => {
     if (index === 0 || cells.every(isBlank)) return;

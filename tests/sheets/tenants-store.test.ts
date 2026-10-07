@@ -130,12 +130,58 @@ describe("ensureTenantsTab", () => {
     expect(fake.calls).not.toContain("addTab");
   });
 
+  it("does not throw for a wrong header, and writes nothing: readTenancies reports it on every read", async () => {
+    const wrong = [...TENANT_HEADERS];
+    wrong[4] = "Moved in";
+    const fake = new FakeGateway({ Schedule: baseSchedule(), [TENANTS_TAB]: [wrong, stored(row())] });
+    await expect(ensureTenantsTab(fake, await fake.listTabs())).resolves.toBeUndefined();
+    expect(fake.calls).not.toContain("updateValues");
+    expect(fake.calls).not.toContain("addTab");
+    expect(fake.tabs.get(TENANTS_TAB)).toEqual([wrong, stored(row())]);
+  });
+
+  it("does not throw for headers that are missing or in the wrong order either", async () => {
+    const swapped = [...TENANT_HEADERS];
+    [swapped[1], swapped[2]] = [swapped[2], swapped[1]];
+    for (const header of [TENANT_HEADERS.slice(0, 3), swapped]) {
+      const fake = new FakeGateway({ Schedule: baseSchedule(), [TENANTS_TAB]: [header] });
+      await expect(ensureTenantsTab(fake, await fake.listTabs())).resolves.toBeUndefined();
+      expect(fake.tabs.get(TENANTS_TAB)).toEqual([header]);
+    }
+  });
+});
+
+describe("readTenancies: the header is checked on every read", () => {
+  it("checks the header on EVERY call: a header changed after a good read is reported by the next read", async () => {
+    const fake = await ensured();
+    fake.tabs.get(TENANTS_TAB)!.push(stored(row()));
+    await expect(readTenancies(fake)).resolves.toHaveLength(1);
+    await expect(readTenancies(fake)).resolves.toHaveLength(1);
+
+    fake.tabs.get(TENANTS_TAB)![0][4] = "Moved in";
+    const error = await structureError(() => readTenancies(fake));
+    expect(error.message).toContain('"Move-in date"');
+    expect(error.message).toContain('"Moved in"');
+    await structureError(() => readTenancies(fake));
+
+    fake.tabs.get(TENANTS_TAB)![0][4] = "Move-in date";
+    await expect(readTenancies(fake)).resolves.toHaveLength(1);
+  });
+
+  it("reports a tab whose header row was deleted", async () => {
+    const fake = await ensured();
+    fake.tabs.get(TENANTS_TAB)!.splice(0, 1);
+    const error = await structureError(() => readTenancies(fake));
+    expect(error.message).toContain('"Tenancy ID"');
+    expect(error.message).toContain("column A");
+  });
+
   it("throws sheet-structure naming the first wrong header, and writes nothing", async () => {
     const wrong = [...TENANT_HEADERS];
     wrong[4] = "Moved in";
     wrong[9] = "Money back";
     const fake = new FakeGateway({ Schedule: baseSchedule(), [TENANTS_TAB]: [wrong] });
-    const error = await structureError(async () => ensureTenantsTab(fake, await fake.listTabs()));
+    const error = await structureError(() => readTenancies(fake));
     expect(error.message).toContain('"Move-in date"');
     expect(error.message).toContain("column E");
     expect(error.message).toContain('"Moved in"');
@@ -148,7 +194,7 @@ describe("ensureTenantsTab", () => {
     const wrong = [...TENANT_HEADERS];
     wrong[14] = "Changed at";
     const fake = new FakeGateway({ Schedule: baseSchedule(), [TENANTS_TAB]: [wrong] });
-    const error = await structureError(async () => ensureTenantsTab(fake, await fake.listTabs()));
+    const error = await structureError(() => readTenancies(fake));
     expect(error.message).toContain('"Updated at"');
     expect(error.message).toContain("column O");
     expect(error.message).toContain('"Changed at"');
@@ -157,7 +203,7 @@ describe("ensureTenantsTab", () => {
 
   it("names \"Updated at\" and column O when only the last header is missing", async () => {
     const fake = new FakeGateway({ Schedule: baseSchedule(), [TENANTS_TAB]: [TENANT_HEADERS.slice(0, 14)] });
-    const error = await structureError(async () => ensureTenantsTab(fake, await fake.listTabs()));
+    const error = await structureError(() => readTenancies(fake));
     expect(error.message).toContain('"Updated at"');
     expect(error.message).toContain("column O");
     expect(error.message).toContain("found nothing");
@@ -166,7 +212,7 @@ describe("ensureTenantsTab", () => {
 
   it("throws sheet-structure naming the first missing header when the row is too short", async () => {
     const fake = new FakeGateway({ Schedule: baseSchedule(), [TENANTS_TAB]: [TENANT_HEADERS.slice(0, 3)] });
-    const error = await structureError(async () => ensureTenantsTab(fake, await fake.listTabs()));
+    const error = await structureError(() => readTenancies(fake));
     expect(error.message).toContain('"Phone"');
     expect(error.message).toContain("column D");
   });
@@ -175,14 +221,14 @@ describe("ensureTenantsTab", () => {
     const swapped = [...TENANT_HEADERS];
     [swapped[1], swapped[2]] = [swapped[2], swapped[1]];
     const fake = new FakeGateway({ Schedule: baseSchedule(), [TENANTS_TAB]: [swapped] });
-    const error = await structureError(async () => ensureTenantsTab(fake, await fake.listTabs()));
+    const error = await structureError(() => readTenancies(fake));
     expect(error.message).toContain('"Portion"');
   });
 
   it("ignores spaces around a header", async () => {
     const padded = TENANT_HEADERS.map((header) => ` ${header} `);
     const fake = new FakeGateway({ Schedule: baseSchedule(), [TENANTS_TAB]: [padded] });
-    await ensureTenantsTab(fake, await fake.listTabs());
+    await expect(readTenancies(fake)).resolves.toEqual([]);
     expect(fake.calls).not.toContain("updateValues");
   });
 });

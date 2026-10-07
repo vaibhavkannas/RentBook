@@ -91,7 +91,21 @@ export default async function TenantsPage({ params }: { params: Promise<{ portio
     );
   }
 
-  const { portion, scheduleTenant, current, mismatched, past } = data;
+  const { portion, scheduleTenant, current, mismatched, past, tenantsProblem } = data;
+
+  // The Tenants tab cannot be used (a header was changed): say what is wrong. Rent logging does not need it.
+  if (tenantsProblem !== undefined) {
+    return (
+      <main className="mx-auto min-h-dvh max-w-md px-4 pb-10 pt-4">
+        <Header title={portion.name} />
+        <LoadProblem
+          title="Can't show the tenant details"
+          message={`${tenantsProblem} Put the header back, then try again. Logging rent and the other pages still work.`}
+          retryHref={`/tenants/${encodeURIComponent(portion.id)}`}
+        />
+      </main>
+    );
+  }
   const today = todayIso(new Date());
   const phoneLink = current ? phoneHref(current.phone) : null;
   const advance = current ? advanceSummary(current) : null;

@@ -11,7 +11,7 @@ import {
 } from "@/lib/domain/tenancy";
 import type { PortionConfig } from "@/lib/domain/types";
 import { isValidIsoDay } from "@/lib/domain/year-month";
-import { conflict, validation } from "@/lib/errors";
+import { conflict, sheetStructure, validation } from "@/lib/errors";
 import { loadSnapshot, type SheetsContext, type Snapshot } from "./service";
 import { checkNewTenancy, recordNewTenant, type WriteStamp } from "./tenancy-writes";
 import { writeTenancyEdit, writeTenancyMoveOut } from "./tenants-store";
@@ -50,7 +50,17 @@ export type PortionTenants = {
   /** A current tenancy on file for a different tenant name (will be closed when new details are added). */
   mismatched: Tenancy | null;
   past: Tenancy[];
+  /**
+   * Set when the Tenants tab cannot be used (for example a header was changed): what is wrong. Then there are
+   * no tenancies to show, and saving details is refused until the tab is fixed.
+   */
+  tenantsProblem?: string;
 };
+
+/** A tenancy write needs a usable Tenants tab: a wrong header refuses it, before anything is written. */
+function requireUsableTenants(snapshot: Snapshot): void {
+  if (snapshot.tenantsProblem !== undefined) throw sheetStructure(snapshot.tenantsProblem);
+}
 
 function requirePortion(snapshot: Snapshot, portionId: string): PortionConfig {
   const portion = snapshot.portions.find((p) => p.id === portionId);
@@ -112,6 +122,7 @@ async function createTenancy(
 ): Promise<{ tenancy: Tenancy }> {
   const checked = checkNewTenancy(input.portionId, input.tenant, input.fields);
   const snapshot = await loadSnapshot(ctx);
+  requireUsableTenants(snapshot);
   const portion = requirePortion(snapshot, input.portionId);
 
   // The person saw one tenant's name; the Schedule must still name that tenant.
@@ -144,6 +155,7 @@ async function updateTenancy(
     throw validation("Updating a tenancy needs the updated-at value the person saw.");
   }
   const snapshot = await loadSnapshot(ctx);
+  requireUsableTenants(snapshot);
   requirePortion(snapshot, input.portionId);
 
   const stored = requireOpenTenancy(snapshot, id);
@@ -220,6 +232,7 @@ async function moveOutUnchecked(
   }
 
   const snapshot = await loadSnapshot(ctx);
+  requireUsableTenants(snapshot);
   const stored = requireOpenTenancy(snapshot, input.id);
   requireSeen(stored, input.expectedUpdatedAt);
   if (isValidIsoDay(stored.moveIn) && moveOut < stored.moveIn) {
@@ -261,6 +274,16 @@ export async function getPortionTenants(
   const portion = requirePortion(snapshot, portionId);
 
   const scheduleTenant = scheduleTenantOf(snapshot, portionId);
+  if (snapshot.tenantsProblem !== undefined) {
+    return {
+      portion,
+      scheduleTenant,
+      current: null,
+      mismatched: null,
+      past: [],
+      tenantsProblem: snapshot.tenantsProblem,
+    };
+  }
   const onFile = currentTenancy(snapshot.tenancies, portionId);
   const matches = onFile !== null && scheduleTenant !== null && sameTenantName(onFile.tenant, scheduleTenant);
   return {

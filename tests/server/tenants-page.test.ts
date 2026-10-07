@@ -174,6 +174,27 @@ describe("the tenant details page", () => {
     expect(html).not.toContain("No past tenants yet.");
   });
 
+  it("shows a problem with the Tenants tab in plain words, with the portion's name, no forms, and that rent logging still works", async () => {
+    mocks.getPortionTenants.mockResolvedValue(
+      data({
+        current: null,
+        tenantsProblem:
+          'The Tenants tab must have "Move-in date" in column E (found "Moved in"). Columns A to O must keep the 15 Tenants headers in their original order; extra columns may go to the right.',
+      }),
+    );
+    const html = await render();
+    expect(html).toContain("Ground floor");
+    expect(html).toContain('role="alert"');
+    expect(html).toContain("Can&#x27;t show the tenant details");
+    expect(html).toContain("Move-in date");
+    expect(html).toContain("Moved in");
+    expect(html).toContain("Logging rent and the other pages still work.");
+    expect(html).toContain('href="/tenants/p1"');
+    expect(html).not.toContain("Add details");
+    expect(html).not.toContain("<form");
+    expect(html).not.toContain("Past tenants");
+  });
+
   it("explains a problem reading the Sheet, with a way to try again", async () => {
     mocks.getPortionTenants.mockRejectedValue(sheetStructure("The Tenants tab must have the headers."));
     const html = await render();
