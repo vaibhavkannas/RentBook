@@ -201,23 +201,35 @@ export async function writeTenancyEdit(
   );
 }
 
+/** Which of the optional move-out columns a move-out writes. The others keep whatever the Sheet holds. */
+export type MoveOutColumns = {
+  /** Advance status (I). */
+  status: boolean;
+  /** Refund (J). */
+  refund: boolean;
+  /** Deductions (K). */
+  deductions: boolean;
+  /** Notes (L). */
+  notes: boolean;
+};
+
 /**
- * Saves a move-out: writes Advance status, Refund, Deductions (I to K), Notes (L, only when `notes` is true),
- * Move-out date, Updated by and Updated at (M to O), with one updateValues call. Every other cell of the row,
- * such as hand-typed text in the Advance column, is never touched.
+ * Saves a move-out with one updateValues call: always Move-out date, Updated by and Updated at (M to O), and only
+ * the optional columns named in `columns` (Advance status, Refund, Deductions, Notes). Every other cell of the row,
+ * including hand-typed text in a column the person gave nothing for, is never touched.
  */
 export async function writeTenancyMoveOut(
   gateway: SheetsGateway,
   rowNumber: number,
   row: Omit<Tenancy, "rowNumber">,
-  options: { notes: boolean },
+  columns: MoveOutColumns,
 ): Promise<void> {
   await gateway.updateValues(
     columnWrites(rowNumber, row, [
-      "Advance status",
-      "Refund",
-      "Deductions",
-      ...(options.notes ? ["Notes"] : []),
+      ...(columns.status ? ["Advance status"] : []),
+      ...(columns.refund ? ["Refund"] : []),
+      ...(columns.deductions ? ["Deductions"] : []),
+      ...(columns.notes ? ["Notes"] : []),
       "Move-out date",
       "Updated by",
       "Updated at",

@@ -226,19 +226,25 @@ async function moveOutUnchecked(
     throw validation("Move-out date cannot be before the move-in date.");
   }
 
+  // Only a tenancy with an advance has an outcome. A column the person gave nothing for is not written at all,
+  // so text typed by hand into it stays; the returned tenancy then shows what the Sheet still holds.
+  const columns = {
+    status: input.advanceStatus != null && stored.advance !== null,
+    refund: refund !== undefined,
+    deductions: deductions !== undefined,
+    notes: notes !== undefined,
+  };
   const closed: Tenancy = {
     ...stored,
     moveOut,
-    // Only a tenancy with an advance has an outcome; without a new one the stored outcome stays.
-    advanceStatus: stored.advance === null ? null : (input.advanceStatus ?? stored.advanceStatus),
+    advanceStatus: columns.status ? (input.advanceStatus ?? null) : stored.advanceStatus,
     refund: refund === undefined ? stored.refund : refund,
     deductions: deductions === undefined ? stored.deductions : deductions,
     notes: notes === undefined ? stored.notes : notes,
     updatedBy: stamp.updatedBy,
     updatedAt: stamp.now.toISOString(),
   };
-  // Only the move-out columns are written (Notes only when notes were given).
-  await writeTenancyMoveOut(ctx.gateway, stored.rowNumber, closed, { notes: notes !== undefined });
+  await writeTenancyMoveOut(ctx.gateway, stored.rowNumber, closed, columns);
   return { tenancy: closed };
 }
 

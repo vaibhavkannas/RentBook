@@ -616,23 +616,26 @@ describe("writeTenancyMoveOut", () => {
     updatedBy: "member@example.com",
     updatedAt: "2026-10-06T09:00:00.000Z",
   });
+  const STAMP_CELLS = ["2026-09-30", "member@example.com", "2026-10-06T09:00:00.000Z"];
+  const ALL = { status: true, refund: true, deductions: true, notes: false };
+  const NONE = { status: false, refund: false, deductions: false, notes: false };
 
-  it("without notes writes only Advance status to Deductions and Move-out date to Updated at, in one call", async () => {
+  async function typedRow() {
     const fake = await ensured();
     fake.tabs.get(TENANTS_TAB)!.push([...TYPED_ROW]);
     fake.calls = [];
-    const writes = recordWrites(fake);
+    return { fake, writes: recordWrites(fake) };
+  }
 
-    await writeTenancyMoveOut(fake, 2, CLOSED, { notes: false });
+  it("with status, refund and deductions writes them and Move-out date to Updated at, in one call", async () => {
+    const { fake, writes } = await typedRow();
+
+    await writeTenancyMoveOut(fake, 2, CLOSED, ALL);
 
     expect(fake.calls).toEqual(["updateValues"]);
     expect(writes).toEqual([
       { tab: TENANTS_TAB, a1: "I2:K2", values: [["Adjusted", 15000, 5000]] },
-      {
-        tab: TENANTS_TAB,
-        a1: "M2:O2",
-        values: [["2026-09-30", "member@example.com", "2026-10-06T09:00:00.000Z"]],
-      },
+      { tab: TENANTS_TAB, a1: "M2:O2", values: [STAMP_CELLS] },
     ]);
     const after = fake.tabs.get(TENANTS_TAB)![1];
     // A to H (0 to 7), the Notes cell (11) and the column right of O (15)
@@ -641,30 +644,54 @@ describe("writeTenancyMoveOut", () => {
     expect(after[11]).toBe("=HYPERLINK(1)");
   });
 
-  it("with notes also writes the Notes cell, still in one call", async () => {
-    const fake = await ensured();
-    fake.tabs.get(TENANTS_TAB)!.push([...TYPED_ROW]);
-    fake.calls = [];
-    const writes = recordWrites(fake);
+  it("with notes too also writes the Notes cell, still in one call", async () => {
+    const { fake, writes } = await typedRow();
 
-    await writeTenancyMoveOut(fake, 2, CLOSED, { notes: true });
+    await writeTenancyMoveOut(fake, 2, CLOSED, { ...ALL, notes: true });
 
     expect(fake.calls).toEqual(["updateValues"]);
     expect(writes).toEqual([
-      {
-        tab: TENANTS_TAB,
-        a1: "I2:O2",
-        values: [["Adjusted", 15000, 5000, "Left the keys", "2026-09-30", "member@example.com", "2026-10-06T09:00:00.000Z"]],
-      },
+      { tab: TENANTS_TAB, a1: "I2:O2", values: [["Adjusted", 15000, 5000, "Left the keys", ...STAMP_CELLS]] },
     ]);
     const after = fake.tabs.get(TENANTS_TAB)![1];
     expect(unchangedColumns(TYPED_ROW, after)).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 15]);
   });
 
+  it("with nothing given writes only Move-out date, Updated by and Updated at, and leaves hand-typed status, refund, deductions and notes", async () => {
+    const { fake, writes } = await typedRow();
+
+    await writeTenancyMoveOut(fake, 2, CLOSED, NONE);
+
+    expect(fake.calls).toEqual(["updateValues"]);
+    expect(writes).toEqual([{ tab: TENANTS_TAB, a1: "M2:O2", values: [STAMP_CELLS] }]);
+    const after = fake.tabs.get(TENANTS_TAB)![1];
+    // everything from Tenancy ID to Notes, and the extra column, is exactly as typed
+    expect(unchangedColumns(TYPED_ROW, after)).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 15]);
+    expect(after.slice(8, 11)).toEqual(["paid back", "see notes", "about 500"]);
+  });
+
+  it.each([
+    ["only the status", { status: true, refund: false, deductions: false }, ["I2", "M2:O2"], [["Adjusted"], STAMP_CELLS], [9, 10]],
+    ["only the refund", { status: false, refund: true, deductions: false }, ["J2", "M2:O2"], [[15000], STAMP_CELLS], [8, 10]],
+    ["only the deductions", { status: false, refund: false, deductions: true }, ["K2", "M2:O2"], [[5000], STAMP_CELLS], [8, 9]],
+    ["the refund and the deductions", { status: false, refund: true, deductions: true }, ["J2:K2", "M2:O2"], [[15000, 5000], STAMP_CELLS], [8]],
+    ["the status and the deductions", { status: true, refund: false, deductions: true }, ["I2", "K2", "M2:O2"], [["Adjusted"], [5000], STAMP_CELLS], [9]],
+  ])("with %s writes just those columns and the move-out columns", async (_name, flags, ranges, values, kept) => {
+    const { fake, writes } = await typedRow();
+
+    await writeTenancyMoveOut(fake, 2, CLOSED, { ...flags, notes: false });
+
+    expect(fake.calls).toEqual(["updateValues"]);
+    expect(writes.map((write) => write.a1)).toEqual(ranges);
+    expect(writes.map((write) => write.values[0])).toEqual(values);
+    const after = fake.tabs.get(TENANTS_TAB)![1];
+    for (const column of kept) expect(after[column]).toBe(TYPED_ROW[column]);
+  });
+
   it("round-trips through readTenancies", async () => {
     const fake = await ensured();
     await appendTenancy(fake, row({ id: "t-1" }));
-    await writeTenancyMoveOut(fake, 2, { ...CLOSED, id: "t-1" }, { notes: true });
+    await writeTenancyMoveOut(fake, 2, { ...CLOSED, id: "t-1" }, { ...ALL, notes: true });
     expect((await readTenancies(fake))[0]).toMatchObject({
       advanceStatus: "Adjusted",
       refund: 15000,
@@ -675,23 +702,38 @@ describe("writeTenancyMoveOut", () => {
     });
   });
 
-  it("writes empty cells for a null status, refund and deductions", async () => {
+  it("writes empty cells for a null status, refund and deductions that were asked for", async () => {
     const fake = await ensured();
     await appendTenancy(fake, row({ advance: 20000, advanceStatus: "Held", refund: 5, deductions: 6 }));
     await writeTenancyMoveOut(
       fake,
       2,
       row({ advanceStatus: null, refund: null, deductions: null, moveOut: "2026-09-30" }),
-      { notes: false },
+      ALL,
     );
     const cells = fake.tabs.get(TENANTS_TAB)![1];
     expect(cells.slice(8, 11)).toEqual(["", "", ""]);
+  });
+
+  it("leaves a stored status, refund and deductions alone when they were not asked for", async () => {
+    const fake = await ensured();
+    await appendTenancy(fake, row({ advance: 20000, advanceStatus: "Held", refund: 5, deductions: 6 }));
+    await writeTenancyMoveOut(
+      fake,
+      2,
+      row({ advanceStatus: null, refund: null, deductions: null, moveOut: "2026-09-30" }),
+      NONE,
+    );
+    const cells = fake.tabs.get(TENANTS_TAB)![1];
+    expect(cells.slice(8, 11)).toEqual(["Held", 5, 6]);
+    expect(cells[12]).toBe("2026-09-30");
   });
 
   it("stores text that starts with = as text", async () => {
     const fake = await ensured();
     await appendTenancy(fake, row());
     await writeTenancyMoveOut(fake, 2, row({ notes: "=1+1", updatedBy: "=2+2", moveOut: "2026-09-30" }), {
+      ...ALL,
       notes: true,
     });
     const cells = fake.tabs.get(TENANTS_TAB)![1];

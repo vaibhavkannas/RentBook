@@ -740,44 +740,94 @@ describe("moveOutTenancy", () => {
     expect(closed).toMatchObject({ rowNumber: 2, moveOut: "2026-09-30", refund: 15000 });
   });
 
-  it("writes only its own columns, in one updateValues call, and leaves the other cells of a hand-typed row alone", async () => {
-    const { fake, ctx } = await ready();
-    pushRawRow(fake, HAND_TYPED_ROW);
-    const [stored] = await tenancies(ctx);
-    const typedBefore = [...fake.tabs.get(TENANTS_TAB)![1]];
-    fake.calls = [];
-    const writes = recordUpdates(fake);
+  describe("on a hand-typed row", () => {
+    // Advance (G) is text here, so the tenancy has no advance. Status, refund, deductions and notes hold text.
+    async function typed(cells: unknown[] = HAND_TYPED_ROW) {
+      const { fake, ctx } = await ready();
+      pushRawRow(fake, cells);
+      const [stored] = await tenancies(ctx);
+      const typedBefore = [...fake.tabs.get(TENANTS_TAB)![1]];
+      fake.calls = [];
+      const writes = recordUpdates(fake);
+      return { fake, ctx, stored, typedBefore, writes };
+    }
+    const updateCalls = (fake: FakeGateway) => fake.calls.filter((call) => call === "updateValues");
+    const STAMP = ["member@example.com", "2026-10-06T09:00:00.000Z"];
 
-    await moveOut(ctx, stored, { advanceStatus: "Refunded", refund: 15000, deductions: 5000 });
+    it("writes only the refund, deductions and move-out cells, in one call, when there is no advance to give an outcome for", async () => {
+      const { fake, ctx, stored, typedBefore, writes } = await typed();
 
-    expect(fake.calls.filter((call) => call === "updateValues")).toHaveLength(1);
-    // no notes were given, so the Notes cell is not written
-    expect(writes.map((write) => write.a1)).toEqual(["I2:K2", "M2:O2"]);
-    const after = fake.tabs.get(TENANTS_TAB)![1];
-    // Tenancy ID to Advance date (hand-typed text in Advance included), the hand-typed Notes, and the extra column
-    expect(unchangedColumns(typedBefore, after)).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 11, 15]);
-    expect(after[6]).toBe("20,000 rupees");
-    expect(after[11]).toBe("=HYPERLINK(1)");
-    // a tenancy whose Advance cell is text has no advance, so it has no outcome
-    expect(after.slice(8, 13)).toEqual(["", 15000, 5000, "=HYPERLINK(1)", "2026-09-30"]);
-    expect(after.slice(13, 15)).toEqual(["member@example.com", "2026-10-06T09:00:00.000Z"]);
-  });
+      await moveOut(ctx, stored, { advanceStatus: "Refunded", refund: 15000, deductions: 5000 });
 
-  it("also writes the Notes cell when notes are given, still in one updateValues call", async () => {
-    const { fake, ctx } = await ready();
-    pushRawRow(fake, HAND_TYPED_ROW);
-    const [stored] = await tenancies(ctx);
-    const typedBefore = [...fake.tabs.get(TENANTS_TAB)![1]];
-    fake.calls = [];
-    const writes = recordUpdates(fake);
+      expect(updateCalls(fake)).toHaveLength(1);
+      // a tenancy whose Advance cell is text has no advance, so the outcome is not written; no notes were given
+      expect(writes.map((write) => write.a1)).toEqual(["J2:K2", "M2:O2"]);
+      const after = fake.tabs.get(TENANTS_TAB)![1];
+      // Tenancy ID to Advance status (hand-typed Advance and status included), the hand-typed Notes, the extra column
+      expect(unchangedColumns(typedBefore, after)).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8, 11, 15]);
+      expect(after[6]).toBe("20,000 rupees");
+      expect(after[8]).toBe("paid back");
+      expect(after[11]).toBe("=HYPERLINK(1)");
+      expect(after.slice(9, 13)).toEqual([15000, 5000, "=HYPERLINK(1)", "2026-09-30"]);
+      expect(after.slice(13, 15)).toEqual(STAMP);
+    });
 
-    await moveOut(ctx, stored, { notes: "Left the keys" });
+    it("writes only Move-out date, Updated by and Updated at when nothing else was given, and leaves hand-typed text in status, refund, deductions and notes", async () => {
+      const { fake, ctx, stored, typedBefore, writes } = await typed();
 
-    expect(fake.calls.filter((call) => call === "updateValues")).toHaveLength(1);
-    expect(writes.map((write) => write.a1)).toEqual(["I2:O2"]);
-    const after = fake.tabs.get(TENANTS_TAB)![1];
-    expect(unchangedColumns(typedBefore, after)).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 15]);
-    expect(after[11]).toBe("Left the keys");
+      await moveOut(ctx, stored);
+
+      expect(updateCalls(fake)).toHaveLength(1);
+      expect(writes.map((write) => write.a1)).toEqual(["M2:O2"]);
+      const after = fake.tabs.get(TENANTS_TAB)![1];
+      expect(unchangedColumns(typedBefore, after)).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 15]);
+      expect(after.slice(8, 12)).toEqual(["paid back", "see notes", "about 500", "=HYPERLINK(1)"]);
+      expect(after.slice(12, 15)).toEqual(["2026-09-30", ...STAMP]);
+    });
+
+    it("writes the Notes cell too when notes are given, still in one call", async () => {
+      const { fake, ctx, stored, typedBefore, writes } = await typed();
+
+      await moveOut(ctx, stored, { notes: "Left the keys" });
+
+      expect(updateCalls(fake)).toHaveLength(1);
+      expect(writes.map((write) => write.a1)).toEqual(["L2:O2"]);
+      const after = fake.tabs.get(TENANTS_TAB)![1];
+      expect(unchangedColumns(typedBefore, after)).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 15]);
+      expect(after[11]).toBe("Left the keys");
+    });
+
+    it("writes a given refund of null as an empty cell: the person asked for it", async () => {
+      const { fake, ctx, stored, writes } = await typed();
+
+      await moveOut(ctx, stored, { refund: null });
+
+      expect(writes.map((write) => write.a1)).toEqual(["J2", "M2:O2"]);
+      expect(fake.tabs.get(TENANTS_TAB)![1][9]).toBe("");
+      expect(fake.tabs.get(TENANTS_TAB)![1][10]).toBe("about 500");
+    });
+
+    it("writes the outcome too when the Advance cell is a real number, and still leaves hand-typed refund text alone", async () => {
+      const withAdvance: unknown[] = [...HAND_TYPED_ROW];
+      withAdvance[6] = 20000;
+      const { fake, ctx, stored, typedBefore, writes } = await typed(withAdvance);
+      expect(stored.advance).toBe(20000);
+
+      const { tenancy } = await moveOut(ctx, stored, { advanceStatus: "Refunded" });
+
+      expect(updateCalls(fake)).toHaveLength(1);
+      expect(writes.map((write) => write.a1)).toEqual(["I2", "M2:O2"]);
+      const after = fake.tabs.get(TENANTS_TAB)![1];
+      expect(after[8]).toBe("Refunded");
+      expect(unchangedColumns(typedBefore, after)).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 9, 10, 11, 15]);
+      expect(tenancy.advanceStatus).toBe("Refunded");
+    });
+
+    it("tells the caller what the Sheet still holds, not what was asked for, when the outcome was not written", async () => {
+      const { ctx, stored } = await typed();
+      const { tenancy } = await moveOut(ctx, stored, { advanceStatus: "Refunded" });
+      expect(tenancy.advanceStatus).toBeNull();
+    });
   });
 
   it("replaces the notes when new notes are given, including empty ones", async () => {
