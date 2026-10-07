@@ -1,9 +1,11 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import type { PortionCard } from "@/lib/domain/types";
 import { formatRupees } from "@/lib/format";
 import { sheetKey } from "@/lib/month-nav";
+import { tenancyChips } from "@/lib/tenancy-chips";
 import PaymentSheet, { type SheetMode } from "./PaymentSheet";
 import UndoSheet from "./UndoSheet";
 
@@ -80,7 +82,28 @@ export default function PortionBoard({ monthKey, monthLabel, cards, defaultDate 
                 )}
 
                 {card.status !== "needs-tenant" && (
-                  <p className="mt-2 text-lg font-medium">
+                  <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
+                    {card.tenancy &&
+                      tenancyChips(card.tenancy).map((chip) => (
+                        <span
+                          key={chip}
+                          className="rounded-lg bg-line px-2.5 py-0.5 text-xs font-medium text-foreground"
+                        >
+                          {chip}
+                        </span>
+                      ))}
+                    <Link
+                      href={`/tenants/${encodeURIComponent(card.portionId)}`}
+                      aria-label={`${card.tenancy ? "Details" : "Add details"} for ${card.name}`}
+                      className="inline-flex min-h-11 items-center text-sm text-muted underline"
+                    >
+                      {card.tenancy ? "Details" : "Add details"}
+                    </Link>
+                  </div>
+                )}
+
+                {card.status !== "needs-tenant" && (
+                  <p className="text-lg font-medium">
                     {formatRupees(card.entry?.amount ?? card.next!.suggestedAmount)}
                   </p>
                 )}

@@ -2,9 +2,15 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import type { TenancyFields } from "@/lib/domain/tenancy";
 import type { PortionCard } from "@/lib/domain/types";
 import { formatRupees } from "@/lib/format";
-import { buildPaymentRequest } from "@/lib/payment-request";
+import {
+  buildPaymentRequest,
+  paymentOutcome,
+  TENANCY_NOT_SAVED_MESSAGE,
+} from "@/lib/payment-request";
+import { newTenantDetails, type NewTenantDetailsForm } from "@/lib/tenancy-input";
 
 export type SheetMode = "log" | "edit" | "new-tenant";
 
@@ -19,7 +25,16 @@ type Props = {
 };
 
 type ApiError = { code: string; message: string; details?: Record<string, unknown> };
-type ApiBody = { ok: boolean; error?: ApiError; logWritten?: boolean; logRow?: unknown[] };
+type ApiBody = {
+  ok: boolean;
+  error?: ApiError;
+  logWritten?: boolean;
+  logRow?: unknown[];
+  tenancyWritten?: boolean;
+};
+
+/** What the sheet still has to tell the person after the payment was saved. */
+type Notice = { logRow: unknown[] | null; tenancyNotSaved: boolean };
 
 async function postJson(url: string, method: string, payload: unknown): Promise<ApiBody | null> {
   try {
@@ -67,7 +82,18 @@ export default function PaymentSheet({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [conflict, setConflict] = useState<{ amount: number; tenant: string } | null>(null);
-  const [pendingLog, setPendingLog] = useState<unknown[] | null>(null);
+  const [notice, setNotice] = useState<Notice | null>(null);
+  // The optional "Tenancy details" part of the New tenant sheet.
+  const [details, setDetails] = useState<NewTenantDetailsForm>({
+    moveIn: defaultDate,
+    advance: "",
+    advanceDate: "",
+    agreementEnd: "",
+    phone: "",
+  });
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const setDetail = (patch: Partial<NewTenantDetailsForm>) =>
+    setDetails((current) => ({ ...current, ...patch }));
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -82,6 +108,16 @@ export default function PaymentSheet({
 
   async function submit(overwrite: boolean) {
     if (!card) return setError("Choose a portion first.");
+    // The sheet decides whether tenancy details are sent: only when the person filled in or changed something.
+    let tenancy: TenancyFields | undefined;
+    if (mode === "new-tenant") {
+      const parsed = newTenantDetails(details, defaultDate);
+      if (!parsed.ok) {
+        setDetailsOpen(true);
+        return setError(parsed.message);
+      }
+      tenancy = parsed.tenancy;
+    }
     const request = buildPaymentRequest({
       mode,
       monthKey,
@@ -91,6 +127,7 @@ export default function PaymentSheet({
       tenantName,
       confirmedReplace: overwrite,
       seenEntry,
+      tenancy,
     });
     if (!request.ok) return setError(request.message);
     setBusy(true);
@@ -101,8 +138,9 @@ export default function PaymentSheet({
     if (!body) return setError(NO_CONFIRMATION);
     if (body.ok) {
       router.refresh();
-      if (body.logWritten === false) return setPendingLog(body.logRow ?? []);
-      return onClose();
+      const outcome = paymentOutcome(body);
+      if (outcome.done) return onClose();
+      return setNotice({ logRow: outcome.pendingLogRow, tenancyNotSaved: outcome.tenancyNotSaved });
     }
     const failure = body.error ?? { code: "unknown", message: "Something went wrong. Try again." };
     if (failure.code === "conflict" && typeof failure.details?.existingAmount === "number") {
@@ -113,15 +151,22 @@ export default function PaymentSheet({
     }
     // Someone else changed this payment, so the screen behind this sheet is out of date.
     if (failure.code === "conflict") router.refresh();
+    // The details are in the collapsed section, so open it when the server found something wrong in them.
+    if (failure.code === "validation" && request.body.tenancy) setDetailsOpen(true);
     setError(failure.message);
   }
 
   async function retryLog() {
+    if (!notice?.logRow) return;
     setBusy(true);
     setError(null);
-    const body = await postJson("/api/payments/log-retry", "POST", { row: pendingLog });
+    const body = await postJson("/api/payments/log-retry", "POST", { row: notice.logRow });
     setBusy(false);
-    if (body?.ok && body.logWritten) return onClose();
+    if (body?.ok && body.logWritten) {
+      // The log entry is saved now; the tenancy warning, if any, still has to be seen.
+      if (notice.tenancyNotSaved) return setNotice({ logRow: null, tenancyNotSaved: true });
+      return onClose();
+    }
     setError("The log entry still didn't save. The payment itself is safe in your Schedule.");
   }
 
@@ -154,32 +199,52 @@ export default function PaymentSheet({
           </button>
         </div>
 
-        {pendingLog ? (
+        {notice ? (
           <div className="mt-4 space-y-3">
-            <p className="rounded-lg bg-warn-bg px-3 py-2 text-sm text-warn-ink">
-              Saved to your Schedule, but the Payments Log entry didn&apos;t save.
-            </p>
+            {notice.logRow && (
+              <p className="rounded-lg bg-warn-bg px-3 py-2 text-sm text-warn-ink">
+                Saved to your Schedule, but the Payments Log entry didn&apos;t save.
+              </p>
+            )}
+            {notice.tenancyNotSaved && (
+              <p role="status" className="rounded-lg bg-warn-bg px-3 py-2 text-sm text-warn-ink">
+                {TENANCY_NOT_SAVED_MESSAGE}
+              </p>
+            )}
             {error && (
               <p role="alert" className="text-sm text-danger-ink">
                 {error}
               </p>
             )}
-            <button
-              type="button"
-              onClick={retryLog}
-              disabled={busy}
-              className="min-h-12 w-full rounded-xl bg-accent px-4 font-medium text-accent-ink"
-            >
-              {busy ? "Retrying…" : "Retry log entry"}
-            </button>
-            <button
-              type="button"
-              onClick={onClose}
-              disabled={busy}
-              className="min-h-11 w-full text-muted"
-            >
-              Skip for now
-            </button>
+            {notice.logRow ? (
+              <>
+                <button
+                  type="button"
+                  onClick={retryLog}
+                  disabled={busy}
+                  className="min-h-12 w-full rounded-xl bg-accent px-4 font-medium text-accent-ink"
+                >
+                  {busy ? "Retrying…" : "Retry log entry"}
+                </button>
+                <button
+                  type="button"
+                  onClick={onClose}
+                  disabled={busy}
+                  className="min-h-11 w-full text-muted"
+                >
+                  Skip for now
+                </button>
+              </>
+            ) : (
+              <button
+                type="button"
+                onClick={onClose}
+                autoFocus
+                className="min-h-12 w-full rounded-xl bg-accent px-4 font-medium text-accent-ink"
+              >
+                Close
+              </button>
+            )}
           </div>
         ) : conflict ? (
           <div className="mt-4 space-y-3">
@@ -309,6 +374,68 @@ export default function PaymentSheet({
             )}
             {mode === "new-tenant" && (
               <p className="text-sm text-muted">Count restarts at 1 for a new tenant.</p>
+            )}
+
+            {mode === "new-tenant" && (
+              <details
+                open={detailsOpen}
+                onToggle={(event) => setDetailsOpen(event.currentTarget.open)}
+                className="rounded-xl border border-line px-3"
+              >
+                <summary className="flex min-h-11 cursor-pointer items-center text-sm font-medium">
+                  Tenancy details (optional)
+                </summary>
+                <div className="space-y-3 pb-3">
+                  <label className="block text-sm">
+                    <span className="text-muted">Move-in date</span>
+                    <input
+                      type="date"
+                      value={details.moveIn}
+                      onChange={(event) => setDetail({ moveIn: event.target.value })}
+                      className="mt-1 min-h-12 w-full rounded-xl border border-control bg-surface px-3 text-base"
+                    />
+                  </label>
+                  <label className="block text-sm">
+                    <span className="text-muted">Advance (₹)</span>
+                    <input
+                      value={details.advance}
+                      onChange={(event) => setDetail({ advance: event.target.value })}
+                      inputMode="numeric"
+                      autoComplete="off"
+                      className="mt-1 min-h-12 w-full rounded-xl border border-control bg-surface px-3 text-base"
+                    />
+                  </label>
+                  <label className="block text-sm">
+                    <span className="text-muted">Advance date</span>
+                    <input
+                      type="date"
+                      value={details.advanceDate}
+                      onChange={(event) => setDetail({ advanceDate: event.target.value })}
+                      className="mt-1 min-h-12 w-full rounded-xl border border-control bg-surface px-3 text-base"
+                    />
+                  </label>
+                  <label className="block text-sm">
+                    <span className="text-muted">Agreement end</span>
+                    <input
+                      type="date"
+                      value={details.agreementEnd}
+                      onChange={(event) => setDetail({ agreementEnd: event.target.value })}
+                      className="mt-1 min-h-12 w-full rounded-xl border border-control bg-surface px-3 text-base"
+                    />
+                  </label>
+                  <label className="block text-sm">
+                    <span className="text-muted">Phone</span>
+                    <input
+                      type="tel"
+                      value={details.phone}
+                      onChange={(event) => setDetail({ phone: event.target.value })}
+                      autoComplete="off"
+                      maxLength={20}
+                      className="mt-1 min-h-12 w-full rounded-xl border border-control bg-surface px-3 text-base"
+                    />
+                  </label>
+                </div>
+              </details>
             )}
 
             {error && (

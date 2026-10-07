@@ -1,5 +1,5 @@
 import type { YearMonth } from "@/lib/domain/types";
-import { monthName, parseYmKey } from "@/lib/domain/year-month";
+import { isValidIsoDay, monthName, parseYmKey } from "@/lib/domain/year-month";
 
 const rupees = new Intl.NumberFormat("en-IN", { maximumFractionDigits: 0 });
 
@@ -17,6 +17,13 @@ export function formatMonthTitle(ym: YearMonth): string {
 export function formatMonthKey(key: string): string {
   const ym = parseYmKey(key);
   return ym ? formatMonthTitle(ym) : key;
+}
+
+/** "2027-03-15" -> "15 Mar 2027". Text that is not a real YYYY-MM-DD day is returned unchanged. */
+export function formatDay(iso: string): string {
+  if (!isValidIsoDay(iso)) return iso;
+  const [year, month, day] = iso.split("-").map(Number);
+  return `${day} ${monthName(month, false)} ${year}`;
 }
 
 const savedAt = new Intl.DateTimeFormat("en-IN", {

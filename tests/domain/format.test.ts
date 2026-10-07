@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatMonthKey, formatMonthTitle, formatRupees, formatSavedAt } from "@/lib/format";
+import { formatDay, formatMonthKey, formatMonthTitle, formatRupees, formatSavedAt } from "@/lib/format";
 
 describe("format", () => {
   it("formats rupees with Indian digit grouping", () => {
@@ -32,4 +32,22 @@ describe("formatSavedAt", () => {
   it("returns text that is not a date unchanged", () => {
     expect(formatSavedAt("not a date")).toBe("not a date");
   });
+});
+
+describe("formatDay", () => {
+  it("shows a day as a short date with no leading zero", () => {
+    expect(formatDay("2027-03-15")).toBe("15 Mar 2027");
+    expect(formatDay("2026-10-05")).toBe("5 Oct 2026");
+    expect(formatDay("2026-01-01")).toBe("1 Jan 2026");
+    expect(formatDay("2026-12-31")).toBe("31 Dec 2026");
+  });
+  it("handles a leap day", () => {
+    expect(formatDay("2028-02-29")).toBe("29 Feb 2028");
+  });
+  it.each(["", "  ", "2026-02-30", "2027-13-01", "2026-10", "15 Mar 2027", "46296", "2026-10-05T04:30:00Z", "soon"])(
+    "returns %j unchanged when it is not a real YYYY-MM-DD day",
+    (text) => {
+      expect(formatDay(text)).toBe(text);
+    },
+  );
 });

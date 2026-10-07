@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { buildPaymentRequest, type PaymentRequestInput } from "@/lib/payment-request";
+import {
+  buildPaymentRequest,
+  paymentOutcome,
+  TENANCY_NOT_SAVED_MESSAGE,
+  type PaymentRequestInput,
+} from "@/lib/payment-request";
 
 const base: PaymentRequestInput = {
   mode: "log",
@@ -114,5 +119,56 @@ describe("buildPaymentRequest", () => {
         expect(result.ok && result.body.tenancy).toBeUndefined();
       }
     });
+  });
+});
+
+describe("paymentOutcome", () => {
+  it("closes the sheet when the payment, the log and the tenancy all saved", () => {
+    expect(paymentOutcome({ ok: true, logWritten: true, tenancyWritten: true })).toEqual({
+      pendingLogRow: null,
+      tenancyNotSaved: false,
+      done: true,
+    });
+  });
+
+  it("closes the sheet for a payment that had no tenancy part (tenancyWritten is absent)", () => {
+    expect(paymentOutcome({ ok: true })).toEqual({ pendingLogRow: null, tenancyNotSaved: false, done: true });
+    expect(paymentOutcome({ ok: true, logWritten: true })).toMatchObject({ done: true });
+  });
+
+  it("keeps the log row for a retry when the log entry did not save", () => {
+    const row = ["a", "b"];
+    expect(paymentOutcome({ ok: true, logWritten: false, logRow: row })).toEqual({
+      pendingLogRow: row,
+      tenancyNotSaved: false,
+      done: false,
+    });
+    expect(paymentOutcome({ ok: true, logWritten: false })).toEqual({
+      pendingLogRow: [],
+      tenancyNotSaved: false,
+      done: false,
+    });
+  });
+
+  it("warns, and does not close, when the tenancy details did not save", () => {
+    expect(paymentOutcome({ ok: true, logWritten: true, tenancyWritten: false })).toEqual({
+      pendingLogRow: null,
+      tenancyNotSaved: true,
+      done: false,
+    });
+  });
+
+  it("reports both problems together", () => {
+    expect(paymentOutcome({ ok: true, logWritten: false, logRow: ["x"], tenancyWritten: false })).toEqual({
+      pendingLogRow: ["x"],
+      tenancyNotSaved: true,
+      done: false,
+    });
+  });
+
+  it("has neutral wording for the tenancy warning", () => {
+    expect(TENANCY_NOT_SAVED_MESSAGE).toBe(
+      "Payment saved, but the tenancy details weren't saved. Open Details on the card to check or add them.",
+    );
   });
 });

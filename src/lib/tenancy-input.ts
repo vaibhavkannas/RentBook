@@ -1,4 +1,4 @@
-import { MAX_RUPEES, type TenancyFields } from "@/lib/domain/tenancy";
+import { MAX_RUPEES, type AdvanceStatus, type Tenancy, type TenancyFields } from "@/lib/domain/tenancy";
 
 /**
  * What the forms send for tenancy details. The screens only gather text; the rules about what is
@@ -67,4 +67,142 @@ export function newTenantDetails(form: NewTenantDetailsForm, defaultMoveIn: stri
     return { ok: false, message: "Tenancy details need a move-in date. Fill it in under Tenancy details." };
   }
   return { ok: true, tenancy: fields };
+}
+
+/** The tenancy form (create and edit), as typed. */
+export type TenancyFormText = {
+  phone: string;
+  moveIn: string;
+  agreementEnd: string;
+  advance: string;
+  advanceDate: string;
+  notes: string;
+};
+
+/** A new form: everything empty except the move-in day. */
+export function emptyTenancyForm(moveIn: string): TenancyFormText {
+  return { phone: "", moveIn, agreementEnd: "", advance: "", advanceDate: "", notes: "" };
+}
+
+/** The edit form's starting values: what the Sheet holds now. */
+export function tenancyFormText(
+  t: Pick<Tenancy, "phone" | "moveIn" | "agreementEnd" | "advance" | "advanceDate" | "notes">,
+): TenancyFormText {
+  return {
+    phone: t.phone,
+    moveIn: t.moveIn,
+    agreementEnd: t.agreementEnd,
+    advance: t.advance === null ? "" : String(t.advance),
+    advanceDate: t.advanceDate,
+    notes: t.notes,
+  };
+}
+
+/** Which tenancy a form is for. An edit carries the updated-at its page was rendered with. */
+export type TenancyTarget =
+  | { mode: "create"; portionId: string; tenant: string }
+  | { mode: "edit"; portionId: string; tenant: string; id: string; expectedUpdatedAt: string };
+
+/** The body of POST /api/tenancies. */
+export type TenancyRequestBody = {
+  portionId: string;
+  tenant: string;
+  fields: TenancyFields;
+  id?: string;
+  expectedUpdatedAt?: string;
+};
+
+export type TenancyRequest = { ok: true; body: TenancyRequestBody } | { ok: false; message: string };
+
+/**
+ * The body of POST /api/tenancies for a form. A create names the tenant the page showed; an edit names the tenancy
+ * and the updated-at it was shown with (which may be empty for a row typed by hand), so a stale page is refused.
+ */
+export function buildTenancyRequest(target: TenancyTarget, form: TenancyFormText): TenancyRequest {
+  const advance = parseRupees(form.advance, "Advance");
+  if (!advance.ok) return advance;
+  const moveIn = form.moveIn.trim();
+  if (moveIn === "") return { ok: false, message: "Move-in date is required." };
+  const fields: TenancyFields = {
+    phone: form.phone.trim(),
+    moveIn,
+    agreementEnd: form.agreementEnd.trim(),
+    advance: advance.value,
+    advanceDate: form.advanceDate.trim(),
+    notes: form.notes.trim(),
+  };
+  const common = { portionId: target.portionId, tenant: target.tenant, fields };
+  return {
+    ok: true,
+    body:
+      target.mode === "create"
+        ? common
+        : { ...common, id: target.id, expectedUpdatedAt: target.expectedUpdatedAt },
+  };
+}
+
+/** The move-out form, as typed. An empty outcome means "leave it as it is". */
+export type MoveOutFormText = {
+  moveOut: string;
+  advanceStatus: AdvanceStatus | "";
+  refund: string;
+  deductions: string;
+  notes: string;
+};
+
+/** The move-out form's starting values: the day, the outcome the tenancy has now (Held if unknown) and its notes. */
+export function emptyMoveOutForm(
+  today: string,
+  current: { advanceStatus: AdvanceStatus | null; notes: string },
+): MoveOutFormText {
+  return {
+    moveOut: today,
+    advanceStatus: current.advanceStatus ?? "Held",
+    refund: "",
+    deductions: "",
+    notes: current.notes,
+  };
+}
+
+/** The tenancy a move-out form closes, as the page was rendered. */
+export type MoveOutTarget = {
+  id: string;
+  expectedUpdatedAt: string;
+  hasAdvance: boolean;
+  /** The notes the form started with: they are sent only when the person changed them. */
+  initialNotes: string;
+};
+
+/** The body of POST /api/tenancies/move-out. */
+export type MoveOutRequestBody = {
+  id: string;
+  expectedUpdatedAt: string;
+  moveOut: string;
+  advanceStatus?: AdvanceStatus;
+  refund?: number;
+  deductions?: number;
+  notes?: string;
+};
+
+export type MoveOutRequest = { ok: true; body: MoveOutRequestBody } | { ok: false; message: string };
+
+/**
+ * The body of POST /api/tenancies/move-out for a form. What the person left empty or did not change is left out,
+ * so the server keeps what is stored (a tenancy with no advance has no outcome; unchanged notes are not rewritten).
+ */
+export function buildMoveOutRequest(target: MoveOutTarget, form: MoveOutFormText): MoveOutRequest {
+  const moveOut = form.moveOut.trim();
+  if (moveOut === "") return { ok: false, message: "Move-out date is required." };
+  const refund = parseRupees(form.refund, "Refund");
+  if (!refund.ok) return refund;
+  const deductions = parseRupees(form.deductions, "Deductions");
+  if (!deductions.ok) return deductions;
+
+  const body: MoveOutRequestBody = { id: target.id, expectedUpdatedAt: target.expectedUpdatedAt, moveOut };
+  if (target.hasAdvance && form.advanceStatus !== "") body.advanceStatus = form.advanceStatus;
+  if (refund.value !== null) body.refund = refund.value;
+  if (deductions.value !== null) body.deductions = deductions.value;
+  const notes = form.notes.trim();
+  if (notes !== target.initialNotes.trim()) body.notes = notes;
+  return { ok: true, body };
 }

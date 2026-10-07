@@ -62,3 +62,31 @@ export function buildPaymentRequest(input: PaymentRequestInput): PaymentRequest 
     },
   };
 }
+
+/** Shown when the payment saved but the tenancy details that came with a new tenant did not. */
+export const TENANCY_NOT_SAVED_MESSAGE =
+  "Payment saved, but the tenancy details weren't saved. Open Details on the card to check or add them.";
+
+/** The parts of POST /api/payments' answer that decide what the sheet does after a save. */
+export type PaymentResponse = {
+  ok: boolean;
+  logWritten?: boolean;
+  logRow?: unknown[];
+  /** Absent unless the payment started a new tenant. */
+  tenancyWritten?: boolean;
+};
+
+export type PaymentOutcome = {
+  /** The Payments Log row to retry, when the log entry did not save. */
+  pendingLogRow: unknown[] | null;
+  tenancyNotSaved: boolean;
+  /** Nothing to tell the person: the sheet can close. */
+  done: boolean;
+};
+
+/** What the sheet does after the server accepted the payment. */
+export function paymentOutcome(body: PaymentResponse): PaymentOutcome {
+  const pendingLogRow = body.logWritten === false ? (body.logRow ?? []) : null;
+  const tenancyNotSaved = body.tenancyWritten === false;
+  return { pendingLogRow, tenancyNotSaved, done: pendingLogRow === null && !tenancyNotSaved };
+}
