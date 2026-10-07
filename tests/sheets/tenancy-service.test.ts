@@ -391,7 +391,7 @@ describe("saveTenancy: create", () => {
   it.each([
     ["an empty name", { tenant: "   " }],
     ["a name over 60 characters", { tenant: "x".repeat(61) }],
-    ["a phone with a letter", { fields: { moveIn: "2026-01-15", phone: "98765 abc" } }],
+    ["a phone with a line break", { fields: { moveIn: "2026-01-15", phone: "98765\n43210" } }],
     ["no move-in date", { fields: { moveIn: "" } }],
     ["an agreement end before move-in", { fields: { moveIn: "2026-01-15", agreementEnd: "2026-01-14" } }],
     ["a fractional advance", { fields: { moveIn: "2026-01-15", advance: 1.5 } }],
@@ -1312,7 +1312,7 @@ describe("logPayment: tenancy details for a new tenant", () => {
       "validation",
     );
     await expectCode(payNew(ctx, { tenancy: { moveIn: "", advance: 5 } }), "validation");
-    await expectCode(payNew(ctx, { tenancy: { moveIn: "2026-10-01", phone: "call me" } }), "validation");
+    await expectCode(payNew(ctx, { tenancy: { moveIn: "2026-10-01", phone: "98765\n43210" } }), "validation");
     expect(fake.calls).toEqual([]);
     expect(fake.tabs.has(LOG_TAB)).toBe(false);
     expect(fake.tabs.get("Schedule")).toHaveLength(5);

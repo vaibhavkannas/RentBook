@@ -35,7 +35,7 @@ Columns, left to right:
 | A | `Tenancy ID` | Stable key made by the app, for example `t-lq3k9x2a`. Never edited by hand. |
 | B | `Portion` | The portion id from the Settings tab, for example `p1`. |
 | C | `Tenant` | Tenant name as written in the Schedule. |
-| D | `Phone` | Free text, at most 20 characters. |
+| D | `Phone` | Free text, at most 30 characters, no line breaks or other control characters. |
 | E | `Move-in date` | `YYYY-MM-DD`. |
 | F | `Agreement end` | `YYYY-MM-DD`, optional. |
 | G | `Advance` | Whole rupees, 0 or more. |

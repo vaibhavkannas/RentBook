@@ -148,7 +148,7 @@ export default function TenancyForm({ target, initial }: Props) {
               onChange={(event) => set({ phone: event.target.value })}
               autoComplete="off"
               autoFocus={editing}
-              maxLength={20}
+              maxLength={30}
               className={FIELD}
             />
           </label>

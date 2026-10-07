@@ -41,10 +41,11 @@ export type TenancyFields = {
 
 export const MAX_RUPEES = 10_000_000;
 
-const MAX_PHONE_LENGTH = 20;
+const MAX_PHONE_LENGTH = 30;
 const MAX_NOTES_LENGTH = 500;
 const MAX_NAME_LENGTH = 60;
-const PHONE_PATTERN = /^[0-9 +\-()]*$/;
+/** Line breaks, tabs and other control characters: a phone is one line of free text. */
+const CONTROL_CHARACTERS = /[\u0000-\u001f\u007f]/;
 
 /** Whether two tenant names are the same person's name: surrounding spaces and case are ignored. */
 export function sameTenantName(a: string, b: string): boolean {
@@ -99,8 +100,8 @@ export function validateTenancyFields(
   if (phone.length > MAX_PHONE_LENGTH) {
     throw validation(`Phone can have at most ${MAX_PHONE_LENGTH} characters.`);
   }
-  if (!PHONE_PATTERN.test(phone)) {
-    throw validation("Phone can only have digits, spaces, +, -, ( and ).");
+  if (CONTROL_CHARACTERS.test(phone)) {
+    throw validation("Phone cannot have line breaks or other control characters.");
   }
 
   const moveIn = (fields.moveIn ?? "").trim();

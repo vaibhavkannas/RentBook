@@ -182,10 +182,10 @@ describe("validateTenancyFields", () => {
     });
   });
 
-  it("accepts the limits: advance 0 and the maximum, a 20 character phone, 500 characters of notes", () => {
+  it("accepts the limits: advance 0 and the maximum, a 30 character phone, 500 characters of notes", () => {
     expect(validateTenancyFields({ moveIn: "2026-10-01", advance: 0 }).advance).toBe(0);
     expect(validateTenancyFields({ moveIn: "2026-10-01", advance: MAX_RUPEES }).advance).toBe(MAX_RUPEES);
-    expect(validateTenancyFields({ moveIn: "2026-10-01", phone: "9".repeat(20) }).phone).toHaveLength(20);
+    expect(validateTenancyFields({ moveIn: "2026-10-01", phone: "9".repeat(30) }).phone).toHaveLength(30);
     expect(validateTenancyFields({ moveIn: "2026-10-01", notes: "n".repeat(500) }).notes).toHaveLength(500);
   });
 
@@ -195,16 +195,18 @@ describe("validateTenancyFields", () => {
     expect(fields.advance).toBeNull();
   });
 
-  it("refuses a phone with a letter", () => {
-    expect(validationMessage(() => validateTenancyFields({ moveIn: "2026-10-01", phone: "98765x" }))).toMatch(
-      /Phone can only have/,
-    );
-  });
+  it.each(["98765\n43210", "98765\r\n43210", "98765\t43210", "98765\u000043210", "98765\u007f"])(
+    "refuses a phone with a control character: %j",
+    (phone) => {
+      expect(validationMessage(() => validateTenancyFields({ moveIn: "2026-10-01", phone }))).toMatch(
+        /Phone cannot have line breaks or other control characters/,
+      );
+    },
+  );
 
-  it("refuses a phone of 21 characters", () => {
-    expect(validationMessage(() => validateTenancyFields({ moveIn: "2026-10-01", phone: "9".repeat(21) }))).toMatch(
-      /Phone can have at most 20 characters/,
-    );
+  it("does not count spaces around the phone, or a trailing line break, against it", () => {
+    expect(validateTenancyFields({ moveIn: "2026-10-01", phone: "  98765 43210\n" }).phone).toBe("98765 43210");
+    expect(validateTenancyFields({ moveIn: "2026-10-01", phone: " ".repeat(40) + "98765" }).phone).toBe("98765");
   });
 
   it("refuses a missing or unreal move-in date", () => {

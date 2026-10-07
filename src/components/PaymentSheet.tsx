@@ -426,7 +426,7 @@ export default function PaymentSheet({
                       value={details.phone}
                       onChange={(event) => setDetail({ phone: event.target.value })}
                       autoComplete="off"
-                      maxLength={20}
+                      maxLength={30}
                       className="mt-1 min-h-12 w-full rounded-xl border border-control bg-surface px-3 text-base"
                     />
                   </label>
