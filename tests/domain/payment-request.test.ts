@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   buildPaymentRequest,
+  LOG_RETRY_FAILED_MESSAGE,
+  LOG_RETRY_UNCONFIRMED_MESSAGE,
+  logRetryFailureMessage,
   paymentOutcome,
   TENANCY_NOT_SAVED_MESSAGE,
   type PaymentRequestInput,
@@ -169,6 +172,23 @@ describe("paymentOutcome", () => {
   it("has neutral wording for the tenancy warning", () => {
     expect(TENANCY_NOT_SAVED_MESSAGE).toBe(
       "Payment saved, but the tenancy details weren't saved. Open the card's details page to check or add them.",
+    );
+  });
+});
+
+describe("logRetryFailureMessage", () => {
+  it("says it could not confirm when the retry got no answer at all (a timeout or a dropped connection)", () => {
+    expect(logRetryFailureMessage(null)).toBe(LOG_RETRY_UNCONFIRMED_MESSAGE);
+    expect(LOG_RETRY_UNCONFIRMED_MESSAGE).toBe(
+      "Couldn't confirm that the log entry saved. Check the Activity screen before trying again.",
+    );
+  });
+
+  it("keeps the plain failure wording for a real answer that says the entry did not save", () => {
+    expect(logRetryFailureMessage({ ok: true, logWritten: false })).toBe(LOG_RETRY_FAILED_MESSAGE);
+    expect(logRetryFailureMessage({ ok: false })).toBe(LOG_RETRY_FAILED_MESSAGE);
+    expect(LOG_RETRY_FAILED_MESSAGE).toBe(
+      "The log entry still didn't save. The payment itself is safe in your Schedule.",
     );
   });
 });

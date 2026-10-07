@@ -67,6 +67,23 @@ export function buildPaymentRequest(input: PaymentRequestInput): PaymentRequest 
 export const TENANCY_NOT_SAVED_MESSAGE =
   "Payment saved, but the tenancy details weren't saved. Open the card's details page to check or add them.";
 
+/** Shown when the retry got a real answer and the Payments Log entry still did not save. */
+export const LOG_RETRY_FAILED_MESSAGE =
+  "The log entry still didn't save. The payment itself is safe in your Schedule.";
+
+/** Shown when the retry got no answer at all, so the entry may have been saved after all. */
+export const LOG_RETRY_UNCONFIRMED_MESSAGE =
+  "Couldn't confirm that the log entry saved. Check the Activity screen before trying again.";
+
+/**
+ * What to tell the person when retrying the Payments Log entry did not succeed. `body` is the answer of
+ * POST /api/payments/log-retry, or null when none arrived (a timeout or a dropped connection): the retry may
+ * then have gone through, so the person is sent to the Activity screen instead of being told it failed.
+ */
+export function logRetryFailureMessage(body: { ok: boolean; logWritten?: boolean } | null): string {
+  return body === null ? LOG_RETRY_UNCONFIRMED_MESSAGE : LOG_RETRY_FAILED_MESSAGE;
+}
+
 /** The parts of POST /api/payments' answer that decide what the sheet does after a save. */
 export type PaymentResponse = {
   ok: boolean;

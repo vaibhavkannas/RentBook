@@ -7,6 +7,7 @@ import type { PortionCard } from "@/lib/domain/types";
 import { formatRupees } from "@/lib/format";
 import {
   buildPaymentRequest,
+  logRetryFailureMessage,
   paymentOutcome,
   TENANCY_NOT_SAVED_MESSAGE,
 } from "@/lib/payment-request";
@@ -155,7 +156,7 @@ export default function PaymentSheet({
       if (notice.tenancyNotSaved) return setNotice({ logRow: null, tenancyNotSaved: true });
       return onClose();
     }
-    setError("The log entry still didn't save. The payment itself is safe in your Schedule.");
+    setError(logRetryFailureMessage(body));
   }
 
   return (
