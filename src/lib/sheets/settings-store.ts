@@ -2,6 +2,7 @@ import type { PortionConfig } from "@/lib/domain/types";
 import { sheetStructure, validation } from "@/lib/errors";
 import { findHeaderRowIndex } from "./schedule";
 import type { SheetsGateway } from "./gateway";
+import { ensureTenantsTab } from "./tenants-store";
 
 export const SETTINGS_TAB = "Settings";
 export const LOG_TAB = "Payments Log";
@@ -104,8 +105,8 @@ const toSettingsRow = (p: PortionConfig) => [
 const bootstrapped = new WeakSet<SheetsGateway>();
 
 /**
- * Creates the Settings and Payments Log tabs when they are missing. Settings
- * is seeded from the Schedule header row. Runs once per gateway instance.
+ * Creates the Settings, Payments Log and Tenants tabs when they are missing.
+ * Settings is seeded from the Schedule header row. Runs once per gateway instance.
  */
 export async function ensureTabs(gateway: SheetsGateway, scheduleTab: string): Promise<void> {
   if (bootstrapped.has(gateway)) return;
@@ -141,6 +142,7 @@ export async function ensureTabs(gateway: SheetsGateway, scheduleTab: string): P
       await gateway.updateValues([{ tab: LOG_TAB, a1: "H1:I1", values: [LOG_HEADERS.slice(7)] }]);
     }
   }
+  await ensureTenantsTab(gateway, tabs);
   bootstrapped.add(gateway);
 }
 

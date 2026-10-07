@@ -10,6 +10,7 @@ import {
   SETTINGS_TAB,
   updateSettings,
 } from "@/lib/sheets/settings-store";
+import { TENANT_HEADERS, TENANTS_TAB } from "@/lib/sheets/tenants-store";
 import { FakeGateway } from "../support/fake-gateway";
 import { baseSchedule, PORTIONS, SCHEDULE_HEADERS } from "../support/fixtures";
 
@@ -39,10 +40,10 @@ describe("inferPortions", () => {
 });
 
 describe("ensureTabs", () => {
-  it("creates Settings and Payments Log once, seeded from the Schedule header", async () => {
+  it("creates Settings, Payments Log and Tenants once, seeded from the Schedule header", async () => {
     const fake = new FakeGateway({ Schedule: baseSchedule() });
     await ensureTabs(fake, "Schedule");
-    expect([...fake.tabs.keys()]).toEqual(["Schedule", SETTINGS_TAB, LOG_TAB]);
+    expect([...fake.tabs.keys()]).toEqual(["Schedule", SETTINGS_TAB, LOG_TAB, TENANTS_TAB]);
     expect(fake.tabs.get(LOG_TAB)).toEqual([LOG_HEADERS]);
     const portions = await readSettings(fake);
     expect(portions.map((p) => p.tenantHeader)).toEqual(PORTIONS.map((p) => p.tenantHeader));
@@ -70,6 +71,48 @@ describe("ensureTabs", () => {
   });
 });
 
+describe("ensureTabs: Tenants tab", () => {
+  it("creates the Tenants tab with its headers", async () => {
+    const fake = new FakeGateway({ Schedule: baseSchedule() });
+    await ensureTabs(fake, "Schedule");
+    expect(fake.tabs.get(TENANTS_TAB)).toEqual([TENANT_HEADERS]);
+  });
+
+  it("creates the Tenants tab next to an existing Settings tab and Payments Log", async () => {
+    const fake = new FakeGateway({
+      Schedule: baseSchedule(),
+      [SETTINGS_TAB]: [[...SETTINGS_HEADERS]],
+      [LOG_TAB]: [[...LOG_HEADERS]],
+    });
+    await ensureTabs(fake, "Schedule");
+    expect(fake.tabs.get(TENANTS_TAB)).toEqual([TENANT_HEADERS]);
+  });
+
+  it("leaves an existing correct Tenants tab and its rows alone", async () => {
+    const data = ["t-1", "p1", "Asha", "", "2026-01-15"];
+    const fake = new FakeGateway({
+      Schedule: baseSchedule(),
+      [SETTINGS_TAB]: [[...SETTINGS_HEADERS]],
+      [LOG_TAB]: [[...LOG_HEADERS]],
+      [TENANTS_TAB]: [[...TENANT_HEADERS], data],
+    });
+    await ensureTabs(fake, "Schedule");
+    expect(fake.tabs.get(TENANTS_TAB)).toEqual([TENANT_HEADERS, data]);
+    expect(fake.calls).not.toContain("addTab");
+    expect(fake.calls).not.toContain("updateValues");
+  });
+
+  it("refuses a Tenants tab with a wrong header, names it, and tries again next time", async () => {
+    const wrong = [...TENANT_HEADERS];
+    wrong[4] = "Moved in";
+    const fake = new FakeGateway({ Schedule: baseSchedule(), [TENANTS_TAB]: [wrong] });
+    await expect(ensureTabs(fake, "Schedule")).rejects.toThrow(/"Move-in date"/);
+    await expect(ensureTabs(fake, "Schedule")).rejects.toThrow(/"Move-in date"/);
+    fake.tabs.get(TENANTS_TAB)![0][4] = "Move-in date";
+    await expect(ensureTabs(fake, "Schedule")).resolves.toBeUndefined();
+  });
+});
+
 describe("ensureTabs: Payments Log header upgrade", () => {
   const oldHeaders = ["Saved at", "Month", "Portion", "Tenant", "Amount", "Count", "Date received"];
   const row = ["2026-09-05T00:00:00.000Z", "2026-09", "First floor, single bedroom", "Asha", 5450, 3, "2026-09-05"];
@@ -79,6 +122,8 @@ describe("ensureTabs: Payments Log header upgrade", () => {
       Schedule: baseSchedule(),
       [SETTINGS_TAB]: [[...SETTINGS_HEADERS]],
       [LOG_TAB]: logRows,
+      // Already there, so these tests only measure what happens to the Payments Log.
+      [TENANTS_TAB]: [[...TENANT_HEADERS]],
     });
     await ensureTabs(fake, "Schedule");
     return fake;

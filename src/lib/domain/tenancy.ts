@@ -1,0 +1,148 @@
+import { validation } from "@/lib/errors";
+import { isValidIsoDay } from "./year-month";
+
+export type AdvanceStatus = "Held" | "Refunded" | "Adjusted";
+
+export type Tenancy = {
+  /** 1-based row in the Tenants tab. Not stored. */
+  rowNumber: number;
+  id: string;
+  portionId: string;
+  tenant: string;
+  phone: string;
+  moveIn: string; // YYYY-MM-DD
+  agreementEnd: string; // YYYY-MM-DD or ""
+  advance: number | null;
+  advanceDate: string; // YYYY-MM-DD or ""
+  advanceStatus: AdvanceStatus | null;
+  refund: number | null;
+  deductions: number | null;
+  notes: string;
+  moveOut: string; // YYYY-MM-DD or "" while current
+  updatedBy: string;
+  updatedAt: string; // ISO timestamp
+};
+
+/** What a portion card needs. */
+export type TenancySummary = Pick<
+  Tenancy,
+  "id" | "phone" | "moveIn" | "agreementEnd" | "advance" | "advanceStatus" | "updatedAt"
+>;
+
+/** Fields a person can enter when creating or editing a tenancy. */
+export type TenancyFields = {
+  phone?: string;
+  moveIn: string;
+  agreementEnd?: string;
+  advance?: number | null;
+  advanceDate?: string;
+  notes?: string;
+};
+
+export const MAX_RUPEES = 10_000_000;
+
+const MAX_PHONE_LENGTH = 20;
+const MAX_NOTES_LENGTH = 500;
+const MAX_NAME_LENGTH = 60;
+const PHONE_PATTERN = /^[0-9 +\-()]*$/;
+
+/** Whether two tenant names are the same person's name: surrounding spaces and case are ignored. */
+export function sameTenantName(a: string, b: string): boolean {
+  return a.trim().toLowerCase() === b.trim().toLowerCase();
+}
+
+/** The last row of the portion that has no move-out date, or null. */
+export function currentTenancy(all: Tenancy[], portionId: string): Tenancy | null {
+  for (let index = all.length - 1; index >= 0; index--) {
+    const candidate = all[index];
+    if (candidate.portionId === portionId && candidate.moveOut === "") return candidate;
+  }
+  return null;
+}
+
+/** Closed tenancies of the portion, newest move-out first; equal dates put the higher row first. */
+export function pastTenancies(all: Tenancy[], portionId: string): Tenancy[] {
+  return all
+    .filter((t) => t.portionId === portionId && t.moveOut !== "")
+    .sort((a, b) => {
+      if (a.moveOut !== b.moveOut) return a.moveOut < b.moveOut ? 1 : -1;
+      return b.rowNumber - a.rowNumber;
+    });
+}
+
+export function summarize(t: Tenancy): TenancySummary {
+  return {
+    id: t.id,
+    phone: t.phone,
+    moveIn: t.moveIn,
+    agreementEnd: t.agreementEnd,
+    advance: t.advance,
+    advanceStatus: t.advanceStatus,
+    updatedAt: t.updatedAt,
+  };
+}
+
+/** "t-" then the time in base 36 then four random base 36 characters. */
+export function newTenancyId(now: Date, random: () => number = Math.random): string {
+  let suffix = "";
+  for (let i = 0; i < 4; i++) {
+    suffix += Math.min(35, Math.floor(random() * 36)).toString(36);
+  }
+  return `t-${now.getTime().toString(36)}${suffix}`;
+}
+
+/** Returns cleaned fields or throws validation() with a clear message. */
+export function validateTenancyFields(
+  fields: TenancyFields,
+): Required<Omit<TenancyFields, "advance">> & { advance: number | null } {
+  const phone = (fields.phone ?? "").trim();
+  if (phone.length > MAX_PHONE_LENGTH) {
+    throw validation(`Phone can have at most ${MAX_PHONE_LENGTH} characters.`);
+  }
+  if (!PHONE_PATTERN.test(phone)) {
+    throw validation("Phone can only have digits, spaces, +, -, ( and ).");
+  }
+
+  const moveIn = (fields.moveIn ?? "").trim();
+  if (moveIn === "") throw validation("Move-in date is required.");
+  if (!isValidIsoDay(moveIn)) throw validation("Move-in date must be a real date (YYYY-MM-DD).");
+
+  const agreementEnd = (fields.agreementEnd ?? "").trim();
+  if (agreementEnd !== "") {
+    if (!isValidIsoDay(agreementEnd)) {
+      throw validation("Agreement end must be a real date (YYYY-MM-DD).");
+    }
+    if (agreementEnd < moveIn) {
+      throw validation("Agreement end cannot be before the move-in date.");
+    }
+  }
+
+  const advanceDate = (fields.advanceDate ?? "").trim();
+  if (advanceDate !== "" && !isValidIsoDay(advanceDate)) {
+    throw validation("Advance date must be a real date (YYYY-MM-DD).");
+  }
+
+  const advance = fields.advance ?? null;
+  if (
+    advance !== null &&
+    !(typeof advance === "number" && Number.isInteger(advance) && advance >= 0 && advance <= MAX_RUPEES)
+  ) {
+    throw validation("Advance must be a whole number of rupees from 0 to 10,000,000.");
+  }
+
+  const notes = (fields.notes ?? "").trim();
+  if (notes.length > MAX_NOTES_LENGTH) {
+    throw validation(`Notes can have at most ${MAX_NOTES_LENGTH} characters.`);
+  }
+
+  return { phone, moveIn, agreementEnd, advance, advanceDate, notes };
+}
+
+/** The tenant name as it will be stored: trimmed, 1 to 60 characters. */
+export function validateTenantName(name: string): string {
+  const trimmed = name.trim();
+  if (trimmed.length === 0 || trimmed.length > MAX_NAME_LENGTH) {
+    throw validation(`Tenant name must be 1 to ${MAX_NAME_LENGTH} characters.`);
+  }
+  return trimmed;
+}

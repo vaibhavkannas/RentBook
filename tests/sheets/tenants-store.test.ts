@@ -1,0 +1,343 @@
+import { describe, expect, it } from "vitest";
+import type { Tenancy } from "@/lib/domain/tenancy";
+import { AppError } from "@/lib/errors";
+import {
+  appendTenancy,
+  ensureTenantsTab,
+  readTenancies,
+  TENANT_HEADERS,
+  TENANTS_TAB,
+  writeTenancy,
+} from "@/lib/sheets/tenants-store";
+import { FakeGateway } from "../support/fake-gateway";
+import { baseSchedule } from "../support/fixtures";
+
+type Row = Omit<Tenancy, "rowNumber">;
+
+function row(overrides: Partial<Row> = {}): Row {
+  return {
+    id: "t-1",
+    portionId: "p1",
+    tenant: "Asha",
+    phone: "98765 43210",
+    moveIn: "2026-01-15",
+    agreementEnd: "2027-01-14",
+    advance: 20000,
+    advanceDate: "2026-01-10",
+    advanceStatus: "Held",
+    refund: null,
+    deductions: null,
+    notes: "Paid by cheque",
+    moveOut: "",
+    updatedBy: "owner@example.com",
+    updatedAt: "2026-01-15T05:00:00.000Z",
+    ...overrides,
+  };
+}
+
+/** The cells the store writes for a row: amounts as numbers or "" for null. */
+function stored(r: Row): unknown[] {
+  return [
+    r.id,
+    r.portionId,
+    r.tenant,
+    r.phone,
+    r.moveIn,
+    r.agreementEnd,
+    r.advance ?? "",
+    r.advanceDate,
+    r.advanceStatus ?? "",
+    r.refund ?? "",
+    r.deductions ?? "",
+    r.notes,
+    r.moveOut,
+    r.updatedBy,
+    r.updatedAt,
+  ];
+}
+
+async function ensured(initial: Record<string, unknown[][]> = {}) {
+  const fake = new FakeGateway({ Schedule: baseSchedule(), ...initial });
+  await ensureTenantsTab(fake, await fake.listTabs());
+  return fake;
+}
+
+async function structureError(run: () => Promise<unknown>): Promise<AppError> {
+  try {
+    await run();
+  } catch (error) {
+    expect(error).toBeInstanceOf(AppError);
+    expect((error as AppError).code).toBe("sheet-structure");
+    return error as AppError;
+  }
+  throw new Error("expected a sheet-structure error");
+}
+
+describe("TENANT_HEADERS", () => {
+  it("are the fifteen headers of columns A to O, in order", () => {
+    expect(TENANTS_TAB).toBe("Tenants");
+    expect(TENANT_HEADERS).toEqual([
+      "Tenancy ID",
+      "Portion",
+      "Tenant",
+      "Phone",
+      "Move-in date",
+      "Agreement end",
+      "Advance",
+      "Advance date",
+      "Advance status",
+      "Refund",
+      "Deductions",
+      "Notes",
+      "Move-out date",
+      "Updated by",
+      "Updated at",
+    ]);
+  });
+});
+
+describe("ensureTenantsTab", () => {
+  it("creates the tab with the fifteen headers when it is missing", async () => {
+    const fake = await ensured();
+    expect(fake.tabs.get(TENANTS_TAB)).toEqual([TENANT_HEADERS]);
+  });
+
+  it("does not touch an existing correct tab", async () => {
+    const data = stored(row());
+    const fake = new FakeGateway({ Schedule: baseSchedule(), [TENANTS_TAB]: [TENANT_HEADERS, data] });
+    await ensureTenantsTab(fake, await fake.listTabs());
+    expect(fake.calls.filter((call) => call !== "listTabs" && call !== "getValues")).toEqual([]);
+    expect(fake.tabs.get(TENANTS_TAB)).toEqual([TENANT_HEADERS, data]);
+  });
+
+  it("accepts columns added by hand to the right of O", async () => {
+    const fake = new FakeGateway({
+      Schedule: baseSchedule(),
+      [TENANTS_TAB]: [[...TENANT_HEADERS, "Flat key given"]],
+    });
+    await ensureTenantsTab(fake, await fake.listTabs());
+    expect(fake.calls).not.toContain("updateValues");
+    expect(fake.tabs.get(TENANTS_TAB)![0]).toHaveLength(16);
+  });
+
+  it("writes the headers into an existing tab that is empty", async () => {
+    const fake = new FakeGateway({ Schedule: baseSchedule(), [TENANTS_TAB]: [] });
+    await ensureTenantsTab(fake, await fake.listTabs());
+    expect(fake.tabs.get(TENANTS_TAB)).toEqual([TENANT_HEADERS]);
+    expect(fake.calls).not.toContain("addTab");
+  });
+
+  it("throws sheet-structure naming the first wrong header, and writes nothing", async () => {
+    const wrong = [...TENANT_HEADERS];
+    wrong[4] = "Moved in";
+    wrong[9] = "Money back";
+    const fake = new FakeGateway({ Schedule: baseSchedule(), [TENANTS_TAB]: [wrong] });
+    const error = await structureError(async () => ensureTenantsTab(fake, await fake.listTabs()));
+    expect(error.message).toContain('"Move-in date"');
+    expect(error.message).toContain("column E");
+    expect(error.message).toContain('"Moved in"');
+    expect(error.message).not.toContain("Refund");
+    expect(fake.calls).not.toContain("updateValues");
+    expect(fake.tabs.get(TENANTS_TAB)).toEqual([wrong]);
+  });
+
+  it("throws sheet-structure naming the first missing header when the row is too short", async () => {
+    const fake = new FakeGateway({ Schedule: baseSchedule(), [TENANTS_TAB]: [TENANT_HEADERS.slice(0, 3)] });
+    const error = await structureError(async () => ensureTenantsTab(fake, await fake.listTabs()));
+    expect(error.message).toContain('"Phone"');
+    expect(error.message).toContain("column D");
+  });
+
+  it("refuses headers that are the right text in the wrong order", async () => {
+    const swapped = [...TENANT_HEADERS];
+    [swapped[1], swapped[2]] = [swapped[2], swapped[1]];
+    const fake = new FakeGateway({ Schedule: baseSchedule(), [TENANTS_TAB]: [swapped] });
+    const error = await structureError(async () => ensureTenantsTab(fake, await fake.listTabs()));
+    expect(error.message).toContain('"Portion"');
+  });
+
+  it("ignores spaces around a header", async () => {
+    const padded = TENANT_HEADERS.map((header) => ` ${header} `);
+    const fake = new FakeGateway({ Schedule: baseSchedule(), [TENANTS_TAB]: [padded] });
+    await ensureTenantsTab(fake, await fake.listTabs());
+    expect(fake.calls).not.toContain("updateValues");
+  });
+});
+
+describe("readTenancies", () => {
+  it("returns nothing for a tab that has only the header row", async () => {
+    const fake = await ensured();
+    expect(await readTenancies(fake)).toEqual([]);
+  });
+
+  it("skips the header and fully blank rows but keeps true row numbers", async () => {
+    const fake = await ensured();
+    const grid = fake.tabs.get(TENANTS_TAB)!;
+    grid.push(stored(row({ id: "a" })));
+    grid.push([]);
+    grid.push(["", "", ""]);
+    grid.push(stored(row({ id: "b", portionId: "p2" })));
+    const all = await readTenancies(fake);
+    expect(all.map((t) => [t.id, t.rowNumber])).toEqual([
+      ["a", 2],
+      ["b", 5],
+    ]);
+  });
+
+  it("parses numbers, blanks and an unknown status to null", async () => {
+    const fake = await ensured();
+    fake.tabs.get(TENANTS_TAB)!.push(
+      ["t-9", "p1", "Asha", "", "2026-01-15", "", "", "", "Lost", "", "", "", "", "", ""],
+      ["t-10", "p1", "Bala", "", "2026-01-15", "", "twenty", "", "Held", "5,000", 0, "", "", "", ""],
+    );
+    const [first, second] = await readTenancies(fake);
+    expect(first).toMatchObject({ advance: null, advanceStatus: null, refund: null, deductions: null });
+    expect(second).toMatchObject({ advance: null, advanceStatus: "Held", refund: null, deductions: 0 });
+  });
+
+  it("reads text with String, so a number typed into a text column does not break", async () => {
+    const fake = await ensured();
+    fake.tabs.get(TENANTS_TAB)!.push(["t-9", "p1", "Asha", 9876543210, "2026-01-15"]);
+    const [only] = await readTenancies(fake);
+    expect(only.phone).toBe("9876543210");
+    expect(only.agreementEnd).toBe("");
+    expect(only.notes).toBe("");
+    expect(only.moveOut).toBe("");
+    expect(only.updatedAt).toBe("");
+  });
+
+  it("reads all three advance statuses", async () => {
+    const fake = await ensured();
+    for (const status of ["Held", "Refunded", "Adjusted"] as const) {
+      await appendTenancy(fake, row({ id: status, advanceStatus: status }));
+    }
+    expect((await readTenancies(fake)).map((t) => t.advanceStatus)).toEqual(["Held", "Refunded", "Adjusted"]);
+  });
+
+  it("asks for unformatted values over columns A to O", async () => {
+    const fake = await ensured();
+    const seen: Array<[string, string, string]> = [];
+    const original = fake.getValues.bind(fake);
+    fake.getValues = async (tab, a1, render) => {
+      seen.push([tab, a1, render]);
+      return original(tab, a1, render);
+    };
+    await readTenancies(fake);
+    expect(seen).toEqual([[TENANTS_TAB, "A1:O", "UNFORMATTED_VALUE"]]);
+  });
+});
+
+describe("appendTenancy", () => {
+  it("appends exactly one row and round-trips every field", async () => {
+    const fake = await ensured();
+    const closed = row({
+      id: "t-2",
+      portionId: "p3",
+      tenant: "Chitra",
+      moveOut: "2026-08-31",
+      advanceStatus: "Refunded",
+      refund: 18000,
+      deductions: 2000,
+    });
+    await appendTenancy(fake, row());
+    await appendTenancy(fake, closed);
+    expect(fake.calls.filter((call) => call === "appendRow")).toHaveLength(2);
+    const all = await readTenancies(fake);
+    expect(all).toEqual([
+      { rowNumber: 2, ...row() },
+      { rowNumber: 3, ...closed },
+    ]);
+  });
+
+  it("round-trips a tenancy with no advance and no optional fields", async () => {
+    const fake = await ensured();
+    const bare = row({
+      phone: "",
+      agreementEnd: "",
+      advance: null,
+      advanceDate: "",
+      advanceStatus: null,
+      notes: "",
+    });
+    await appendTenancy(fake, bare);
+    expect(fake.tabs.get(TENANTS_TAB)![1]).toEqual(stored(bare));
+    expect(await readTenancies(fake)).toEqual([{ rowNumber: 2, ...bare }]);
+  });
+
+  it("stores a missing amount as an empty cell and a number as a number", async () => {
+    const fake = await ensured();
+    await appendTenancy(fake, row({ advance: 0, refund: null }));
+    const cells = fake.tabs.get(TENANTS_TAB)![1];
+    expect(cells[6]).toBe(0);
+    expect(cells[9]).toBe("");
+  });
+
+  it("stores text that starts with = as text, written through the raw gateway", async () => {
+    const fake = await ensured();
+    await appendTenancy(fake, row({ tenant: "=1+1", notes: "=HYPERLINK(1)", phone: "+91 98765" }));
+    const cells = fake.tabs.get(TENANTS_TAB)![1];
+    expect(cells[2]).toBe("=1+1");
+    expect(cells[11]).toBe("=HYPERLINK(1)");
+    expect(cells[3]).toBe("+91 98765");
+  });
+});
+
+describe("writeTenancy", () => {
+  it("rewrites exactly one row with exactly one updateValues call", async () => {
+    const fake = await ensured();
+    await appendTenancy(fake, row({ id: "a" }));
+    await appendTenancy(fake, row({ id: "b", portionId: "p2", tenant: "Bala" }));
+    await appendTenancy(fake, row({ id: "c", portionId: "p3", tenant: "Chitra" }));
+    const before = structuredClone(fake.tabs.get(TENANTS_TAB)!);
+    fake.calls = [];
+
+    const changed = row({
+      id: "b",
+      portionId: "p2",
+      tenant: "Bala",
+      advanceStatus: "Refunded",
+      refund: 20000,
+      moveOut: "2026-09-30",
+      updatedAt: "2026-09-30T05:00:00.000Z",
+    });
+    await writeTenancy(fake, 3, changed);
+
+    expect(fake.calls).toEqual(["updateValues"]);
+    const after = fake.tabs.get(TENANTS_TAB)!;
+    expect(after[2]).toEqual(stored(changed)); // sheet row 3
+    expect(after[0]).toEqual(before[0]);
+    expect(after[1]).toEqual(before[1]);
+    expect(after[3]).toEqual(before[3]);
+    expect(after).toHaveLength(before.length);
+    expect((await readTenancies(fake))[1]).toEqual({ rowNumber: 3, ...changed });
+  });
+
+  it("targets A{r}:O{r} of the Tenants tab", async () => {
+    const fake = await ensured();
+    await appendTenancy(fake, row());
+    const writes: unknown[] = [];
+    const original = fake.updateValues.bind(fake);
+    fake.updateValues = async (cellWrites) => {
+      writes.push(...cellWrites);
+      return original(cellWrites);
+    };
+    await writeTenancy(fake, 2, row({ notes: "Changed" }));
+    expect(writes).toEqual([{ tab: TENANTS_TAB, a1: "A2:O2", values: [stored(row({ notes: "Changed" }))] }]);
+  });
+
+  it("clears a cell that becomes null instead of leaving the old number", async () => {
+    const fake = await ensured();
+    await appendTenancy(fake, row({ advance: 20000, advanceStatus: "Held" }));
+    await writeTenancy(fake, 2, row({ advance: null, advanceStatus: null }));
+    const [only] = await readTenancies(fake);
+    expect(only.advance).toBeNull();
+    expect(only.advanceStatus).toBeNull();
+  });
+
+  it("stores text that starts with = as text", async () => {
+    const fake = await ensured();
+    await appendTenancy(fake, row());
+    await writeTenancy(fake, 2, row({ notes: "=SUM(A1:A9)" }));
+    expect(fake.tabs.get(TENANTS_TAB)![1][11]).toBe("=SUM(A1:A9)");
+  });
+});
