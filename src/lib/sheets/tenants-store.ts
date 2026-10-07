@@ -143,3 +143,25 @@ export async function writeTenancy(
     },
   ]);
 }
+
+/** The columns `closeTenancyRow` writes: Move-out date, Updated by and Updated at, which end the row at column O. */
+const MOVE_OUT_COLUMN = colLetter(TENANT_HEADERS.indexOf("Move-out date"));
+
+/**
+ * Closes a tenancy by writing only its Move-out date, Updated by and Updated at cells (columns M to O),
+ * with one call. Every other cell of the row is left exactly as it is in the Sheet, so text typed by hand
+ * into the amount, status or notes columns survives, and a change someone saved a moment ago is not reverted.
+ */
+export async function closeTenancyRow(
+  gateway: SheetsGateway,
+  rowNumber: number,
+  close: { moveOut: string; updatedBy: string; updatedAt: string },
+): Promise<void> {
+  await gateway.updateValues([
+    {
+      tab: TENANTS_TAB,
+      a1: `${MOVE_OUT_COLUMN}${rowNumber}:${LAST_COLUMN}${rowNumber}`,
+      values: [[close.moveOut, close.updatedBy, close.updatedAt]],
+    },
+  ]);
+}

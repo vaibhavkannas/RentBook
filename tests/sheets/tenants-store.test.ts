@@ -3,6 +3,7 @@ import type { Tenancy } from "@/lib/domain/tenancy";
 import { AppError } from "@/lib/errors";
 import {
   appendTenancy,
+  closeTenancyRow,
   ensureTenantsTab,
   readTenancies,
   TENANT_HEADERS,
@@ -421,5 +422,62 @@ describe("writeTenancy", () => {
     await appendTenancy(fake, row());
     await writeTenancy(fake, 2, row({ notes: "=SUM(A1:A9)" }));
     expect(fake.tabs.get(TENANTS_TAB)![1][11]).toBe("=SUM(A1:A9)");
+  });
+});
+
+describe("closeTenancyRow", () => {
+  const STAMP = { moveOut: "2026-09-30", updatedBy: "member@example.com", updatedAt: "2026-09-30T08:00:00.000Z" };
+
+  it("writes only Move-out date, Updated by and Updated at (M:O), with one updateValues call", async () => {
+    const fake = await ensured();
+    await appendTenancy(fake, row({ id: "a" }));
+    await appendTenancy(fake, row({ id: "b", portionId: "p2", tenant: "Bala" }));
+    await appendTenancy(fake, row({ id: "c", portionId: "p3", tenant: "Chitra" }));
+    const before = structuredClone(fake.tabs.get(TENANTS_TAB)!);
+    fake.calls = [];
+    const writes: unknown[] = [];
+    const original = fake.updateValues.bind(fake);
+    fake.updateValues = async (cellWrites) => {
+      writes.push(...cellWrites);
+      return original(cellWrites);
+    };
+
+    await closeTenancyRow(fake, 3, STAMP);
+
+    expect(fake.calls).toEqual(["updateValues"]);
+    expect(writes).toEqual([
+      { tab: TENANTS_TAB, a1: "M3:O3", values: [["2026-09-30", "member@example.com", "2026-09-30T08:00:00.000Z"]] },
+    ]);
+    const after = fake.tabs.get(TENANTS_TAB)!;
+    expect(after[2].slice(0, 12)).toEqual(before[2].slice(0, 12));
+    expect(after[2].slice(12)).toEqual(["2026-09-30", "member@example.com", "2026-09-30T08:00:00.000Z"]);
+    expect(after[0]).toEqual(before[0]);
+    expect(after[1]).toEqual(before[1]);
+    expect(after[3]).toEqual(before[3]);
+    expect(after).toHaveLength(before.length);
+  });
+
+  it("leaves hand-typed text in the amount, status, notes and extra columns exactly as it is", async () => {
+    const fake = await ensured();
+    const typed = [
+      "t-hand", "p1", "Asha", "98765 43210", "2026-01-15", "2027-01-14", "20,000 rupees", "ten Jan",
+      "paid back", "see notes", "about 500", "=HYPERLINK(1)", "", "owner@example.com", "2026-01-15T05:00:00.000Z",
+      "flat key given",
+    ];
+    fake.tabs.get(TENANTS_TAB)!.push([...typed]);
+
+    await closeTenancyRow(fake, 2, STAMP);
+
+    const after = fake.tabs.get(TENANTS_TAB)![1];
+    expect(after.slice(0, 12)).toEqual(typed.slice(0, 12));
+    expect(after[15]).toBe("flat key given"); // a column added by hand to the right of O
+    expect((await readTenancies(fake))[0]).toMatchObject({ moveOut: "2026-09-30", updatedBy: "member@example.com" });
+  });
+
+  it("stores text that starts with = as text", async () => {
+    const fake = await ensured();
+    await appendTenancy(fake, row());
+    await closeTenancyRow(fake, 2, { ...STAMP, updatedBy: "=1+1" });
+    expect(fake.tabs.get(TENANTS_TAB)![1][13]).toBe("=1+1");
   });
 });

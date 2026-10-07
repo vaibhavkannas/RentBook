@@ -393,7 +393,8 @@ async function logPaymentUnchecked(
         { now: options.now, updatedBy: options.loggedBy },
       );
       result.tenancyWritten = true;
-    } catch {
+    } catch (error) {
+      console.error("Tenancy write failed after the payment was saved", error);
       result.tenancyWritten = false;
     }
   }

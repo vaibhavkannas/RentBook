@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from "vitest";
 import type { Tenancy, TenancyFields } from "@/lib/domain/tenancy";
 import { AppError } from "@/lib/errors";
 import {
@@ -18,7 +18,7 @@ import {
 } from "@/lib/sheets/tenancy-service";
 import { appendTenancy, readTenancies, TENANTS_TAB } from "@/lib/sheets/tenants-store";
 import { cell, FakeGateway } from "../support/fake-gateway";
-import { baseSchedule, TOTAL_HEADER } from "../support/fixtures";
+import { baseSchedule, PORTIONS, TOTAL_HEADER } from "../support/fixtures";
 
 const NOW = new Date("2026-10-05T04:30:00Z");
 const LATER = new Date("2026-10-06T09:00:00Z");
@@ -90,6 +90,25 @@ async function expectCode(promise: Promise<unknown>, code: string) {
 }
 
 const snapshotOf = (fake: FakeGateway) => structuredClone([...fake.tabs.entries()]);
+
+/**
+ * Types a tenant name into the portion's latest Schedule row (Sep-26, sheet row 5), as if someone
+ * had edited the Sheet by hand. The portion must already have an entry there.
+ */
+function setScheduleTenant(fake: FakeGateway, portionId: string, name: string) {
+  const index = PORTIONS.findIndex((p) => p.id === portionId);
+  fake.tabs.get("Schedule")![4][1 + 3 * index] = name;
+}
+
+/** A row pushed into the Tenants tab exactly as typed, with no cleaning (a hand-edited Sheet). */
+function pushRawRow(fake: FakeGateway, cells: unknown[]) {
+  fake.tabs.get(TENANTS_TAB)!.push([...cells]);
+}
+
+const RAW_ASHA = [
+  "t-raw", "p1", "Asha", "98765 43210", "2026-01-15", "2027-01-14", "20,000 rupees", "2026-01-10",
+  "paid back", "see notes", "about 500", "=HYPERLINK(1)", "", "owner@example.com", "2026-01-15T05:00:00.000Z",
+];
 
 /**
  * Makes writes to the Tenants tab fail while writes to every other tab keep working.
@@ -170,9 +189,11 @@ describe("saveTenancy: create", () => {
 
   it("stores text that starts with = as text", async () => {
     const { fake, ctx } = await ready();
-    await create(ctx, { tenant: "=1+1", fields: { moveIn: "2026-01-15", notes: "=HYPERLINK(1)" } });
+    // (The tenant name must match the Schedule's, and a Schedule cell starting with = reads as a formula,
+    // so the name itself is covered at store level in tenants-store.test.ts.)
+    await create(ctx, { fields: { moveIn: "2026-01-15", notes: "=HYPERLINK(1)" } });
     const cells = fake.tabs.get(TENANTS_TAB)![1];
-    expect(cells[2]).toBe("=1+1");
+    expect(cells[2]).toBe("Asha");
     expect(cells[11]).toBe("=HYPERLINK(1)");
   });
 
@@ -188,6 +209,7 @@ describe("saveTenancy: create", () => {
   it("closes the previous current tenancy of the portion when the name differs: append, then close", async () => {
     const { fake, ctx } = await ready();
     const first = await create(ctx);
+    setScheduleTenant(fake, "p1", "Hari"); // the Sheet was edited by hand: Hari lives there now
     fake.calls = [];
 
     const second = await create(
@@ -218,16 +240,18 @@ describe("saveTenancy: create", () => {
   });
 
   it("closes the previous tenancy no earlier than its own move-in date", async () => {
-    const { ctx } = await ready();
+    const { fake, ctx } = await ready();
     await create(ctx, { fields: { moveIn: "2026-10-20" } });
+    setScheduleTenant(fake, "p1", "Hari");
     await create(ctx, { tenant: "Hari", fields: { moveIn: "2026-10-01" } });
     expect(await tenancies(ctx)).toMatchObject([{ tenant: "Asha", moveOut: "2026-10-20" }, { tenant: "Hari", moveOut: "" }]);
   });
 
   it("leaves the tenancies of other portions alone", async () => {
-    const { ctx } = await ready();
+    const { fake, ctx } = await ready();
     await create(ctx, { portionId: "p2", tenant: "Bala" });
     await create(ctx, { portionId: "p1", tenant: "Asha" });
+    setScheduleTenant(fake, "p1", "Hari");
     await create(ctx, { portionId: "p1", tenant: "Hari", fields: { moveIn: "2026-10-01" } });
     expect(await tenancies(ctx)).toMatchObject([
       { portionId: "p2", tenant: "Bala", moveOut: "" },
@@ -257,6 +281,91 @@ describe("saveTenancy: create", () => {
     const error = await expectCode(create(ctx, { portionId: "p9" }), "validation");
     expect(error.message).toBe('Unknown portion "p9".');
     expect(snapshotOf(fake)).toEqual(before);
+  });
+
+  it("refuses details for a tenant other than the one the Schedule names now, and writes nothing", async () => {
+    const { fake, ctx } = await ready();
+    setScheduleTenant(fake, "p1", "Hari"); // the person's page still said Asha
+    const before = snapshotOf(fake);
+    const error = await expectCode(create(ctx, { tenant: "Asha" }), "conflict");
+    expect(error.message).toBe("The tenant for First floor, single bedroom changed. Refresh the page.");
+    expect(snapshotOf(fake)).toEqual(before);
+    expect(fake.calls).not.toContain("appendRow");
+    expect(fake.calls).not.toContain("updateValues");
+  });
+
+  it("compares the tenant name with the Schedule's ignoring case and spaces", async () => {
+    const { fake, ctx } = await ready();
+    setScheduleTenant(fake, "p1", "  hARi ");
+    await create(ctx, { tenant: "Hari" });
+    expect(await tenancies(ctx)).toMatchObject([{ portionId: "p1", tenant: "Hari" }]);
+  });
+
+  it("refuses details for a portion that has no tenant in the Schedule, and writes nothing", async () => {
+    const { fake, ctx } = await ready();
+    const before = snapshotOf(fake);
+    // p4 has never had an entry
+    const error = await expectCode(create(ctx, { portionId: "p4", tenant: "Farah" }), "validation");
+    expect(error.message).toBe("This portion has no tenant yet.");
+    expect(snapshotOf(fake)).toEqual(before);
+  });
+
+  it("treats a blank tenant cell in the Schedule as no tenant", async () => {
+    const { fake, ctx } = await ready();
+    setScheduleTenant(fake, "p1", "   ");
+    const before = snapshotOf(fake);
+    const error = await expectCode(create(ctx, { tenant: "Asha" }), "validation");
+    expect(error.message).toBe("This portion has no tenant yet.");
+    expect(snapshotOf(fake)).toEqual(before);
+  });
+
+  it("closes the previous tenancy by writing only Move-out date, Updated by and Updated at", async () => {
+    const { fake, ctx } = await ready();
+    pushRawRow(fake, RAW_ASHA);
+    const rowBefore = [...fake.tabs.get(TENANTS_TAB)![1]];
+    setScheduleTenant(fake, "p1", "Hari");
+    fake.calls = [];
+    const updates: Array<{ a1: string; values: unknown[][] }> = [];
+    const original = fake.updateValues.bind(fake);
+    fake.updateValues = async (writes) => {
+      updates.push(...writes.map(({ a1, values }) => ({ a1, values })));
+      return original(writes);
+    };
+
+    await create(ctx, { tenant: "Hari", fields: { moveIn: "2026-10-01" } }, LATER_OPTIONS);
+
+    expect(updates).toEqual([
+      { a1: "M2:O2", values: [["2026-10-01", "member@example.com", "2026-10-06T09:00:00.000Z"]] },
+    ]);
+    const rowAfter = fake.tabs.get(TENANTS_TAB)![1];
+    // hand-typed text in the amount columns, the status and the notes is exactly as it was
+    expect(rowAfter.slice(0, 12)).toEqual(rowBefore.slice(0, 12));
+    expect(rowAfter.slice(12)).toEqual(["2026-10-01", "member@example.com", "2026-10-06T09:00:00.000Z"]);
+  });
+
+  it("closes EVERY other open tenancy of the portion, and no other portion's", async () => {
+    const { fake, ctx } = await ready();
+    await appendTenancy(fake, row({ id: "dup-1", moveIn: "2026-01-15" }));
+    await appendTenancy(fake, row({ id: "dup-2", moveIn: "2026-10-20" })); // a hand-copied row
+    await appendTenancy(fake, row({ id: "other", portionId: "p2", tenant: "Bala" }));
+    await appendTenancy(fake, row({ id: "done", moveIn: "2025-01-01", moveOut: "2025-12-31" }));
+    setScheduleTenant(fake, "p1", "Hari");
+    fake.calls = [];
+
+    const { tenancy } = await create(ctx, { tenant: "Hari", fields: { moveIn: "2026-10-01" } }, LATER_OPTIONS);
+
+    expect(fake.calls.filter((call) => call === "appendRow" || call === "updateValues")).toEqual([
+      "appendRow",
+      "updateValues",
+      "updateValues",
+    ]);
+    expect(await tenancies(ctx)).toMatchObject([
+      { id: "dup-1", moveOut: "2026-10-01", updatedBy: "member@example.com" },
+      { id: "dup-2", moveOut: "2026-10-20", updatedBy: "member@example.com" }, // never before its own move-in
+      { id: "other", moveOut: "", updatedBy: "owner@example.com" },
+      { id: "done", moveOut: "2025-12-31", updatedBy: "owner@example.com" },
+      { id: tenancy.id, tenant: "Hari", moveOut: "" },
+    ]);
   });
 
   it.each([
@@ -393,6 +502,95 @@ describe("saveTenancy: update", () => {
       "validation",
     );
     expect(snapshotOf(fake)).toEqual(before);
+  });
+
+  describe("a hand-typed row with a blank Updated at", () => {
+    async function blankRow() {
+      const { fake, ctx } = await ready();
+      await appendTenancy(fake, row({ updatedAt: "", updatedBy: "" }));
+      const [stored] = await tenancies(ctx);
+      expect(stored.updatedAt).toBe("");
+      return { fake, ctx, stored };
+    }
+
+    it("can be edited by a screen that also saw a blank", async () => {
+      const { ctx, stored } = await blankRow();
+      const { tenancy } = await edit(ctx, stored, { moveIn: "2026-01-15", notes: "typed by hand" });
+      expect(tenancy.updatedAt).toBe("2026-10-06T09:00:00.000Z");
+      expect(await tenancies(ctx)).toMatchObject([
+        { notes: "typed by hand", updatedBy: "member@example.com", updatedAt: "2026-10-06T09:00:00.000Z" },
+      ]);
+    });
+
+    it("is a conflict when the screen saw a value but the stored cell is blank", async () => {
+      const { fake, ctx, stored } = await blankRow();
+      const before = snapshotOf(fake);
+      await expectCode(
+        edit(ctx, stored, { moveIn: "2026-01-15" }, { expectedUpdatedAt: "2026-01-15T05:00:00.000Z" }),
+        "conflict",
+      );
+      expect(snapshotOf(fake)).toEqual(before);
+    });
+
+    it("is a conflict when the screen saw a blank but the stored cell now has a value", async () => {
+      const { fake, ctx } = await ready();
+      await appendTenancy(fake, row());
+      const [stored] = await tenancies(ctx);
+      const before = snapshotOf(fake);
+      await expectCode(edit(ctx, stored, { moveIn: "2026-01-15" }, { expectedUpdatedAt: "" }), "conflict");
+      expect(snapshotOf(fake)).toEqual(before);
+    });
+
+    it("still needs the updated-at to be given at all", async () => {
+      const { fake, ctx, stored } = await blankRow();
+      const before = snapshotOf(fake);
+      await expectCode(
+        saveTenancy(ctx, { portionId: "p1", tenant: "Asha", fields: FIELDS, id: stored.id }, LATER_OPTIONS),
+        "validation",
+      );
+      expect(snapshotOf(fake)).toEqual(before);
+    });
+  });
+
+  describe("a row whose id was copied by hand", () => {
+    const FIRST_AT = "2026-01-15T05:00:00.000Z";
+    const SECOND_AT = "2026-03-01T05:00:00.000Z";
+
+    async function duplicated(second: Partial<Row> = {}) {
+      const { fake, ctx } = await ready();
+      await appendTenancy(fake, row({ id: "dup", notes: "first", updatedAt: FIRST_AT }));
+      await appendTenancy(fake, row({ id: "dup", notes: "second", updatedAt: SECOND_AT, ...second }));
+      return { fake, ctx };
+    }
+
+    it("is edited in its LAST row, and the earlier row is left alone", async () => {
+      const { fake, ctx } = await duplicated();
+      const [first, last] = await tenancies(ctx);
+      await edit(ctx, last, { moveIn: "2026-01-15", notes: "edited" }, { id: "dup" });
+      expect(await tenancies(ctx)).toMatchObject([
+        { rowNumber: 2, notes: "first", updatedAt: FIRST_AT },
+        { rowNumber: 3, notes: "edited", updatedAt: "2026-10-06T09:00:00.000Z" },
+      ]);
+      expect((await tenancies(ctx))[0]).toEqual(first);
+      expect(fake.calls.filter((call) => call === "updateValues")).toHaveLength(1);
+    });
+
+    it("is checked against the last row's updated-at, not the first row's", async () => {
+      const { fake, ctx } = await duplicated();
+      const [first] = await tenancies(ctx);
+      const before = snapshotOf(fake);
+      await expectCode(edit(ctx, first, { moveIn: "2026-01-15" }, { id: "dup" }), "conflict");
+      expect(snapshotOf(fake)).toEqual(before);
+    });
+
+    it("is refused as moved out when the last row is closed, even though an earlier row is open", async () => {
+      const { fake, ctx } = await duplicated({ moveOut: "2026-06-30" });
+      const [, last] = await tenancies(ctx);
+      const before = snapshotOf(fake);
+      const error = await expectCode(edit(ctx, last, { moveIn: "2026-01-15" }, { id: "dup" }), "conflict");
+      expect(error.message).toMatch(/already moved out/);
+      expect(snapshotOf(fake)).toEqual(before);
+    });
   });
 
   it("refuses a tenancy that has been closed", async () => {
@@ -601,6 +799,51 @@ describe("moveOutTenancy", () => {
       { tenant: "Asha", moveOut: "2026-09-30" },
     ]);
   });
+
+  it("moves out a hand-typed row with a blank Updated at, for a screen that also saw a blank", async () => {
+    const { fake, ctx } = await ready();
+    await appendTenancy(fake, row({ updatedAt: "", updatedBy: "" }));
+    const [stored] = await tenancies(ctx);
+    const { tenancy } = await moveOut(ctx, stored);
+    expect(tenancy).toMatchObject({ moveOut: "2026-09-30", updatedAt: "2026-10-06T09:00:00.000Z" });
+    expect(await tenancies(ctx)).toMatchObject([{ moveOut: "2026-09-30", updatedBy: "member@example.com" }]);
+  });
+
+  it("refuses a move-out when the screen saw a value but the stored Updated at is blank", async () => {
+    const { fake, ctx } = await ready();
+    await appendTenancy(fake, row({ updatedAt: "" }));
+    const [stored] = await tenancies(ctx);
+    const before = snapshotOf(fake);
+    await expectCode(moveOut(ctx, stored, { expectedUpdatedAt: "2026-01-15T05:00:00.000Z" }), "conflict");
+    expect(snapshotOf(fake)).toEqual(before);
+  });
+
+  it("still needs the updated-at to be given at all", async () => {
+    const { fake, ctx } = await ready();
+    await appendTenancy(fake, row({ updatedAt: "" }));
+    const before = snapshotOf(fake);
+    await expectCode(
+      moveOutTenancy(ctx, { id: "t-seed", moveOut: "2026-09-30" } as Parameters<typeof moveOutTenancy>[1], LATER_OPTIONS),
+      "validation",
+    );
+    expect(snapshotOf(fake)).toEqual(before);
+  });
+
+  it("moves out the LAST row when an id was copied by hand, and leaves the earlier row alone", async () => {
+    const { fake, ctx } = await ready();
+    await appendTenancy(fake, row({ id: "dup", notes: "first", updatedAt: "2026-01-15T05:00:00.000Z" }));
+    await appendTenancy(fake, row({ id: "dup", notes: "second", updatedAt: "2026-03-01T05:00:00.000Z" }));
+    const [first, last] = await tenancies(ctx);
+
+    await expectCode(moveOut(ctx, first), "conflict"); // the screen of the first row is stale: the last row wins
+    expect(await tenancies(ctx)).toEqual([first, last]);
+
+    await moveOut(ctx, last);
+    const [firstAfter, lastAfter] = await tenancies(ctx);
+    expect(firstAfter).toEqual(first);
+    expect(lastAfter).toMatchObject({ moveOut: "2026-09-30", notes: "second" });
+    expect(fake.calls.filter((call) => call === "updateValues")).toHaveLength(1);
+  });
 });
 
 describe("getPortionTenants", () => {
@@ -639,6 +882,18 @@ describe("getPortionTenants", () => {
     expect(result.current).toBeNull();
     expect(result.mismatched).toBeNull();
     expect(result.past).toHaveLength(1);
+  });
+
+  it("has no schedule tenant when the tenant cell is blank or only spaces", async () => {
+    const { fake, ctx } = await ready();
+    await appendTenancy(fake, row({ tenant: "Asha" }));
+    for (const blank of ["", "   "]) {
+      setScheduleTenant(fake, "p1", blank);
+      const result = await getPortionTenants(ctx, "p1");
+      expect(result.scheduleTenant).toBeNull(); // null, never ""
+      expect(result.current).toBeNull();
+      expect(result.mismatched).toMatchObject({ tenant: "Asha" });
+    }
   });
 
   it("lists past tenancies newest first, only for this portion", async () => {
@@ -695,7 +950,16 @@ describe("getPortionTenants", () => {
 });
 
 describe("logPayment: tenancy details for a new tenant", () => {
-  const payNew = (ctx: SheetsContext, input: Partial<LogPaymentInput> = {}, options = PAY_OPTIONS) =>
+  // A tenancy failure is logged with console.error. Keep the test output clean and let tests look at the calls.
+  let errorSpy: MockInstance<typeof console.error>;
+  beforeEach(() => {
+    errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+  });
+  afterEach(() => {
+    errorSpy.mockRestore();
+  });
+
+  const payNew =(ctx: SheetsContext, input: Partial<LogPaymentInput> = {}, options = PAY_OPTIONS) =>
     logPayment(
       ctx,
       { month: OCT, portionId: "p1", amount: 6000, dateReceived: "2026-10-05", newTenantName: "Hari", ...input },
@@ -757,6 +1021,84 @@ describe("logPayment: tenancy details for a new tenant", () => {
     expect(await tenancies(ctx)).toMatchObject([
       { id: asha.id, tenant: "Asha", moveOut: "2026-10-01", updatedBy: "owner@example.com", updatedAt: "2026-10-05T04:30:00.000Z" },
       { tenant: "Hari", moveOut: "" },
+    ]);
+    expect(errorSpy).not.toHaveBeenCalled();
+  });
+
+  it("closes the previous tenancy by writing only Move-out date, Updated by and Updated at", async () => {
+    const { fake, ctx } = await ready();
+    pushRawRow(fake, RAW_ASHA);
+    const before = [...fake.tabs.get(TENANTS_TAB)![1]];
+    const updates: Array<{ a1: string; values: unknown[][] }> = [];
+    const original = fake.updateValues.bind(fake);
+    fake.updateValues = async (writes) => {
+      updates.push(...writes.filter((w) => w.tab === TENANTS_TAB).map(({ a1, values }) => ({ a1, values })));
+      return original(writes);
+    };
+
+    await payNew(ctx, { tenancy: NEW_FIELDS });
+
+    expect(updates).toEqual([{ a1: "M2:O2", values: [["2026-10-01", "owner@example.com", "2026-10-05T04:30:00.000Z"]] }]);
+    const after = fake.tabs.get(TENANTS_TAB)![1];
+    expect(after.slice(0, 12)).toEqual(before.slice(0, 12)); // hand-typed text amounts, status and notes kept
+    expect(after.slice(12)).toEqual(["2026-10-01", "owner@example.com", "2026-10-05T04:30:00.000Z"]);
+  });
+
+  it("does not undo an edit made to the previous row between the read and the close", async () => {
+    const { fake, ctx } = await ready();
+    await create(ctx);
+    const original = fake.appendRow.bind(fake);
+    fake.appendRow = async (tab, values) => {
+      await original(tab, values);
+      if (tab === TENANTS_TAB) fake.tabs.get(TENANTS_TAB)![1][11] = "edited meanwhile";
+    };
+
+    const result = await payNew(ctx, { tenancy: NEW_FIELDS });
+
+    expect(result.tenancyWritten).toBe(true);
+    const asha = fake.tabs.get(TENANTS_TAB)![1];
+    expect(asha[11]).toBe("edited meanwhile");
+    expect(asha[12]).toBe("2026-10-01");
+  });
+
+  it("closes every other open tenancy of the portion, not only the last", async () => {
+    const { fake, ctx } = await ready();
+    await appendTenancy(fake, row({ id: "dup-1", moveIn: "2026-01-15" }));
+    await appendTenancy(fake, row({ id: "dup-2", moveIn: "2026-10-20" })); // a hand-copied row
+    await appendTenancy(fake, row({ id: "other", portionId: "p2", tenant: "Bala" }));
+    await appendTenancy(fake, row({ id: "done", moveIn: "2025-01-01", moveOut: "2025-12-31" }));
+    fake.calls = [];
+
+    const result = await payNew(ctx, { tenancy: NEW_FIELDS });
+
+    expect(result.tenancyWritten).toBe(true);
+    const tenantWrites = fake.calls.slice(fake.calls.indexOf("appendRow"));
+    expect(tenantWrites.filter((call) => call === "appendRow" || call === "updateValues")).toEqual([
+      "appendRow", // the Payments Log row
+      "appendRow", // the new tenancy
+      "updateValues", // dup-1
+      "updateValues", // dup-2
+    ]);
+    expect(await tenancies(ctx)).toMatchObject([
+      { id: "dup-1", moveOut: "2026-10-01" },
+      { id: "dup-2", moveOut: "2026-10-20" }, // never before its own move-in
+      { id: "other", moveOut: "" },
+      { id: "done", moveOut: "2025-12-31", updatedBy: "owner@example.com" },
+      { tenant: "Hari", moveOut: "" },
+    ]);
+  });
+
+  it("closes every open tenancy of the portion on the date received when no details are given", async () => {
+    const { fake, ctx } = await ready();
+    await appendTenancy(fake, row({ id: "dup-1" }));
+    await appendTenancy(fake, row({ id: "dup-2" }));
+
+    const result = await payNew(ctx, { dateReceived: "2026-10-03" });
+
+    expect(result.tenancyWritten).toBe(true);
+    expect(await tenancies(ctx)).toMatchObject([
+      { id: "dup-1", moveOut: "2026-10-03" },
+      { id: "dup-2", moveOut: "2026-10-03" },
     ]);
   });
 
@@ -856,6 +1198,20 @@ describe("logPayment: tenancy details for a new tenant", () => {
     expect(log[log.length - 1][3]).toBe("Hari");
     // nothing half-done: the new row was not added, so the previous tenancy was not closed either
     expect(await tenancies(ctx)).toMatchObject([{ id: asha.id, tenant: "Asha", moveOut: "" }]);
+  });
+
+  it("logs the reason when the tenancy work fails after the payment was saved", async () => {
+    const { fake, ctx } = await ready();
+    await create(ctx);
+    failTenantsWrites(fake, "appendRow");
+
+    await payNew(ctx, { tenancy: NEW_FIELDS });
+
+    expect(errorSpy).toHaveBeenCalledOnce();
+    const [message, error] = errorSpy.mock.calls[0];
+    expect(message).toBe("Tenancy write failed after the payment was saved");
+    expect(error).toBeInstanceOf(Error);
+    expect((error as Error).message).toBe("appendRow failed on the Tenants tab");
   });
 
   it("keeps the payment when closing the previous tenancy fails, and says so", async () => {

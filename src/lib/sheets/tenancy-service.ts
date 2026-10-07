@@ -16,8 +16,7 @@ import { loadSnapshot, type SheetsContext, type Snapshot } from "./service";
 import {
   appendNewTenancy,
   checkNewTenancy,
-  closeTenancy,
-  closingDay,
+  closeOpenTenancies,
   type WriteStamp,
 } from "./tenancy-writes";
 import { writeTenancy } from "./tenants-store";
@@ -64,9 +63,17 @@ function requirePortion(snapshot: Snapshot, portionId: string): PortionConfig {
   return portion;
 }
 
-/** The tenancy with this id, which must still be current. */
+/** The tenant the Schedule's latest entry for the portion names, or null when there is none (or the cell is blank). */
+function scheduleTenantOf(snapshot: Snapshot, portionId: string): string | null {
+  return findLatestEntry(snapshot.rows, portionId)?.tenant || null;
+}
+
+/**
+ * The tenancy with this id, which must still be current. If a row was copied by hand and kept its id,
+ * the LAST row with that id is the one that counts, like every other "last row wins" rule of the Sheet.
+ */
 function requireOpenTenancy(snapshot: Snapshot, id: string): Tenancy {
-  const found = snapshot.tenancies.find((t) => t.id === id);
+  const found = snapshot.tenancies.findLast((t) => t.id === id);
   if (!found) {
     throw conflict("These tenant details are no longer in the Tenants tab. Refresh the page.");
   }
@@ -110,13 +117,18 @@ async function createTenancy(
 ): Promise<{ tenancy: Tenancy }> {
   const checked = checkNewTenancy(input.portionId, input.tenant, input.fields);
   const snapshot = await loadSnapshot(ctx);
-  requirePortion(snapshot, input.portionId);
+  const portion = requirePortion(snapshot, input.portionId);
 
-  const previous = currentTenancy(snapshot.tenancies, input.portionId);
-  const tenancy = await appendNewTenancy(ctx.gateway, snapshot.tenancies, checked, stamp);
-  if (previous) {
-    await closeTenancy(ctx.gateway, previous, closingDay(previous.moveIn, tenancy.moveIn), stamp);
+  // The person saw one tenant's name; the Schedule must still name that tenant.
+  const scheduleTenant = scheduleTenantOf(snapshot, input.portionId);
+  if (scheduleTenant === null) throw validation("This portion has no tenant yet.");
+  if (!sameTenantName(scheduleTenant, checked.tenant)) {
+    throw conflict(`The tenant for ${portion.name} changed. Refresh the page.`);
   }
+
+  // Add the new row first; only then close the ones it replaces, so a failed append closes nothing.
+  const tenancy = await appendNewTenancy(ctx.gateway, snapshot.tenancies, checked, stamp);
+  await closeOpenTenancies(ctx.gateway, snapshot.tenancies, input.portionId, tenancy.moveIn, stamp);
   return { tenancy };
 }
 
@@ -127,7 +139,8 @@ async function updateTenancy(
   stamp: WriteStamp,
 ): Promise<{ tenancy: Tenancy }> {
   const fields = validateTenancyFields(input.fields);
-  if (!input.expectedUpdatedAt) {
+  // Only a missing value is refused: a hand-typed row can have an empty Updated at, which a screen sends as "".
+  if (input.expectedUpdatedAt === undefined) {
     throw validation("Updating a tenancy needs the updated-at value the person saw.");
   }
   const snapshot = await loadSnapshot(ctx);
@@ -201,7 +214,7 @@ async function moveOutUnchecked(
   if (notes !== undefined && notes.length > MAX_NOTES_LENGTH) {
     throw validation(`Notes can have at most ${MAX_NOTES_LENGTH} characters.`);
   }
-  if (!input.expectedUpdatedAt) {
+  if (input.expectedUpdatedAt === undefined) {
     throw validation("Moving out needs the updated-at value the person saw.");
   }
 
@@ -239,7 +252,7 @@ export async function getPortionTenants(
   const snapshot = ctx.cache ? await ctx.cache.get(options.minFetchedAt) : await loadSnapshot(ctx);
   const portion = requirePortion(snapshot, portionId);
 
-  const scheduleTenant = findLatestEntry(snapshot.rows, portionId)?.tenant ?? null;
+  const scheduleTenant = scheduleTenantOf(snapshot, portionId);
   const onFile = currentTenancy(snapshot.tenancies, portionId);
   const matches = onFile !== null && scheduleTenant !== null && sameTenantName(onFile.tenant, scheduleTenant);
   return {
