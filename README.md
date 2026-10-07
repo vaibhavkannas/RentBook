@@ -7,6 +7,7 @@ A phone-first web app for recording monthly rent receipts for a building with fi
 - Per-portion cycle length (or "never resets") and hike percent.
 - Each payment also lands in a `Payments Log` tab with the date it was received and who logged it.
 - Undo a mistaken payment, see who did what on the Activity screen, and let several people sign in (the first one listed is the owner).
+- Tenant details for each portion (phone, move-in, agreement end, advance, move-out) kept in a `Tenants` tab of the same Sheet, shown on the card and on a tenant page with past tenants.
 
 ## Develop
 
@@ -22,7 +23,7 @@ npm run dev
 | `npm run typecheck` | TypeScript check |
 | `npm run lint` | ESLint |
 | `npm run recon` | Read-only check of your Google Sheet. Never writes |
-| `npm run verify:testcopy` | End-to-end log, edit, undo and Activity check against a test copy of the Sheet. Needs `TEST_SHEET_ID`; refuses to run on the real Sheet. The copy's Schedule must already have a row for 2040-04 with no payment for portion p5 (new month rows can only be added in order); the script checks this first and stops before writing if not |
+| `npm run verify:testcopy` | End-to-end log, edit, undo, Activity and tenant-details check against a test copy of the Sheet. Needs `TEST_SHEET_ID`; refuses to run on the real Sheet. The copy's Schedule must already have a row for 2040-04 with no payment for portion p5 (new month rows can only be added in order); the script checks this first and stops before writing if not. The "Verify Tenant" rows it adds to the Tenants tab (p5 only) stay in the test copy, already moved out |
 
 ## Setup and deployment
 

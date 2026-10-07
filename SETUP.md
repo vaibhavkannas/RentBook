@@ -161,6 +161,19 @@ Older deployments have a single `ALLOWED_EMAIL`. The app still reads it, but onl
 
 The first time the new version loads, it adds two new header columns, "Logged by" and "Action", to the Payments Log tab by itself. Older log rows keep those two cells empty and show without an action on the Activity screen. You do not need to edit the tab.
 
+## Tenant details
+
+RentBook keeps each portion's tenancy details (phone, move-in date, agreement end, advance, move-out and notes) in a `Tenants` tab of the same Sheet. The app creates the tab, with its headers, by itself the first time it loads. You do not need to make it. Try it on the test copy first (step 1).
+
+- The tab must keep these 15 headers in columns A to O, in this order: `Tenancy ID`, `Portion`, `Tenant`, `Phone`, `Move-in date`, `Agreement end`, `Advance`, `Advance date`, `Advance status`, `Refund`, `Deductions`, `Notes`, `Move-out date`, `Updated by`, `Updated at`. If one is missing or different, the app stops with a message naming it and writes nothing. You may add your own columns to the right of column O. The app ignores them.
+- You can edit rows by hand. When the app saves a change it writes only the columns that change belongs to, so what you typed in the other columns of that row stays. Leave `Tenancy ID` alone: it is how the app finds the row.
+- Type the date columns (`Move-in date`, `Agreement end`, `Advance date`, `Move-out date`) as plain text in the form `YYYY-MM-DD`, for example `2026-10-07`. The app also reads real Sheet dates, so a cell that Google Sheets turned into a date still works.
+- `Advance status` must be exactly `Held`, `Refunded` or `Adjusted` (capital first letter). Leave it blank when there is no advance. Any other text is ignored.
+- `Advance`, `Refund` and `Deductions` are whole rupees typed as numbers. Text typed into a number column is ignored.
+- A blank `Move-out date` means the tenancy is current. A portion's current tenancy is the last row for that portion with a blank move-out date. Adding a date there moves the tenant out.
+- A card shows a tenancy's details only while its `Tenant` is the name the Schedule shows for that portion (capitals and surrounding spaces do not matter).
+- `Updated by` and `Updated at` are written by the app. `Updated at` is also how it notices that someone changed a row after you opened it.
+
 ## 7. Deploy to Vercel
 
 1. Sign in at https://vercel.com with GitHub, choose Add New, then Project, and import `vaibhavkannas/RentBook`.

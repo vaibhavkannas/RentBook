@@ -1,7 +1,7 @@
 # RentBook enhancements, wave B: tenancy details
 
 Date: 2026-10-07
-Status: approach approved by the owner (a `Tenants` tab in the same Sheet); field list and screens chosen by the assistant, open to change in review
+Status: approved; implemented per docs/superpowers/plans/2026-10-07-wave-b-implementation.md
 
 ## Purpose
 
@@ -52,7 +52,7 @@ Rules:
 
 - A portion's **current tenancy** is the last row for that portion with a blank move-out date.
 - A current tenancy is shown on a card only when its tenant name equals, ignoring case and surrounding spaces, the tenant name the card shows from the Schedule. Otherwise the card treats the tenant as having no details yet. This stops stale details from appearing under a new tenant.
-- Header names are matched by text, so the owner may add columns to the right or reorder rows. The app never rewrites or deletes rows it did not touch.
+- The headers must be exactly the fifteen above, in columns A to O, in that order. Columns to the right of O may be added by hand and are ignored. A missing or different header is a clear structure error naming it, and nothing is written. The app never rewrites or deletes rows it did not touch.
 
 ## Screens
 
