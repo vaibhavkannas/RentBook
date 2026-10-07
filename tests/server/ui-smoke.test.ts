@@ -8,6 +8,7 @@ import type { PortionCard } from "@/lib/domain/types";
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
 
+import TenantsLoading from "@/app/tenants/[portionId]/loading";
 import MoveOutForm from "@/components/MoveOutForm";
 import PaymentSheet from "@/components/PaymentSheet";
 import PortionBoard from "@/components/PortionBoard";
@@ -87,6 +88,10 @@ describe("PortionBoard", () => {
     expect(out).not.toContain("details");
   });
 
+  it("keeps the amount line's spacing below the details row", () => {
+    expect(board([card()])).toContain('<p class="mt-2 text-lg font-medium">');
+  });
+
   it("gives the link a tap target of at least 44 px", () => {
     expect(board([card()])).toMatch(/<a [^>]*class="[^"]*min-h-11[^"]*"/);
   });
@@ -111,6 +116,12 @@ describe("PaymentSheet", () => {
     }
     // the move-in date field starts on today; the Date received field does too
     expect(out.match(/value="2026-10-05"/g)).toHaveLength(2);
+  });
+
+  it("has its status region on the page from the start, empty, for the tenancy warning", () => {
+    const out = html(createElement(PaymentSheet, { ...props, mode: "new-tenant" }));
+    expect(out).toContain('<div role="status"></div>');
+    expect(out).not.toContain("weren&#x27;t saved");
   });
 
   it("does not offer the section when logging or editing a payment", () => {
@@ -171,5 +182,28 @@ describe("MoveOutForm", () => {
     expect(out).toContain(">Move out<");
     expect(out).toContain('<div role="alert"></div>');
     expect(out).not.toContain("<form");
+  });
+});
+
+describe("the tenant details loading screen", () => {
+  const out = html(createElement(TenantsLoading));
+
+  it("has a working back link and says what is loading", () => {
+    expect(out).toContain('href="/"');
+    expect(out).toContain('aria-label="Back to month"');
+    expect(out).toContain("Loading tenant details");
+    expect(out).toContain('aria-busy="true"');
+  });
+
+  it("shows a title bar and two cards, with the existing colour tokens", () => {
+    expect(out.match(/rounded-2xl border border-line bg-surface/g)).toHaveLength(2);
+    expect(out).toContain("bg-line");
+  });
+
+  it("pulses only for people who have not asked for less motion", () => {
+    expect(out).toContain("animate-pulse");
+    expect(out).toContain("motion-reduce:animate-none");
+    // every animated bar has the fallback
+    expect(out.match(/animate-pulse/g)!.length).toBe(out.match(/motion-reduce:animate-none/g)!.length);
   });
 });

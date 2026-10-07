@@ -65,7 +65,7 @@ export function buildPaymentRequest(input: PaymentRequestInput): PaymentRequest 
 
 /** Shown when the payment saved but the tenancy details that came with a new tenant did not. */
 export const TENANCY_NOT_SAVED_MESSAGE =
-  "Payment saved, but the tenancy details weren't saved. Open Details on the card to check or add them.";
+  "Payment saved, but the tenancy details weren't saved. Open the card's details page to check or add them.";
 
 /** The parts of POST /api/payments' answer that decide what the sheet does after a save. */
 export type PaymentResponse = {

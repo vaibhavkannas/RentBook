@@ -168,7 +168,7 @@ describe("paymentOutcome", () => {
 
   it("has neutral wording for the tenancy warning", () => {
     expect(TENANCY_NOT_SAVED_MESSAGE).toBe(
-      "Payment saved, but the tenancy details weren't saved. Open Details on the card to check or add them.",
+      "Payment saved, but the tenancy details weren't saved. Open the card's details page to check or add them.",
     );
   });
 });

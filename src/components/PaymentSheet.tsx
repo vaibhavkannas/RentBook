@@ -10,6 +10,7 @@ import {
   paymentOutcome,
   TENANCY_NOT_SAVED_MESSAGE,
 } from "@/lib/payment-request";
+import { postJson } from "@/lib/post-json";
 import { newTenantDetails, type NewTenantDetailsForm } from "@/lib/tenancy-input";
 
 export type SheetMode = "log" | "edit" | "new-tenant";
@@ -35,19 +36,6 @@ type ApiBody = {
 
 /** What the sheet still has to tell the person after the payment was saved. */
 type Notice = { logRow: unknown[] | null; tenancyNotSaved: boolean };
-
-async function postJson(url: string, method: string, payload: unknown): Promise<ApiBody | null> {
-  try {
-    const res = await fetch(url, {
-      method,
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-    return (await res.json()) as ApiBody;
-  } catch {
-    return null;
-  }
-}
 
 const NO_CONFIRMATION =
   "Couldn't confirm that the save went through. Check your connection and refresh the page before trying again.";
@@ -132,7 +120,7 @@ export default function PaymentSheet({
     if (!request.ok) return setError(request.message);
     setBusy(true);
     setError(null);
-    const body = await postJson("/api/payments", "POST", request.body);
+    const body = await postJson<ApiBody>("/api/payments", request.body);
     setBusy(false);
 
     if (!body) return setError(NO_CONFIRMATION);
@@ -160,7 +148,7 @@ export default function PaymentSheet({
     if (!notice?.logRow) return;
     setBusy(true);
     setError(null);
-    const body = await postJson("/api/payments/log-retry", "POST", { row: notice.logRow });
+    const body = await postJson<ApiBody>("/api/payments/log-retry", { row: notice.logRow });
     setBusy(false);
     if (body?.ok && body.logWritten) {
       // The log entry is saved now; the tenancy warning, if any, still has to be seen.
@@ -199,16 +187,23 @@ export default function PaymentSheet({
           </button>
         </div>
 
+        {/* On the page from the start, so screen readers announce the warning when its text appears. */}
+        <div
+          role="status"
+          className={
+            notice?.tenancyNotSaved
+              ? "mt-4 rounded-lg bg-warn-bg px-3 py-2 text-sm text-warn-ink"
+              : undefined
+          }
+        >
+          {notice?.tenancyNotSaved ? TENANCY_NOT_SAVED_MESSAGE : null}
+        </div>
+
         {notice ? (
           <div className="mt-4 space-y-3">
             {notice.logRow && (
               <p className="rounded-lg bg-warn-bg px-3 py-2 text-sm text-warn-ink">
                 Saved to your Schedule, but the Payments Log entry didn&apos;t save.
-              </p>
-            )}
-            {notice.tenancyNotSaved && (
-              <p role="status" className="rounded-lg bg-warn-bg px-3 py-2 text-sm text-warn-ink">
-                {TENANCY_NOT_SAVED_MESSAGE}
               </p>
             )}
             {error && (
