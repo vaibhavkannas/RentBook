@@ -1,13 +1,20 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildMoveOutDraftRequest,
   buildMoveOutRequest,
+  buildTenancyDraftRequest,
   buildTenancyRequest,
+  editDraft,
   emptyMoveOutForm,
   emptyTenancyForm,
   hasTenancyDetails,
   newTenantDetails,
   parseRupees,
+  startDraft,
   tenancyFormText,
+  type MoveOutTarget,
+  type TenancyFormText,
+  type TenancyTarget,
 } from "@/lib/tenancy-input";
 
 describe("parseRupees", () => {
@@ -339,5 +346,170 @@ describe("buildMoveOutRequest", () => {
       ok: false,
       message: "Deductions must be a whole number of rupees from 0 to 10,000,000.",
     });
+  });
+});
+
+// A form saves with the stale-screen token and the values it was OPENED with, never with a token from props
+// that a later router.refresh() delivered. These cases act out the ways a live token used to overwrite newer data.
+describe("tenancy drafts", () => {
+  const OLD_AT = "2026-01-15T05:00:00.000Z";
+  const NEW_AT = "2026-10-06T09:00:00.000Z";
+  const editTarget = (expectedUpdatedAt: string): TenancyTarget => ({
+    mode: "edit",
+    portionId: "p1",
+    tenant: "Asha",
+    id: "t-1",
+    expectedUpdatedAt,
+  });
+  const oldValues: TenancyFormText = { ...emptyTenancyForm("2026-01-15"), phone: "11111", notes: "old notes" };
+  const newValues: TenancyFormText = { ...emptyTenancyForm("2026-01-15"), phone: "99999", notes: "newer notes" };
+
+  it("builds the request from the token and the values it started with", () => {
+    const draft = startDraft(editTarget(OLD_AT), oldValues);
+    const request = buildTenancyDraftRequest(draft);
+    expect(request).toMatchObject({
+      ok: true,
+      body: { id: "t-1", expectedUpdatedAt: OLD_AT, fields: { phone: "11111", notes: "old notes" } },
+    });
+  });
+
+  it("applies what the person types and keeps the token", () => {
+    const draft = editDraft(startDraft(editTarget(OLD_AT), oldValues), { phone: "22222" });
+    expect(buildTenancyDraftRequest(draft)).toMatchObject({
+      ok: true,
+      body: { expectedUpdatedAt: OLD_AT, fields: { phone: "22222", notes: "old notes" } },
+    });
+  });
+
+  it("does not change the draft it edits, or the objects it started from", () => {
+    const target = editTarget(OLD_AT);
+    const draft = startDraft(target, oldValues);
+    const typed = editDraft(draft, { phone: "22222" });
+    expect(draft.form.phone).toBe("11111");
+    expect(typed.seen).toEqual(target);
+    expect(oldValues.phone).toBe("11111");
+  });
+
+  it("(a) reopening before the refresh lands keeps the OLD token with the OLD values, so a late save is refused as stale", () => {
+    // the first edit saved (the Sheet now holds NEW_AT) but the page props are still the old ones when Edit is tapped
+    const reopened = startDraft(editTarget(OLD_AT), oldValues);
+    // the refresh lands: the page props now carry the new token and values. The open draft does not follow them.
+    const propsAfterRefresh = { target: editTarget(NEW_AT), initial: newValues };
+    expect(propsAfterRefresh.target).toMatchObject({ expectedUpdatedAt: NEW_AT });
+    const request = buildTenancyDraftRequest(reopened);
+    expect(request.ok && request.body.expectedUpdatedAt).toBe(OLD_AT);
+    expect(request.ok && request.body.fields.phone).toBe("11111");
+  });
+
+  it("(b) after a conflict the next draft starts from the fresh page: new token AND new values together", () => {
+    const stale = startDraft(editTarget(OLD_AT), oldValues);
+    const reopened = startDraft(editTarget(NEW_AT), newValues);
+    expect(buildTenancyDraftRequest(reopened)).toMatchObject({
+      ok: true,
+      body: { expectedUpdatedAt: NEW_AT, fields: { phone: "99999", notes: "newer notes" } },
+    });
+    // and the stale draft still cannot pass the newer token with its old values
+    expect(buildTenancyDraftRequest(stale)).toMatchObject({ body: { expectedUpdatedAt: OLD_AT } });
+  });
+
+  it("(d) a create draft keeps the tenant it started with, even when the Schedule's tenant has changed since", () => {
+    const asha = startDraft<TenancyTarget, TenancyFormText>(
+      { mode: "create", portionId: "p1", tenant: "Asha" },
+      { ...emptyTenancyForm("2026-10-05"), phone: "11111", advance: "5000" },
+    );
+    // the Schedule now names Hari: the page gives the form a new key, so a NEW draft starts empty
+    const hari = startDraft<TenancyTarget, TenancyFormText>(
+      { mode: "create", portionId: "p1", tenant: "Hari" },
+      emptyTenancyForm("2026-10-05"),
+    );
+    expect(buildTenancyDraftRequest(asha)).toMatchObject({
+      body: { tenant: "Asha", fields: { phone: "11111", advance: 5000 } },
+    });
+    expect(buildTenancyDraftRequest(hari)).toMatchObject({
+      body: { tenant: "Hari", fields: { phone: "", advance: null } },
+    });
+  });
+
+  it("refuses a draft whose typed values are wrong, with the same messages as before", () => {
+    const draft = editDraft(startDraft(editTarget(OLD_AT), oldValues), { advance: "lots" });
+    expect(buildTenancyDraftRequest(draft)).toEqual({
+      ok: false,
+      message: "Advance must be a whole number of rupees from 0 to 10,000,000.",
+    });
+  });
+});
+
+describe("move-out drafts", () => {
+  const OLD_AT = "2026-01-15T05:00:00.000Z";
+  const NEW_AT = "2026-10-06T09:00:00.000Z";
+  const moveOutTarget = (expectedUpdatedAt: string, initialNotes: string): MoveOutTarget => ({
+    id: "t-1",
+    expectedUpdatedAt,
+    hasAdvance: true,
+    initialNotes,
+  });
+
+  it("builds the request from the token and the notes it started with", () => {
+    const draft = startDraft(
+      moveOutTarget(OLD_AT, "old notes"),
+      emptyMoveOutForm("2026-10-05", { advanceStatus: "Held", notes: "old notes" }),
+    );
+    const request = buildMoveOutDraftRequest(draft);
+    expect(request).toMatchObject({ ok: true, body: { id: "t-1", expectedUpdatedAt: OLD_AT, moveOut: "2026-10-05" } });
+    // the notes were not changed, so they are not sent
+    expect(request.ok && "notes" in request.body).toBe(false);
+  });
+
+  it("(c) unchanged notes stay unsent even when the page's notes changed after the form opened", () => {
+    // opened with "old notes"; the page later shows "newer notes" (another person's edit) as its new target
+    const draft = startDraft(
+      moveOutTarget(OLD_AT, "old notes"),
+      emptyMoveOutForm("2026-10-05", { advanceStatus: "Held", notes: "old notes" }),
+    );
+    const laterProps = moveOutTarget(NEW_AT, "newer notes");
+    expect(laterProps.initialNotes).toBe("newer notes");
+    const request = buildMoveOutDraftRequest(draft);
+    expect(request.ok && "notes" in request.body).toBe(false);
+    expect(request.ok && request.body.expectedUpdatedAt).toBe(OLD_AT);
+  });
+
+  it("(c) a draft started from the fresh page after a conflict has the newer notes on both sides, and sends none", () => {
+    const draft = startDraft(
+      moveOutTarget(NEW_AT, "newer notes"),
+      emptyMoveOutForm("2026-10-05", { advanceStatus: "Held", notes: "newer notes" }),
+    );
+    const request = buildMoveOutDraftRequest(draft);
+    expect(request.ok && request.body.expectedUpdatedAt).toBe(NEW_AT);
+    expect(request.ok && "notes" in request.body).toBe(false);
+  });
+
+  it("sends notes the person changed, with the token the draft started with", () => {
+    const draft = editDraft(
+      startDraft(
+        moveOutTarget(OLD_AT, "old notes"),
+        emptyMoveOutForm("2026-10-05", { advanceStatus: "Held", notes: "old notes" }),
+      ),
+      { notes: "Left the keys", refund: "5,000" },
+    );
+    expect(buildMoveOutDraftRequest(draft)).toEqual({
+      ok: true,
+      body: {
+        id: "t-1",
+        expectedUpdatedAt: OLD_AT,
+        moveOut: "2026-10-05",
+        advanceStatus: "Held",
+        refund: 5000,
+        notes: "Left the keys",
+      },
+    });
+  });
+
+  it("does not change the draft it edits", () => {
+    const draft = startDraft(
+      moveOutTarget(OLD_AT, ""),
+      emptyMoveOutForm("2026-10-05", { advanceStatus: null, notes: "" }),
+    );
+    editDraft(draft, { refund: "9" });
+    expect(draft.form.refund).toBe("");
   });
 });

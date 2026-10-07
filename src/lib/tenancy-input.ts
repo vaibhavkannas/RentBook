@@ -206,3 +206,35 @@ export function buildMoveOutRequest(target: MoveOutTarget, form: MoveOutFormText
   if (notes !== target.initialNotes.trim()) body.notes = notes;
   return { ok: true, body };
 }
+
+/**
+ * A form's stale-screen token (`seen`) and its values (`form`), taken at the same moment, when the form was opened.
+ * A form must save from its draft and never from live props: router.refresh() can deliver a newer token
+ * while the typed values are still the old ones, and a save that mixed the two would overwrite someone's newer change
+ * without a conflict. With a draft, anything that changed since the form opened is refused as a safe conflict.
+ */
+export type Draft<Seen, Form> = { readonly seen: Seen; readonly form: Form };
+
+/** Starts a draft from the target and the values the page shows right now. Both are copied. */
+export function startDraft<Seen extends object, Form extends object>(seen: Seen, initial: Form): Draft<Seen, Form> {
+  return { seen: { ...seen }, form: { ...initial } };
+}
+
+/** The draft with some values changed. The token stays the one the draft started with. */
+export function editDraft<Seen, Form>(draft: Draft<Seen, Form>, patch: Partial<Form>): Draft<Seen, Form> {
+  return { seen: draft.seen, form: { ...draft.form, ...patch } };
+}
+
+export type TenancyDraft = Draft<TenancyTarget, TenancyFormText>;
+
+/** The body of POST /api/tenancies for a draft: its own token and its own values. */
+export function buildTenancyDraftRequest(draft: TenancyDraft): TenancyRequest {
+  return buildTenancyRequest(draft.seen, draft.form);
+}
+
+export type MoveOutDraft = Draft<MoveOutTarget, MoveOutFormText>;
+
+/** The body of POST /api/tenancies/move-out for a draft: its own token, notes baseline and values. */
+export function buildMoveOutDraftRequest(draft: MoveOutDraft): MoveOutRequest {
+  return buildMoveOutRequest(draft.seen, draft.form);
+}

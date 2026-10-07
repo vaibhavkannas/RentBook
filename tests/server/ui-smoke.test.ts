@@ -137,7 +137,10 @@ describe("TenancyForm", () => {
     expect(out).toContain('value="2026-10-05"');
     expect(out).toContain("Save details");
     expect(out).toContain('maxLength="500"');
-    expect(out).not.toContain('role="alert"');
+    // the status and alert regions are on the page from the start, empty, so their text is announced when it appears
+    expect(out).toContain('<div role="status"></div>');
+    expect(out).toContain('<div role="alert"></div>');
+    expect(out).not.toContain('<p role="alert"');
     expect(out).not.toContain(">Cancel<");
   });
 
@@ -149,6 +152,8 @@ describe("TenancyForm", () => {
       }),
     );
     expect(out).toContain(">Edit<");
+    expect(out).toContain('<div role="status"></div>');
+    expect(out).toContain('<div role="alert"></div>');
     expect(out).not.toContain("<form");
   });
 });
@@ -164,6 +169,7 @@ describe("MoveOutForm", () => {
     );
     expect(out).toContain('aria-label="Move out Asha"');
     expect(out).toContain(">Move out<");
+    expect(out).toContain('<div role="alert"></div>');
     expect(out).not.toContain("<form");
   });
 });

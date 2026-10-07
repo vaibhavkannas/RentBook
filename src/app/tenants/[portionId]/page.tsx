@@ -28,7 +28,19 @@ function Detail({ label, children }: { label: string; children?: ReactNode }) {
   return (
     <div className="flex justify-between gap-4 py-1.5 text-sm">
       <dt className="shrink-0 text-muted">{label}</dt>
-      <dd className="min-w-0 whitespace-pre-wrap break-words text-right">
+      <dd className="min-w-0 break-words text-right">
+        {children || <span className="text-muted">Not added</span>}
+      </dd>
+    </div>
+  );
+}
+
+/** Long text (notes) on a full-width row of its own, left-aligned, with its line breaks kept. */
+function LongDetail({ label, children }: { label: string; children?: ReactNode }) {
+  return (
+    <div className="py-1.5 text-sm">
+      <dt className="text-muted">{label}</dt>
+      <dd className="mt-0.5 whitespace-pre-wrap break-words text-left">
         {children || <span className="text-muted">Not added</span>}
       </dd>
     </div>
@@ -113,7 +125,7 @@ export default async function TenantsPage({ params }: { params: Promise<{ portio
               <Detail label="Moved in">{current.moveIn && formatDay(current.moveIn)}</Detail>
               <Detail label="Agreement ends">{current.agreementEnd.trim() && formatDay(current.agreementEnd.trim())}</Detail>
               <Detail label="Advance">{advance}</Detail>
-              <Detail label="Notes">{current.notes}</Detail>
+              <LongDetail label="Notes">{current.notes}</LongDetail>
               <Detail label="Last updated">{lastUpdatedText(current)}</Detail>
             </dl>
             <TenancyForm
@@ -137,7 +149,7 @@ export default async function TenantsPage({ params }: { params: Promise<{ portio
             <h3 className="mt-2 text-sm font-medium">Add details</h3>
             {note && <p className="mt-1 text-sm text-muted">{note}</p>}
             <TenancyForm
-              key="create"
+              key={`create-${scheduleTenant}`}
               target={{ mode: "create", portionId: portion.id, tenant: scheduleTenant }}
               initial={emptyTenancyForm(today)}
             />

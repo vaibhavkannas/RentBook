@@ -104,7 +104,9 @@ describe("the tenant details page", () => {
     expect(html).toContain("15 Jan 2026");
     expect(html).toContain("15 Mar 2027");
     expect(html).toContain("₹ 20,000 · Held · paid 10 Jan 2026");
-    expect(html).toContain("Paid by cheque");
+    // the notes sit on a row of their own, full width and left-aligned, not in the narrow right-aligned column
+    expect(html).toMatch(/<dt class="text-muted">Notes<\/dt><dd class="[^"]*text-left[^"]*">Paid by cheque<\/dd>/);
+    expect(html).not.toMatch(/Notes<\/dt><dd class="[^"]*text-right/);
     expect(html).toContain("owner@example.com");
     expect(html).toContain(">Edit<");
     expect(html).toContain('aria-label="Edit tenancy details"');
