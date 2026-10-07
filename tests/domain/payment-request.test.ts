@@ -77,28 +77,35 @@ describe("buildPaymentRequest", () => {
       expect(result.ok && result.body.tenancy).toBeUndefined();
     });
 
-    it.each([
-      ["every field is empty", { moveIn: "", phone: "", agreementEnd: "", advance: null, advanceDate: "", notes: "" }],
-      ["every field is blank or spaces", { moveIn: "  ", phone: " ", notes: "\t" }],
-      ["only an empty move-in is there", { moveIn: "" }],
-      ["the advance is undefined and the text is empty", { moveIn: "", advance: undefined }],
-    ])("leaves the tenancy out when %s", (_name, empty) => {
-      const result = buildPaymentRequest({ ...newTenant, tenancy: empty });
-      expect(result.ok).toBe(true);
-      expect(result.ok && result.body.tenancy).toBeUndefined();
+    it("sends exactly the tenancy it is given: the sheet decides whether there is one", () => {
+      // buildPaymentRequest never second-guesses the object, even a mostly empty one.
+      for (const given of [
+        { moveIn: "2026-10-05" },
+        { moveIn: "" },
+        { moveIn: "2026-10-05", phone: "", advance: null },
+        { moveIn: "", advance: 0 },
+      ]) {
+        const result = buildPaymentRequest({ ...newTenant, tenancy: given });
+        expect(result).toMatchObject({ ok: true, body: { tenancy: given } });
+        expect(result.ok && result.body.tenancy).toBe(given);
+      }
     });
 
-    it.each([
-      ["a move-in date", { moveIn: "2026-10-01" }],
-      ["a phone", { moveIn: "", phone: "98000 12345" }],
-      ["an agreement end", { moveIn: "", agreementEnd: "2027-09-30" }],
-      ["an advance date", { moveIn: "", advanceDate: "2026-09-28" }],
-      ["notes", { moveIn: "", notes: "Cheque" }],
-      ["an advance of zero", { moveIn: "", advance: 0 }],
-      ["an advance", { moveIn: "", advance: 12000 }],
-    ])("sends the tenancy when only %s is filled", (_name, partial) => {
-      const result = buildPaymentRequest({ ...newTenant, tenancy: partial });
-      expect(result).toMatchObject({ ok: true, body: { tenancy: partial } });
+    it("sends the tenancy next to the new tenant's name and the payment", () => {
+      const result = buildPaymentRequest({ ...newTenant, tenancy: { moveIn: "2026-10-01", advance: 5000 } });
+      expect(result).toEqual({
+        ok: true,
+        body: {
+          month: "2026-10",
+          portionId: "p1",
+          amount: 5450,
+          dateReceived: "2026-10-05",
+          newTenantName: "Hari",
+          overwrite: undefined,
+          expected: undefined,
+          tenancy: { moveIn: "2026-10-01", advance: 5000 },
+        },
+      });
     });
 
     it("ignores tenancy details outside the new tenant mode", () => {
