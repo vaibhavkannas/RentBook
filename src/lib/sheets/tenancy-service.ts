@@ -13,12 +13,7 @@ import type { PortionConfig } from "@/lib/domain/types";
 import { isValidIsoDay } from "@/lib/domain/year-month";
 import { conflict, validation } from "@/lib/errors";
 import { loadSnapshot, type SheetsContext, type Snapshot } from "./service";
-import {
-  appendNewTenancy,
-  checkNewTenancy,
-  closeOpenTenancies,
-  type WriteStamp,
-} from "./tenancy-writes";
+import { checkNewTenancy, recordNewTenant, type WriteStamp } from "./tenancy-writes";
 import { writeTenancyEdit, writeTenancyMoveOut } from "./tenants-store";
 
 const ADVANCE_STATUSES: readonly string[] = ["Held", "Refunded", "Adjusted"] satisfies AdvanceStatus[];
@@ -127,9 +122,14 @@ async function createTenancy(
   }
 
   // Add the new row first; only then close the ones it replaces, so a failed append closes nothing.
-  const tenancy = await appendNewTenancy(ctx.gateway, snapshot.tenancies, checked, stamp);
-  await closeOpenTenancies(ctx.gateway, snapshot.tenancies, input.portionId, tenancy.moveIn, stamp);
-  return { tenancy };
+  const tenancy = await recordNewTenant(
+    ctx.gateway,
+    snapshot.tenancies,
+    { portionId: input.portionId, newTenancy: checked, dateReceived: checked.fields.moveIn },
+    stamp,
+  );
+  // A new tenancy was given, so recordNewTenant returns it as it is stored.
+  return { tenancy: tenancy! };
 }
 
 async function updateTenancy(

@@ -10,12 +10,13 @@ import {
 import { isValidIsoDay } from "@/lib/domain/year-month";
 import { conflict } from "@/lib/errors";
 import type { SheetsGateway } from "./gateway";
-import { appendTenancy, closeTenancyRow } from "./tenants-store";
+import { appendTenancy, closeTenancyRow, readTenancies } from "./tenants-store";
 
 /**
  * The tenancy write steps that `saveTenancy` (tenancy-service.ts) and `logPayment` (service.ts) share.
  * They live in their own module, which imports neither of those two, so that service.ts can use
- * them without a circular import. They never read the sheet: callers pass the tenancies they loaded.
+ * them without a circular import. Callers pass the tenancies they loaded; recordNewTenant reads the Tenants tab
+ * once more after its append, to find the rows to close where they are now.
  */
 
 /** Who changed a row and when: written to the row's Updated by and Updated at cells. */
@@ -46,16 +47,17 @@ export function closingDay(previousMoveIn: string, newMoveIn: string): string {
 }
 
 /**
- * Appends a new current tenancy. Refused with a conflict, before anything is written, when the portion's
- * current tenancy (in `tenancies`) already belongs to the same tenant name. The returned row number is
- * where the app appends: the row after the last one it read.
+ * Appends a new current tenancy and returns the row it wrote (without a row number). Refused with a conflict,
+ * before anything is written, when the portion's current tenancy (in `tenancies`) already belongs to the same
+ * tenant name. Where Google puts the row is not known here: a blank row inside the tab makes it land there and
+ * moves the rows below it down. The caller finds the row again by its id (see recordNewTenant).
  */
-export async function appendNewTenancy(
+async function appendNewTenancy(
   gateway: SheetsGateway,
   tenancies: Tenancy[],
   checked: NewTenancy,
   stamp: WriteStamp,
-): Promise<Tenancy> {
+): Promise<Omit<Tenancy, "rowNumber">> {
   const { portionId, tenant, fields } = checked;
   const existing = currentTenancy(tenancies, portionId);
   if (existing && sameTenantName(existing.tenant, tenant)) {
@@ -79,55 +81,62 @@ export async function appendNewTenancy(
     updatedAt: stamp.now.toISOString(),
   };
   await appendTenancy(gateway, row);
-  const lastRow = tenancies.reduce((last, t) => Math.max(last, t.rowNumber), 1);
-  return { rowNumber: lastRow + 1, ...row };
+  return row;
 }
 
 /**
  * Writes `moveOut` (and who and when) into the tenancy's own row, with one write that touches only the
  * Move-out date, Updated by and Updated at cells. The rest of the row is never rewritten.
  */
-export async function closeTenancy(
+async function closeTenancy(
   gateway: SheetsGateway,
   tenancy: Tenancy,
   moveOut: string,
   stamp: WriteStamp,
-): Promise<Tenancy> {
-  const updatedAt = stamp.now.toISOString();
-  await closeTenancyRow(gateway, tenancy.rowNumber, { moveOut, updatedBy: stamp.updatedBy, updatedAt });
-  return { ...tenancy, moveOut, updatedBy: stamp.updatedBy, updatedAt };
-}
-
-/**
- * Closes EVERY open row of the portion in `tenancies` (not only the last one, so a row copied by hand
- * cannot stay open behind the new tenancy), in sheet order, each on `newMoveIn` but never before its own move-in.
- * `tenancies` is what the caller read before it appended anything, so a row it just added is not in it.
- */
-export async function closeOpenTenancies(
-  gateway: SheetsGateway,
-  tenancies: Tenancy[],
-  portionId: string,
-  newMoveIn: string,
-  stamp: WriteStamp,
 ): Promise<void> {
-  for (const open of tenancies) {
-    if (open.portionId !== portionId || open.moveOut !== "") continue;
-    await closeTenancy(gateway, open, closingDay(open.moveIn, newMoveIn), stamp);
-  }
+  await closeTenancyRow(gateway, tenancy.rowNumber, {
+    moveOut,
+    updatedBy: stamp.updatedBy,
+    updatedAt: stamp.now.toISOString(),
+  });
 }
 
 /**
- * The tenancy work of a payment that starts a new tenant: add the new tenancy when details were given
- * (new row first), then close every open tenancy of the portion on the new move-in date, or on
- * the date received when no details were given. `tenancies` is what the payment's own load read.
+ * The tenancy work of a new tenant: add the new tenancy when details were given (new row first), then close the
+ * portion's previous open tenancies on the new move-in date, or on the date received when no details were given.
+ * `tenancies` is what the caller read before it wrote anything. The previous open tenancies are taken from it,
+ * but the rows to close are found again by their ID in a fresh read after the append, because the append can
+ * move rows (a blank row inside the Tenants tab). A previous tenancy that is no longer there, or that someone
+ * has closed in the meantime, is skipped. Each is closed no earlier than its own move-in date.
+ *
+ * Returns the new tenancy as it is stored now, or null when no details were given. Closes nothing and refuses
+ * with a conflict when the row that was just appended cannot be found again.
  */
 export async function recordNewTenant(
   gateway: SheetsGateway,
   tenancies: Tenancy[],
   input: { portionId: string; newTenancy: NewTenancy | undefined; dateReceived: string },
   stamp: WriteStamp,
-): Promise<void> {
-  if (input.newTenancy) await appendNewTenancy(gateway, tenancies, input.newTenancy, stamp);
+): Promise<Tenancy | null> {
+  const previousIds = new Set(
+    tenancies.filter((t) => t.portionId === input.portionId && t.moveOut === "").map((t) => t.id),
+  );
+  const added = input.newTenancy
+    ? await appendNewTenancy(gateway, tenancies, input.newTenancy, stamp)
+    : undefined;
+  if (!added && previousIds.size === 0) return null;
+
+  const fresh = await readTenancies(gateway);
+  const created = added ? fresh.findLast((t) => t.id === added.id) : undefined;
+  if (added && !created) {
+    throw conflict("The Tenants tab changed while the details were being saved. Refresh the page.");
+  }
+
   const newMoveIn = input.newTenancy?.fields.moveIn ?? input.dateReceived;
-  await closeOpenTenancies(gateway, tenancies, input.portionId, newMoveIn, stamp);
+  for (const open of fresh) {
+    if (!previousIds.has(open.id) || open.portionId !== input.portionId || open.moveOut !== "") continue;
+    if (open.id === added?.id) continue;
+    await closeTenancy(gateway, open, closingDay(open.moveIn, newMoveIn), stamp);
+  }
+  return created ?? null;
 }
