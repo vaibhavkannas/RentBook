@@ -7,6 +7,7 @@ import {
   LATER_ENTRY_REASON,
 } from "@/lib/domain/month-view";
 import { nextCount, sumAmounts } from "@/lib/domain/rent-rules";
+import type { Tenancy, TenancyFields } from "@/lib/domain/tenancy";
 import type {
   MonthView,
   PortionConfig,
@@ -28,35 +29,41 @@ import {
   type SettingsUpdate,
 } from "./settings-store";
 import { createSnapshotCache, type SnapshotCache } from "./snapshot-cache";
+import { checkNewTenancy, recordNewTenant } from "./tenancy-writes";
+import { readTenancies } from "./tenants-store";
 
 export type Snapshot = {
   portions: PortionConfig[];
   layout: ScheduleLayout;
   rows: ScheduleRow[];
+  /** Every row of the Tenants tab. */
+  tenancies: Tenancy[];
 };
 
 export type SheetsContext = {
   gateway: SheetsGateway;
   scheduleTab: string;
   totalHeader: string;
-  /** Short-lived copy of the Settings and Schedule reads. Page views use it; writes never do. */
+  /** Short-lived copy of the Settings, Schedule and Tenants reads. Page views use it; writes never do. */
   cache?: SnapshotCache<Snapshot>;
 };
 
-async function load(ctx: SheetsContext): Promise<Snapshot> {
+/** Reads Settings, the Schedule and the Tenants tab, all at the same time. Never cached. */
+export async function loadSnapshot(ctx: SheetsContext): Promise<Snapshot> {
   await ensureTabs(ctx.gateway, ctx.scheduleTab);
-  const [portions, values] = await Promise.all([
+  const [portions, values, tenancies] = await Promise.all([
     readSettings(ctx.gateway),
     ctx.gateway.getValues(ctx.scheduleTab, "A1:ZZ", "UNFORMATTED_VALUE"),
+    readTenancies(ctx.gateway),
   ]);
-  return { portions, ...parseSchedule(values, portions, ctx.totalHeader) };
+  return { portions, ...parseSchedule(values, portions, ctx.totalHeader), tenancies };
 }
 
 export const SNAPSHOT_TTL_MS = 15_000;
 
 /** Adds the page-view cache to a context. */
 export function withSnapshotCache(ctx: SheetsContext, ttlMs = SNAPSHOT_TTL_MS): SheetsContext {
-  ctx.cache = createSnapshotCache(() => load(ctx), ttlMs);
+  ctx.cache = createSnapshotCache(() => loadSnapshot(ctx), ttlMs);
   return ctx;
 }
 
@@ -65,8 +72,10 @@ export async function getMonthView(
   month: YearMonth,
   options: { minFetchedAt?: number } = {},
 ): Promise<MonthView> {
-  const { portions, rows } = ctx.cache ? await ctx.cache.get(options.minFetchedAt) : await load(ctx);
-  return deriveMonthView(rows, portions, month);
+  const { portions, rows, tenancies } = ctx.cache
+    ? await ctx.cache.get(options.minFetchedAt)
+    : await loadSnapshot(ctx);
+  return deriveMonthView(rows, portions, month, tenancies);
 }
 
 export async function getSettings(ctx: SheetsContext): Promise<PortionConfig[]> {
@@ -180,6 +189,11 @@ export type LogPaymentInput = {
   dateReceived: string;
   /** Set when a new tenant moves in: count restarts at 1. */
   newTenantName?: string;
+  /**
+   * Tenancy details for the new tenant. Only used together with `newTenantName`. Checked before
+   * anything is written, so bad details refuse the whole request.
+   */
+  tenancy?: TenancyFields;
   /** Replace an amount that is already recorded for this month. */
   overwrite?: boolean;
   /**
@@ -199,6 +213,11 @@ export type LogPaymentResult = {
   /** False when the Schedule was saved but the Payments Log row could not be written. */
   logWritten: boolean;
   logRow: LogRow;
+  /**
+   * Only present when a new tenant was named. False when the payment was saved but the tenancy
+   * rows could not be written; the details can be added from the tenant's page.
+   */
+  tenancyWritten?: boolean;
 };
 
 export type LogPaymentOptions = {
@@ -257,7 +276,12 @@ async function logPaymentUnchecked(
   options: LogPaymentOptions,
 ): Promise<LogPaymentResult> {
   const newTenant = validateInput(input);
-  const loaded = await load(ctx);
+  // Bad tenancy details refuse the whole request, before anything is read or written.
+  const newTenancy =
+    newTenant !== undefined && input.tenancy !== undefined
+      ? checkNewTenancy(input.portionId, newTenant, input.tenancy)
+      : undefined;
+  const loaded = await loadSnapshot(ctx);
   const portion = loaded.portions.find((p) => p.id === input.portionId);
   if (!portion) throw validation(`Unknown portion "${input.portionId}".`);
 
@@ -357,7 +381,23 @@ async function logPaymentUnchecked(
     action,
   ];
   const logWritten = await appendLogRow(ctx.gateway, logRow, options.retryDelayMs ?? 400);
-  return { entry: { tenant, count, amount: input.amount }, logWritten, logRow };
+  const result: LogPaymentResult = { entry: { tenant, count, amount: input.amount }, logWritten, logRow };
+
+  if (newTenant !== undefined) {
+    // The payment is already saved, so a tenancy failure is reported but never undoes it.
+    try {
+      await recordNewTenant(
+        ctx.gateway,
+        loaded.tenancies,
+        { portionId: portion.id, newTenancy, dateReceived: input.dateReceived },
+        { now: options.now, updatedBy: options.loggedBy },
+      );
+      result.tenancyWritten = true;
+    } catch {
+      result.tenancyWritten = false;
+    }
+  }
+  return result;
 }
 
 export type UndoPaymentInput = {
@@ -395,7 +435,7 @@ async function undoPaymentUnchecked(
   options: LogPaymentOptions,
 ): Promise<UndoPaymentResult> {
   validateMonth(input.month);
-  const loaded = await load(ctx);
+  const loaded = await loadSnapshot(ctx);
   const portion = loaded.portions.find((p) => p.id === input.portionId);
   if (!portion) throw validation(`Unknown portion "${input.portionId}".`);
 

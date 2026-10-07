@@ -1,4 +1,5 @@
 import { nextCount, startsNewCycle, suggestAmount, sumAmounts } from "./rent-rules";
+import { currentTenancy, sameTenantName, summarize, type Tenancy } from "./tenancy";
 import type {
   MonthView,
   NextPayment,
@@ -22,15 +23,15 @@ export function findEntryForMonth(
   return matches.length > 0 ? matches[matches.length - 1].entries[portionId] : null;
 }
 
-/** The most recent entry from a month strictly before `month`. */
-export function findPriorEntry(
+/** The portion's latest entry, optionally only from months strictly before `before`. A month's lower row wins. */
+function latestEntry(
   rows: ScheduleRow[],
   portionId: string,
-  month: YearMonth,
+  before?: YearMonth,
 ): PortionEntry | null {
   let best: ScheduleRow | null = null;
   for (const row of rows) {
-    if (compareYm(row.month, month) >= 0 || !row.entries[portionId]) continue;
+    if ((before && compareYm(row.month, before) >= 0) || !row.entries[portionId]) continue;
     if (
       !best ||
       compareYm(row.month, best.month) > 0 ||
@@ -40,6 +41,20 @@ export function findPriorEntry(
     }
   }
   return best ? best.entries[portionId] : null;
+}
+
+/** The most recent entry from a month strictly before `month`. */
+export function findPriorEntry(
+  rows: ScheduleRow[],
+  portionId: string,
+  month: YearMonth,
+): PortionEntry | null {
+  return latestEntry(rows, portionId, month);
+}
+
+/** The portion's most recent entry in any month. */
+export function findLatestEntry(rows: ScheduleRow[], portionId: string): PortionEntry | null {
+  return latestEntry(rows, portionId);
 }
 
 export const LATER_ENTRY_REASON =
@@ -72,11 +87,15 @@ export function deriveMonthView(
   rows: ScheduleRow[],
   portions: PortionConfig[],
   month: YearMonth,
+  tenancies: Tenancy[] = [],
 ): MonthView {
   const cards: PortionCard[] = portions.map((portion) => {
     const entry = findEntryForMonth(rows, portion.id, month);
     const prior = findPriorEntry(rows, portion.id, month);
     const next = prior ? nextPayment(prior, portion) : null;
+    // Details are shown only for the tenant the card shows, so they never outlive a change of tenant.
+    const name = entry?.tenant ?? next?.tenant;
+    const current = currentTenancy(tenancies, portion.id);
     return {
       portionId: portion.id,
       name: portion.name,
@@ -86,6 +105,10 @@ export function deriveMonthView(
       next,
       undoBlockedReason:
         entry && hasLaterEntry(rows, portion.id, month) ? LATER_ENTRY_REASON : null,
+      tenancy:
+        current && name !== undefined && sameTenantName(current.tenant, name)
+          ? summarize(current)
+          : null,
     };
   });
 

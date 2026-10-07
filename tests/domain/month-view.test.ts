@@ -5,6 +5,7 @@ import {
   hasLaterEntry,
   LATER_ENTRY_REASON,
 } from "@/lib/domain/month-view";
+import { summarize, type Tenancy } from "@/lib/domain/tenancy";
 import { parseSchedule } from "@/lib/sheets/schedule";
 import { baseSchedule, PORTIONS, TOTAL_HEADER } from "../support/fixtures";
 
@@ -114,5 +115,84 @@ describe("undoBlockedReason", () => {
     const rows = [rowFor(8, entry, 3), rowFor(9, entry, 4), rowFor(10, null, 5)];
     expect(hasLaterEntry(rows, "p1", { year: 2026, month: 9 })).toBe(false);
     expect(hasLaterEntry(rows, "p1", { year: 2026, month: 8 })).toBe(true);
+  });
+});
+
+describe("card tenancy summary", () => {
+  const OCT = { year: 2026, month: 10 };
+  const SEP = { year: 2026, month: 9 };
+
+  function tenancy(overrides: Partial<Tenancy> = {}): Tenancy {
+    return {
+      rowNumber: 2,
+      id: "t-1",
+      portionId: "p1",
+      tenant: "Asha",
+      phone: "98765 43210",
+      moveIn: "2026-01-15",
+      agreementEnd: "2027-01-14",
+      advance: 20000,
+      advanceDate: "2026-01-10",
+      advanceStatus: "Held",
+      refund: null,
+      deductions: null,
+      notes: "",
+      moveOut: "",
+      updatedBy: "owner@example.com",
+      updatedAt: "2026-01-15T05:00:00.000Z",
+      ...overrides,
+    };
+  }
+
+  it("is the summary of the current tenancy when the names match", () => {
+    const t = tenancy();
+    expect(card(deriveMonthView(rows, PORTIONS, OCT, [t]), "p1").tenancy).toEqual(summarize(t));
+  });
+
+  it("matches the name ignoring case and surrounding spaces", () => {
+    const t = tenancy({ tenant: "  ASHA " });
+    expect(card(deriveMonthView(rows, PORTIONS, OCT, [t]), "p1").tenancy).toEqual(summarize(t));
+  });
+
+  it("uses the name on a paid card as well as on a pending one", () => {
+    const t = tenancy();
+    expect(card(deriveMonthView(rows, PORTIONS, SEP, [t]), "p1")).toMatchObject({ status: "paid", tenancy: summarize(t) });
+    expect(card(deriveMonthView(rows, PORTIONS, OCT, [t]), "p1").status).toBe("pending");
+  });
+
+  it("is null when the tenancy is for a different tenant name", () => {
+    const view = deriveMonthView(rows, PORTIONS, OCT, [tenancy({ tenant: "Bala" })]);
+    expect(card(view, "p1").tenancy).toBeNull();
+  });
+
+  it("is null for a card with no tenant, even if the portion has a tenancy on file", () => {
+    const view = deriveMonthView(rows, PORTIONS, OCT, [tenancy({ portionId: "p4", tenant: "Farah" })]);
+    expect(card(view, "p4")).toMatchObject({ status: "needs-tenant", tenancy: null });
+  });
+
+  it("ignores a closed tenancy and another portion's tenancy", () => {
+    const view = deriveMonthView(rows, PORTIONS, OCT, [
+      tenancy({ moveOut: "2026-08-31" }),
+      tenancy({ id: "t-2", portionId: "p2", tenant: "Asha" }),
+    ]);
+    expect(card(view, "p1").tenancy).toBeNull();
+    expect(card(view, "p2").tenancy).toBeNull();
+  });
+
+  it("uses the last current row of the portion", () => {
+    const older = tenancy({ id: "t-old", rowNumber: 2 });
+    const newer = tenancy({ id: "t-new", rowNumber: 3, advance: 30000 });
+    const view = deriveMonthView(rows, PORTIONS, OCT, [older, newer]);
+    expect(card(view, "p1").tenancy).toEqual(summarize(newer));
+  });
+
+  it("gives every card a null tenancy when none is passed, and changes nothing else", () => {
+    const without = deriveMonthView(rows, PORTIONS, OCT);
+    const withEmpty = deriveMonthView(rows, PORTIONS, OCT, []);
+    expect(without).toEqual(withEmpty);
+    expect(without.cards.map((c) => c.tenancy)).toEqual([null, null, null, null, null]);
+    const { cards, ...totals } = deriveMonthView(rows, PORTIONS, OCT, [tenancy()]);
+    expect(totals).toEqual({ month: OCT, received: 0, expected: 5450 + 13335 + 9000 + 5100, paidCount: 0 });
+    expect(cards[0]).toMatchObject({ status: "pending", next: { count: 4 } });
   });
 });

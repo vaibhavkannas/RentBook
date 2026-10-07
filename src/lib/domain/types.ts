@@ -1,3 +1,5 @@
+import type { TenancySummary } from "./tenancy";
+
 export type YearMonth = { year: number; month: number };
 
 export type PortionConfig = {
@@ -39,6 +41,11 @@ export type PortionCard = {
   next: NextPayment | null;
   /** For a paid card that cannot be undone, the reason. Null otherwise. */
   undoBlockedReason: string | null;
+  /**
+   * The portion's current tenancy, when its tenant name matches the tenant this card shows.
+   * Null when there are no details yet, or the details are for a different tenant name.
+   */
+  tenancy: TenancySummary | null;
 };
 
 export type MonthView = {

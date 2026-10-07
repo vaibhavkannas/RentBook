@@ -1,12 +1,14 @@
 import { describe, expect, it } from "vitest";
 import {
   getMonthView,
+  getSettings,
   logPayment,
   saveSettings,
   undoPayment,
   withSnapshotCache,
   type SheetsContext,
 } from "@/lib/sheets/service";
+import { moveOutTenancy, saveTenancy } from "@/lib/sheets/tenancy-service";
 import { FakeGateway } from "../support/fake-gateway";
 import { baseSchedule, TOTAL_HEADER } from "../support/fixtures";
 
@@ -86,8 +88,83 @@ describe("cached month views", () => {
   });
 });
 
+describe("cached tenancies", () => {
+  const TENANCY = { portionId: "p1", tenant: "Asha", fields: { moveIn: "2026-01-15", advance: 20000 } };
+  const OWNER = { now: new Date("2026-10-05T04:30:00Z"), updatedBy: "owner@example.com" };
+
+  it("reads Settings, the Schedule and the Tenants tab once for repeated views of any month", async () => {
+    const { ctx, reads } = setup();
+    await getSettings(ctx); // creates the missing tabs, so the reads below are plain ones
+    const before = reads();
+    await getMonthView(ctx, OCT);
+    expect(reads() - before).toBe(3);
+    await getMonthView(ctx, { year: 2026, month: 9 });
+    await getMonthView(ctx, { year: 2026, month: 11 });
+    expect(reads() - before).toBe(3);
+  });
+
+  it("shows a saved tenancy straight away", async () => {
+    const { ctx } = setup();
+    expect((await getMonthView(ctx, OCT)).cards[0].tenancy).toBeNull();
+    await saveTenancy(ctx, TENANCY, OWNER);
+    expect((await getMonthView(ctx, OCT)).cards[0].tenancy).toMatchObject({ moveIn: "2026-01-15", advance: 20000 });
+  });
+
+  it("shows a move-out straight away", async () => {
+    const { ctx } = setup();
+    const { tenancy } = await saveTenancy(ctx, TENANCY, OWNER);
+    expect((await getMonthView(ctx, OCT)).cards[0].tenancy).not.toBeNull();
+    await moveOutTenancy(ctx, { id: tenancy.id, expectedUpdatedAt: tenancy.updatedAt, moveOut: "2026-09-30" }, OWNER);
+    expect((await getMonthView(ctx, OCT)).cards[0].tenancy).toBeNull();
+  });
+
+  it("clears the cache when a save is refused, so the next view is fresh", async () => {
+    const { fake, ctx } = setup();
+    await getMonthView(ctx, OCT);
+    const other = { gateway: fake, scheduleTab: "Schedule", totalHeader: TOTAL_HEADER } as SheetsContext;
+    await saveTenancy(other, TENANCY, OWNER);
+    expect((await getMonthView(ctx, OCT)).cards[0].tenancy).toBeNull(); // still the cached copy
+    await expect(saveTenancy(ctx, TENANCY, OWNER)).rejects.toMatchObject({ code: "conflict" });
+    expect((await getMonthView(ctx, OCT)).cards[0].tenancy).not.toBeNull();
+  });
+
+  it("clears the cache when a move-out is refused, so the next view is fresh", async () => {
+    const { fake, ctx } = setup();
+    const other = { gateway: fake, scheduleTab: "Schedule", totalHeader: TOTAL_HEADER } as SheetsContext;
+    const { tenancy } = await saveTenancy(other, TENANCY, OWNER);
+    expect((await getMonthView(ctx, OCT)).cards[0].tenancy).not.toBeNull();
+    await moveOutTenancy(other, { id: tenancy.id, expectedUpdatedAt: tenancy.updatedAt, moveOut: "2026-09-30" }, OWNER);
+    expect((await getMonthView(ctx, OCT)).cards[0].tenancy).not.toBeNull(); // still the cached copy
+    await expect(
+      moveOutTenancy(ctx, { id: tenancy.id, expectedUpdatedAt: tenancy.updatedAt, moveOut: "2026-09-30" }, OWNER),
+    ).rejects.toMatchObject({ code: "conflict" });
+    expect((await getMonthView(ctx, OCT)).cards[0].tenancy).toBeNull();
+  });
+
+  it("a log that starts a new tenant with details shows them straight away", async () => {
+    const { ctx } = setup();
+    await getMonthView(ctx, OCT);
+    await logPayment(
+      ctx,
+      {
+        month: OCT,
+        portionId: "p1",
+        amount: 6000,
+        dateReceived: "2026-10-05",
+        newTenantName: "Hari",
+        tenancy: { moveIn: "2026-10-01" },
+      },
+      OPTIONS,
+    );
+    expect((await getMonthView(ctx, OCT)).cards[0]).toMatchObject({
+      status: "paid",
+      tenancy: { moveIn: "2026-10-01" },
+    });
+  });
+});
+
 describe("a single page view read", () => {
-  it("fetches the Settings and the Schedule at the same time", async () => {
+  it("fetches the Settings, the Schedule and the Tenants tab at the same time", async () => {
     const fake = new FakeGateway({ Schedule: baseSchedule() });
     const ctx = { gateway: fake, scheduleTab: "Schedule", totalHeader: TOTAL_HEADER } as SheetsContext;
     await getMonthView(ctx, OCT); // creates the missing tabs, so the next read is a plain one
@@ -105,7 +182,7 @@ describe("a single page view read", () => {
       }
     };
     await getMonthView(ctx, OCT);
-    expect(peak).toBe(2);
+    expect(peak).toBe(3);
   });
 });
 
