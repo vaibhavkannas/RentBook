@@ -21,6 +21,7 @@ export async function POST(request: Request) {
           newTenantName: body.newTenantName,
           overwrite: body.overwrite,
           expected: body.expected,
+          tenancy: body.tenancy,
         },
         { now: new Date(), loggedBy: viewer.email },
       ),
