@@ -19,7 +19,7 @@ import {
   closeOpenTenancies,
   type WriteStamp,
 } from "./tenancy-writes";
-import { writeTenancy } from "./tenants-store";
+import { writeTenancyEdit, writeTenancyMoveOut } from "./tenants-store";
 
 const ADVANCE_STATUSES: readonly string[] = ["Held", "Refunded", "Adjusted"] satisfies AdvanceStatus[];
 const MAX_NOTES_LENGTH = 500;
@@ -165,7 +165,8 @@ async function updateTenancy(
     updatedBy: stamp.updatedBy,
     updatedAt: stamp.now.toISOString(),
   };
-  await writeTenancy(ctx.gateway, stored.rowNumber, updated);
+  // Only the columns an edit changes are written: the rest of the row stays as it is in the Sheet.
+  await writeTenancyEdit(ctx.gateway, stored.rowNumber, updated);
   return { tenancy: updated };
 }
 
@@ -236,7 +237,8 @@ async function moveOutUnchecked(
     updatedBy: stamp.updatedBy,
     updatedAt: stamp.now.toISOString(),
   };
-  await writeTenancy(ctx.gateway, stored.rowNumber, closed);
+  // Only the move-out columns are written (Notes only when notes were given).
+  await writeTenancyMoveOut(ctx.gateway, stored.rowNumber, closed, { notes: notes !== undefined });
   return { tenancy: closed };
 }
 

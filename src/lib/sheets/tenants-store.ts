@@ -2,7 +2,7 @@ import type { AdvanceStatus, Tenancy } from "@/lib/domain/tenancy";
 import { isoDayFromSerial } from "@/lib/domain/year-month";
 import { sheetStructure } from "@/lib/errors";
 import { colLetter } from "./a1";
-import type { SheetsGateway } from "./gateway";
+import type { CellWrite, SheetsGateway } from "./gateway";
 
 export const TENANTS_TAB = "Tenants";
 
@@ -129,7 +129,10 @@ export async function appendTenancy(
   await gateway.appendRow(TENANTS_TAB, toCells(row));
 }
 
-/** Rewrites one row (columns A to O) in a single call. */
+/**
+ * Rewrites a whole row (columns A to O) in a single call. The services do not use it for edits or move-outs:
+ * they write only the columns they change (writeTenancyEdit, writeTenancyMoveOut), so hand-typed cells survive.
+ */
 export async function writeTenancy(
   gateway: SheetsGateway,
   rowNumber: number,
@@ -142,6 +145,84 @@ export async function writeTenancy(
       values: [toCells(row)],
     },
   ]);
+}
+
+const columnOf = (header: string) => TENANT_HEADERS.indexOf(header);
+
+/**
+ * One CellWrite per run of neighbouring columns, all for the same row. Only the named columns are written,
+ * so every other cell of the row (hand-typed text, columns added to the right of O) is left exactly as it is.
+ */
+function columnWrites(
+  rowNumber: number,
+  row: Omit<Tenancy, "rowNumber">,
+  headers: string[],
+): CellWrite[] {
+  const cells = toCells(row);
+  const columns = headers.map(columnOf).sort((a, b) => a - b);
+  const runs: number[][] = [];
+  for (const column of columns) {
+    const last = runs[runs.length - 1];
+    if (last && last[last.length - 1] === column - 1) last.push(column);
+    else runs.push([column]);
+  }
+  return runs.map((run) => {
+    const first = `${colLetter(run[0])}${rowNumber}`;
+    return {
+      tab: TENANTS_TAB,
+      a1: run.length === 1 ? first : `${first}:${colLetter(run[run.length - 1])}${rowNumber}`,
+      values: [run.map((column) => cells[column])],
+    };
+  });
+}
+
+/**
+ * Saves an edit of a tenancy: writes Phone to Advance status (D to I), Notes (L), Updated by and Updated at
+ * (N, O), with one updateValues call. The ID, portion, tenant, refund, deductions and move-out cells, and any
+ * column added to the right of O, are never touched, so hand-typed text in them survives.
+ */
+export async function writeTenancyEdit(
+  gateway: SheetsGateway,
+  rowNumber: number,
+  row: Omit<Tenancy, "rowNumber">,
+): Promise<void> {
+  await gateway.updateValues(
+    columnWrites(rowNumber, row, [
+      "Phone",
+      "Move-in date",
+      "Agreement end",
+      "Advance",
+      "Advance date",
+      "Advance status",
+      "Notes",
+      "Updated by",
+      "Updated at",
+    ]),
+  );
+}
+
+/**
+ * Saves a move-out: writes Advance status, Refund, Deductions (I to K), Notes (L, only when `notes` is true),
+ * Move-out date, Updated by and Updated at (M to O), with one updateValues call. Every other cell of the row,
+ * such as hand-typed text in the Advance column, is never touched.
+ */
+export async function writeTenancyMoveOut(
+  gateway: SheetsGateway,
+  rowNumber: number,
+  row: Omit<Tenancy, "rowNumber">,
+  options: { notes: boolean },
+): Promise<void> {
+  await gateway.updateValues(
+    columnWrites(rowNumber, row, [
+      "Advance status",
+      "Refund",
+      "Deductions",
+      ...(options.notes ? ["Notes"] : []),
+      "Move-out date",
+      "Updated by",
+      "Updated at",
+    ]),
+  );
 }
 
 /** The columns `closeTenancyRow` writes: Move-out date, Updated by and Updated at, which end the row at column O. */
