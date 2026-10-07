@@ -35,6 +35,19 @@ export function ymFromSerial(serial: number): YearMonth {
   return { year: date.getUTCFullYear(), month: date.getUTCMonth() + 1 };
 }
 
+/**
+ * The calendar day (YYYY-MM-DD) of a Google Sheets date serial; the time of day is dropped.
+ * Null when the number cannot be a date (not finite, or a year outside 0001 to 9999).
+ */
+export function isoDayFromSerial(serial: number): string | null {
+  if (!Number.isFinite(serial)) return null;
+  const date = new Date((Math.floor(serial) - SERIAL_UNIX_OFFSET) * MS_PER_DAY);
+  const year = date.getUTCFullYear();
+  if (Number.isNaN(year) || year < 1 || year > 9999) return null;
+  const pad = (value: number, width: number) => String(value).padStart(width, "0");
+  return `${pad(year, 4)}-${pad(date.getUTCMonth() + 1, 2)}-${pad(date.getUTCDate(), 2)}`;
+}
+
 /** Calendar month that `now` falls in, for the given IANA time zone. */
 export function currentYm(now: Date, timeZone = "Asia/Kolkata"): YearMonth {
   const [year, month] = todayIso(now, timeZone).split("-").map(Number);

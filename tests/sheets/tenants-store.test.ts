@@ -141,6 +141,26 @@ describe("ensureTenantsTab", () => {
     expect(fake.tabs.get(TENANTS_TAB)).toEqual([wrong]);
   });
 
+  it("names \"Updated at\" and column O when only the last header is wrong", async () => {
+    const wrong = [...TENANT_HEADERS];
+    wrong[14] = "Changed at";
+    const fake = new FakeGateway({ Schedule: baseSchedule(), [TENANTS_TAB]: [wrong] });
+    const error = await structureError(async () => ensureTenantsTab(fake, await fake.listTabs()));
+    expect(error.message).toContain('"Updated at"');
+    expect(error.message).toContain("column O");
+    expect(error.message).toContain('"Changed at"');
+    expect(fake.calls).not.toContain("updateValues");
+  });
+
+  it("names \"Updated at\" and column O when only the last header is missing", async () => {
+    const fake = new FakeGateway({ Schedule: baseSchedule(), [TENANTS_TAB]: [TENANT_HEADERS.slice(0, 14)] });
+    const error = await structureError(async () => ensureTenantsTab(fake, await fake.listTabs()));
+    expect(error.message).toContain('"Updated at"');
+    expect(error.message).toContain("column O");
+    expect(error.message).toContain("found nothing");
+    expect(fake.calls).not.toContain("updateValues");
+  });
+
   it("throws sheet-structure naming the first missing header when the row is too short", async () => {
     const fake = new FakeGateway({ Schedule: baseSchedule(), [TENANTS_TAB]: [TENANT_HEADERS.slice(0, 3)] });
     const error = await structureError(async () => ensureTenantsTab(fake, await fake.listTabs()));
@@ -182,6 +202,68 @@ describe("readTenancies", () => {
       ["a", 2],
       ["b", 5],
     ]);
+  });
+
+  it("skips a row that holds only spaces", async () => {
+    const fake = await ensured();
+    const grid = fake.tabs.get(TENANTS_TAB)!;
+    grid.push([" ", "  "]);
+    grid.push(stored(row({ id: "a" })));
+    grid.push(["   ", "", "\t"]);
+    const all = await readTenancies(fake);
+    expect(all.map((t) => [t.id, t.rowNumber])).toEqual([["a", 3]]);
+  });
+
+  it("reads amounts only from real numbers, never from numeric-looking text", async () => {
+    const fake = await ensured();
+    fake.tabs.get(TENANTS_TAB)!.push(
+      ["t-1", "p1", "Asha", "", "2026-01-15", "", "5000", "", "Held", "5000", "5000", "", "", "", ""],
+      ["t-2", "p1", "Bala", "", "2026-01-15", "", 5000, "", "Held", 5000, 5000, "", "", "", ""],
+    );
+    const [text, numbers] = await readTenancies(fake);
+    expect(text).toMatchObject({ advance: null, refund: null, deductions: null });
+    expect(numbers).toMatchObject({ advance: 5000, refund: 5000, deductions: 5000 });
+  });
+
+  it("reads a date typed by hand into a date cell (a serial number) as YYYY-MM-DD", async () => {
+    const fake = await ensured();
+    fake.tabs.get(TENANTS_TAB)!.push([
+      "t-1", "p1", "Asha", "", 46037, 46401, 20000, 46032, "Held", "", "", "", 46295, "owner@example.com", "2026-01-15T05:00:00.000Z",
+    ]);
+    const [only] = await readTenancies(fake);
+    expect(only).toMatchObject({
+      moveIn: "2026-01-15",
+      agreementEnd: "2027-01-14",
+      advanceDate: "2026-01-10",
+      moveOut: "2026-09-30",
+    });
+    expect(only.updatedAt).toBe("2026-01-15T05:00:00.000Z");
+  });
+
+  it("drops the time of day from a date serial and leaves text dates exactly as typed", async () => {
+    const fake = await ensured();
+    fake.tabs.get(TENANTS_TAB)!.push(
+      ["t-1", "p1", "Asha", "", 46037.75, "2027-01-14", "", "15 Jan 2026", "", "", "", "", "", "", ""],
+    );
+    const [only] = await readTenancies(fake);
+    expect(only.moveIn).toBe("2026-01-15");
+    expect(only.agreementEnd).toBe("2027-01-14");
+    expect(only.advanceDate).toBe("15 Jan 2026");
+  });
+
+  it("keeps a number that cannot be a date as text instead of failing", async () => {
+    const fake = await ensured();
+    fake.tabs.get(TENANTS_TAB)!.push(["t-1", "p1", "Asha", "", 1e12, "", "", "", "", "", "", "", "", "", ""]);
+    const [only] = await readTenancies(fake);
+    expect(only.moveIn).toBe("1000000000000");
+  });
+
+  it("does not turn a number in a text column into a date", async () => {
+    const fake = await ensured();
+    fake.tabs.get(TENANTS_TAB)!.push(["t-1", "p1", "Asha", 9876543210, "2026-01-15", "", "", "", "", "", "", 46037, "", "", ""]);
+    const [only] = await readTenancies(fake);
+    expect(only.phone).toBe("9876543210");
+    expect(only.notes).toBe("46037");
   });
 
   it("parses numbers, blanks and an unknown status to null", async () => {

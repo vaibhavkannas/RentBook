@@ -3,6 +3,7 @@ import {
   addMonths,
   compareYm,
   currentYm,
+  isoDayFromSerial,
   isValidIsoDay,
   monthIndexFromName,
   monthName,
@@ -48,6 +49,34 @@ describe("sheets serials", () => {
     expect(ymFromSerial(43831)).toEqual({ year: 2020, month: 1 });
     expect(ymFromSerial(43831 + 20.5)).toEqual({ year: 2020, month: 1 });
     expect(ymFromSerial(serialFromYm({ year: 2026, month: 10 }))).toEqual({ year: 2026, month: 10 });
+  });
+});
+
+describe("isoDayFromSerial", () => {
+  it("turns known serials into the calendar day", () => {
+    expect(isoDayFromSerial(25569)).toBe("1970-01-01");
+    expect(isoDayFromSerial(43831)).toBe("2020-01-01");
+    expect(isoDayFromSerial(46037)).toBe("2026-01-15");
+    expect(isoDayFromSerial(46401)).toBe("2027-01-14");
+    expect(isoDayFromSerial(0)).toBe("1899-12-30");
+  });
+  it("drops the time of day", () => {
+    expect(isoDayFromSerial(46037.75)).toBe("2026-01-15");
+    expect(isoDayFromSerial(46037.999)).toBe("2026-01-15");
+  });
+  it("round-trips the first day of a month", () => {
+    expect(isoDayFromSerial(serialFromYm({ year: 2026, month: 10 }))).toBe("2026-10-01");
+  });
+  it("agrees with isValidIsoDay", () => {
+    for (const serial of [1, 59, 60, 61, 20000, 46387, 80000]) {
+      expect(isValidIsoDay(isoDayFromSerial(serial)!)).toBe(true);
+    }
+  });
+  it("returns null for a number that is not a plausible date", () => {
+    expect(isoDayFromSerial(Number.NaN)).toBeNull();
+    expect(isoDayFromSerial(Number.POSITIVE_INFINITY)).toBeNull();
+    expect(isoDayFromSerial(1e12)).toBeNull();
+    expect(isoDayFromSerial(-1e9)).toBeNull();
   });
 });
 

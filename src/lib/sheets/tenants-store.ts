@@ -1,4 +1,5 @@
 import type { AdvanceStatus, Tenancy } from "@/lib/domain/tenancy";
+import { isoDayFromSerial } from "@/lib/domain/year-month";
 import { sheetStructure } from "@/lib/errors";
 import { colLetter } from "./a1";
 import type { SheetsGateway } from "./gateway";
@@ -63,6 +64,10 @@ const isBlank = (cell: unknown) => cell === undefined || cell === null || String
 
 const text = (cell: unknown) => (cell === undefined || cell === null ? "" : String(cell));
 
+/** A date column: text stays as it is, a number (a date typed into a Sheet date cell) becomes YYYY-MM-DD. */
+const day = (cell: unknown) =>
+  typeof cell === "number" ? (isoDayFromSerial(cell) ?? String(cell)) : text(cell);
+
 const amount = (cell: unknown) => (typeof cell === "number" && Number.isFinite(cell) ? cell : null);
 
 const status = (cell: unknown): AdvanceStatus | null =>
@@ -80,15 +85,15 @@ export async function readTenancies(gateway: SheetsGateway): Promise<Tenancy[]> 
       portionId: text(cells[1]),
       tenant: text(cells[2]),
       phone: text(cells[3]),
-      moveIn: text(cells[4]),
-      agreementEnd: text(cells[5]),
+      moveIn: day(cells[4]),
+      agreementEnd: day(cells[5]),
       advance: amount(cells[6]),
-      advanceDate: text(cells[7]),
+      advanceDate: day(cells[7]),
       advanceStatus: status(cells[8]),
       refund: amount(cells[9]),
       deductions: amount(cells[10]),
       notes: text(cells[11]),
-      moveOut: text(cells[12]),
+      moveOut: day(cells[12]),
       updatedBy: text(cells[13]),
       updatedAt: text(cells[14]),
     });
