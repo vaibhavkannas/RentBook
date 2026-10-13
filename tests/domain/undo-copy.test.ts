@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { undoConfirmationText, undoToastText, UNDO_CONFLICT_MESSAGE } from "@/lib/undo-copy";
+import { LOG_RETRY_UNCONFIRMED_MESSAGE } from "@/lib/payment-request";
+import {
+  undoConfirmationText,
+  undoLogRetryFailureMessage,
+  undoToastText,
+  UNDO_CONFLICT_MESSAGE,
+} from "@/lib/undo-copy";
 
 describe("undoConfirmationText", () => {
   it("names the tenant, the payment number, the amount, the portion and the month", () => {
@@ -33,5 +39,21 @@ describe("undoToastText", () => {
     expect(undoToastText("First floor, single bedroom")).toBe(
       "First floor, single bedroom: payment undone",
     );
+  });
+});
+
+describe("undoLogRetryFailureMessage", () => {
+  it("says the undo is safe when the retry got an answer and the log entry still did not save", () => {
+    expect(undoLogRetryFailureMessage({ ok: false })).toBe(
+      "The log entry still didn't save. The undo itself is safe in your Schedule.",
+    );
+    expect(undoLogRetryFailureMessage({ ok: true, logWritten: false })).toBe(
+      "The log entry still didn't save. The undo itself is safe in your Schedule.",
+    );
+  });
+
+  it("sends the person to the Activity screen when the retry got no answer at all", () => {
+    expect(undoLogRetryFailureMessage(null)).toBe(LOG_RETRY_UNCONFIRMED_MESSAGE);
+    expect(undoLogRetryFailureMessage(null)).toMatch(/Check the Activity screen/);
   });
 });

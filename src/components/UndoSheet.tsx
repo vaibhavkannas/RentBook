@@ -3,7 +3,12 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import type { PortionCard } from "@/lib/domain/types";
-import { undoConfirmationText, undoToastText, UNDO_CONFLICT_MESSAGE } from "@/lib/undo-copy";
+import {
+  undoConfirmationText,
+  undoLogRetryFailureMessage,
+  undoToastText,
+  UNDO_CONFLICT_MESSAGE,
+} from "@/lib/undo-copy";
 
 type Props = {
   monthKey: string;
@@ -103,7 +108,7 @@ export default function UndoSheet({ monthKey, monthLabel, card, onClose, onDone 
       onDone(toastText);
       return onClose();
     }
-    setError("The log entry still didn't save. The undo itself is safe in your Schedule.");
+    setError(undoLogRetryFailureMessage(body));
   }
 
   return (

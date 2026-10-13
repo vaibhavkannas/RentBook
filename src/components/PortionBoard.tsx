@@ -96,7 +96,7 @@ export default function PortionBoard({ monthKey, monthLabel, cards, defaultDate 
                       <Link
                         href={`/tenants/${encodeURIComponent(card.portionId)}`}
                         aria-label={`${card.tenancy ? "Details" : "Add details"} for ${card.name}`}
-                        className="inline-flex min-h-11 items-center text-sm text-muted underline"
+                        className="inline-flex min-h-11 min-w-11 items-center text-sm text-muted underline"
                       >
                         {card.tenancy ? "Details" : "Add details"}
                       </Link>
