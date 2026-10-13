@@ -54,6 +54,18 @@ export function lastUpdatedText(t: Pick<Tenancy, "updatedBy" | "updatedAt">): st
   return by === "" ? formatSavedAt(at) : `${by} · ${formatSavedAt(at)}`;
 }
 
+/** Under "What happened to the advance?" in the move-out form. */
+export const MOVE_OUT_OUTCOME_HINT =
+  "Refunded: given back to the tenant. Adjusted: used against rent or damage. Held: still kept.";
+
+/** Under the Refund and Deductions fields of the move-out form. */
+export const MOVE_OUT_RUPEES_HINT = "Whole rupees, leave blank if none.";
+
+/** The line under the "Add details" heading: whose details these are, and where a different tenant is added. */
+export function addDetailsHint(scheduleTenant: string): string {
+  return `Adding details for ${scheduleTenant}. A new tenant is added with New tenant on the month screen.`;
+}
+
 /**
  * A short note for the "Add details" form of a portion that has no current tenancy: either earlier details for
  * another tenant name will be closed by saving, or the same tenant already moved out. Null when there is nothing to say.

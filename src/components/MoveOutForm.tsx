@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import type { AdvanceStatus } from "@/lib/domain/tenancy";
 import { postJson } from "@/lib/post-json";
 import {
@@ -11,7 +11,14 @@ import {
   type MoveOutFormText,
   type MoveOutTarget,
 } from "@/lib/tenancy-input";
-import { saveFailure, type TenancyApiBody } from "@/lib/tenancy-response";
+import {
+  applyPageMove,
+  pageAfterConflict,
+  pageAfterSave,
+  saveFailure,
+  type TenancyApiBody,
+} from "@/lib/tenancy-response";
+import { MOVE_OUT_OUTCOME_HINT, MOVE_OUT_RUPEES_HINT } from "@/lib/tenancy-view";
 
 type Props = {
   /** The tenancy being closed, as the page was rendered. */
@@ -20,6 +27,10 @@ type Props = {
   initial: MoveOutFormText;
   /** Only used in the button's name. */
   tenant: string;
+  /** The portion whose page this is: where the form goes after a save or a conflict. */
+  portionId: string;
+  /** The page is showing the changed-just-now notice, so a save that goes through has to take it away. */
+  noticeShown?: boolean;
 };
 
 const FIELD = "mt-1 min-h-12 w-full rounded-xl border border-control bg-surface px-3 text-base";
@@ -38,14 +49,14 @@ const OUTCOMES: Array<{ value: AdvanceStatus; label: string }> = [
  * when the form was opened. The `target` and `initial` props can change later (router.refresh() delivers newer
  * ones), but they are only used when the form is opened, so a save never mixes a newer token with older values.
  */
-export default function MoveOutForm({ target, initial, tenant }: Props) {
+export default function MoveOutForm({ target, initial, tenant, portionId, noticeShown = false }: Props) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState(() => startDraft(target, initial));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  /** Shown while the form is closed after the page turned out to be out of date. */
-  const [stale, setStale] = useState<string | null>(null);
+  const outcomeHint = useId();
+  const rupeesHint = useId();
   const openButton = useRef<HTMLButtonElement>(null);
   const wasOpen = useRef(open);
 
@@ -73,17 +84,17 @@ export default function MoveOutForm({ target, initial, tenant }: Props) {
     const body = await postJson<TenancyApiBody>("/api/tenancies/move-out", request.body);
     if (body?.ok) {
       // The refreshed page shows the tenancy as a past one and replaces this form. Until then it stays disabled.
-      router.refresh();
+      applyPageMove(router, pageAfterSave(portionId, noticeShown));
       return;
     }
     setBusy(false);
     const failure = saveFailure(body);
     if (failure.refresh) {
-      // The page behind the form is out of date. Load what is in the Sheet now and close the form, so that
-      // opening it again starts from the fresh page. The message is shown while it is closed.
-      router.refresh();
+      // The page behind the form is out of date. Open it again: it loads what is in the Sheet now and shows the
+      // changed-just-now notice itself, so the notice does not go away when the page replaces this form. The form
+      // closes, so that opening it again starts from the fresh page.
+      applyPageMove(router, pageAfterConflict(portionId, noticeShown));
       setOpen(false);
-      setStale(failure.message);
       return;
     }
     setError(failure.message);
@@ -91,14 +102,6 @@ export default function MoveOutForm({ target, initial, tenant }: Props) {
 
   return (
     <>
-      {/* The alert region stays on the page, so screen readers announce the text that appears in it. */}
-      <div
-        role="alert"
-        className={stale ? "mt-3 rounded-lg bg-danger-bg px-3 py-2 text-sm text-danger-ink" : undefined}
-      >
-        {stale}
-      </div>
-
       {!open ? (
         <button
           ref={openButton}
@@ -106,7 +109,6 @@ export default function MoveOutForm({ target, initial, tenant }: Props) {
           onClick={() => {
             setDraft(startDraft(target, initial));
             setError(null);
-            setStale(null);
             setOpen(true);
           }}
           aria-label={`Move out ${tenant}`}
@@ -136,43 +138,56 @@ export default function MoveOutForm({ target, initial, tenant }: Props) {
           </label>
 
           {draft.seen.hasAdvance && (
-            <label className="block text-sm">
-              <span className="text-muted">What happened to the advance?</span>
-              <select
-                value={form.advanceStatus}
-                onChange={(event) => set({ advanceStatus: event.target.value as AdvanceStatus })}
-                className={FIELD}
-              >
-                {OUTCOMES.map((outcome) => (
-                  <option key={outcome.value} value={outcome.value}>
-                    {outcome.label}
-                  </option>
-                ))}
-              </select>
-            </label>
+            <div>
+              <label className="block text-sm">
+                <span className="text-muted">What happened to the advance?</span>
+                <select
+                  value={form.advanceStatus}
+                  onChange={(event) => set({ advanceStatus: event.target.value as AdvanceStatus })}
+                  aria-describedby={outcomeHint}
+                  className={FIELD}
+                >
+                  {OUTCOMES.map((outcome) => (
+                    <option key={outcome.value} value={outcome.value}>
+                      {outcome.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <p id={outcomeHint} className="mt-1 text-sm text-muted">
+                {MOVE_OUT_OUTCOME_HINT}
+              </p>
+            </div>
           )}
 
-          <label className="block text-sm">
-            <span className="text-muted">Refund (₹)</span>
-            <input
-              value={form.refund}
-              onChange={(event) => set({ refund: event.target.value })}
-              inputMode="numeric"
-              autoComplete="off"
-              className={FIELD}
-            />
-          </label>
+          <div>
+            <label className="block text-sm">
+              <span className="text-muted">Refund (₹)</span>
+              <input
+                value={form.refund}
+                onChange={(event) => set({ refund: event.target.value })}
+                inputMode="numeric"
+                autoComplete="off"
+                aria-describedby={rupeesHint}
+                className={FIELD}
+              />
+            </label>
 
-          <label className="block text-sm">
-            <span className="text-muted">Deductions (₹)</span>
-            <input
-              value={form.deductions}
-              onChange={(event) => set({ deductions: event.target.value })}
-              inputMode="numeric"
-              autoComplete="off"
-              className={FIELD}
-            />
-          </label>
+            <label className="mt-3 block text-sm">
+              <span className="text-muted">Deductions (₹)</span>
+              <input
+                value={form.deductions}
+                onChange={(event) => set({ deductions: event.target.value })}
+                inputMode="numeric"
+                autoComplete="off"
+                aria-describedby={rupeesHint}
+                className={FIELD}
+              />
+            </label>
+            <p id={rupeesHint} className="mt-1 text-sm text-muted">
+              {MOVE_OUT_RUPEES_HINT}
+            </p>
+          </div>
 
           <label className="block text-sm">
             <span className="text-muted">Notes</span>

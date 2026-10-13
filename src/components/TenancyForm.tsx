@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { postJson } from "@/lib/post-json";
 import {
   buildTenancyDraftRequest,
@@ -10,13 +10,21 @@ import {
   type TenancyFormText,
   type TenancyTarget,
 } from "@/lib/tenancy-input";
-import { saveFailure, type TenancyApiBody } from "@/lib/tenancy-response";
+import {
+  applyPageMove,
+  pageAfterConflict,
+  pageAfterSave,
+  saveFailure,
+  type TenancyApiBody,
+} from "@/lib/tenancy-response";
 
 type Props = {
   /** What this form saves. An edit carries the updated-at the page was rendered with. */
   target: TenancyTarget;
   /** The starting values. An edit form starts again from them every time it is opened. */
   initial: TenancyFormText;
+  /** The page is showing the changed-just-now notice, so a save that goes through has to take it away. */
+  noticeShown?: boolean;
 };
 
 const FIELD = "mt-1 min-h-12 w-full rounded-xl border border-control bg-surface px-3 text-base";
@@ -29,7 +37,7 @@ const FIELD = "mt-1 min-h-12 w-full rounded-xl border border-control bg-surface 
  * was opened. The `target` and `initial` props can change later (router.refresh() delivers newer ones), but
  * they are only used when a form is opened, so a save never mixes a newer token with older values.
  */
-export default function TenancyForm({ target, initial }: Props) {
+export default function TenancyForm({ target, initial, noticeShown = false }: Props) {
   const router = useRouter();
   const editing = target.mode === "edit";
   const [open, setOpen] = useState(!editing);
@@ -37,8 +45,7 @@ export default function TenancyForm({ target, initial }: Props) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
-  /** Shown while the edit form is closed after the page turned out to be out of date. */
-  const [stale, setStale] = useState<string | null>(null);
+  const moveInHint = useId();
   const editButton = useRef<HTMLButtonElement>(null);
   const wasOpen = useRef(open);
 
@@ -65,7 +72,7 @@ export default function TenancyForm({ target, initial }: Props) {
     setError(null);
     const body = await postJson<TenancyApiBody>("/api/tenancies", request.body);
     if (body?.ok) {
-      router.refresh();
+      applyPageMove(router, pageAfterSave(target.portionId, noticeShown));
       setSaved(true);
       // An edit form closes. A create form stays disabled until the refreshed page replaces it.
       if (editing) {
@@ -77,14 +84,12 @@ export default function TenancyForm({ target, initial }: Props) {
     setBusy(false);
     const failure = saveFailure(body);
     if (failure.refresh) {
-      // The page behind the form is out of date. Load what is in the Sheet now. An edit form closes, so that
-      // opening it again starts from the fresh page, and the message is shown while it is closed.
-      router.refresh();
-      if (editing) {
-        setOpen(false);
-        setStale(failure.message);
-        return;
-      }
+      // The page behind the form is out of date. Open it again: it loads what is in the Sheet now and shows the
+      // changed-just-now notice itself, so the notice does not go away when the page replaces this form. An edit
+      // form closes, so that opening it again starts from the fresh page.
+      applyPageMove(router, pageAfterConflict(target.portionId, noticeShown));
+      if (editing) setOpen(false);
+      return;
     }
     setError(failure.message);
   }
@@ -106,13 +111,6 @@ export default function TenancyForm({ target, initial }: Props) {
       >
         {statusText}
       </div>
-      <div
-        role="alert"
-        className={stale ? "mt-3 rounded-lg bg-danger-bg px-3 py-2 text-sm text-danger-ink" : undefined}
-      >
-        {stale}
-      </div>
-
       {!open ? (
         <div className="mt-3">
           <button
@@ -123,7 +121,6 @@ export default function TenancyForm({ target, initial }: Props) {
               setDraft(startDraft(target, initial));
               setError(null);
               setSaved(false);
-              setStale(null);
               setOpen(true);
             }}
             className="min-h-11 rounded-xl border border-control px-4 font-medium"
@@ -153,16 +150,24 @@ export default function TenancyForm({ target, initial }: Props) {
             />
           </label>
 
-          <label className="block text-sm">
-            <span className="text-muted">Move-in date</span>
-            <input
-              type="date"
-              value={form.moveIn}
-              onChange={(event) => set({ moveIn: event.target.value })}
-              required
-              className={FIELD}
-            />
-          </label>
+          <div>
+            <label className="block text-sm">
+              <span className="text-muted">Move-in date</span>
+              <input
+                type="date"
+                value={form.moveIn}
+                onChange={(event) => set({ moveIn: event.target.value })}
+                required
+                aria-describedby={editing ? undefined : moveInHint}
+                className={FIELD}
+              />
+            </label>
+            {!editing && (
+              <p id={moveInHint} className="mt-1 text-sm text-muted">
+                Change this if the tenant moved in earlier.
+              </p>
+            )}
+          </div>
 
           <label className="block text-sm">
             <span className="text-muted">Agreement end</span>

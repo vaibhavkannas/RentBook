@@ -67,8 +67,11 @@ function data(overrides: Partial<PortionTenants> = {}): PortionTenants {
   return { portion: PORTION, scheduleTenant: "Asha", current: tenancy(), mismatched: null, past: [], ...overrides };
 }
 
-async function render(portionId = "p1"): Promise<string> {
-  const page = (await TenantsPage({ params: Promise.resolve({ portionId }) })) as ReactElement;
+async function render(portionId = "p1", searchParams: Record<string, string | string[] | undefined> = {}): Promise<string> {
+  const page = (await TenantsPage({
+    params: Promise.resolve({ portionId }),
+    searchParams: Promise.resolve(searchParams),
+  })) as ReactElement;
   return renderToStaticMarkup(createElement(() => page));
 }
 
@@ -115,6 +118,25 @@ describe("the tenant details page", () => {
     expect(html).not.toContain("Add details");
   });
 
+  it("shows no changed-just-now notice on a normal visit", async () => {
+    const html = await render();
+    expect(html).not.toContain("This changed just now");
+    expect(await render("p1", { changed: "0" })).not.toContain("This changed just now");
+  });
+
+  it("shows a changed-just-now notice at the top when the page was opened after a conflict", async () => {
+    const html = await render("p1", { changed: "1" });
+    expect(html).toContain("This changed just now. The page was updated. Please check and save again.");
+    expect(html).toMatch(/role="status" class="[^"]*bg-warn-bg[^"]*text-warn-ink[^"]*">This changed just now/);
+    // above the tenant line and the cards
+    expect(html.indexOf("This changed just now")).toBeLessThan(html.indexOf("Tenant in the Schedule"));
+  });
+
+  it("still shows the notice when there is no current tenancy", async () => {
+    mocks.getPortionTenants.mockResolvedValue(data({ current: null }));
+    expect(await render("p1", { changed: "1" })).toContain("This changed just now");
+  });
+
   it("shows Not added for what is empty", async () => {
     mocks.getPortionTenants.mockResolvedValue(
       data({ current: tenancy({ phone: "", agreementEnd: "", advance: null, advanceStatus: null, notes: "" }) }),
@@ -131,6 +153,28 @@ describe("the tenant details page", () => {
     expect(html).toContain('aria-label="Add tenancy details"');
     expect(html).not.toContain('id="move-out-heading"');
     expect(html).not.toContain(">Edit<");
+  });
+
+  it("says whose details are being added, and where a new tenant is added, under the Add details heading", async () => {
+    mocks.getPortionTenants.mockResolvedValue(data({ current: null, scheduleTenant: "Hari" }));
+    const html = await render();
+    expect(html).toContain("Adding details for Hari. A new tenant is added with New tenant on the month screen.");
+    expect(html.indexOf("Add details</h3>")).toBeLessThan(html.indexOf("Adding details for Hari"));
+    expect(html.indexOf("Adding details for Hari")).toBeLessThan(html.indexOf("<form"));
+  });
+
+  it("has no Adding details hint when the Schedule names no tenant, and none while details exist", async () => {
+    mocks.getPortionTenants.mockResolvedValue(data({ scheduleTenant: null, current: null }));
+    expect(await render()).not.toContain("Adding details for");
+    mocks.getPortionTenants.mockResolvedValue(data());
+    expect(await render()).not.toContain("Adding details for");
+  });
+
+  it("hints under Move-in date that it can be changed, in the Add details form only", async () => {
+    mocks.getPortionTenants.mockResolvedValue(data({ current: null }));
+    expect(await render()).toContain("Change this if the tenant moved in earlier.");
+    mocks.getPortionTenants.mockResolvedValue(data());
+    expect(await render()).not.toContain("Change this if the tenant moved in earlier.");
   });
 
   it("says earlier details for another tenant will be closed, when the names differ", async () => {

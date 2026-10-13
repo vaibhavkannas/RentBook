@@ -1,9 +1,19 @@
-import { describe, expect, it } from "vitest";
-import { saveFailure, TENANCY_CONFLICT_MESSAGE, TENANCY_NO_CONFIRMATION } from "@/lib/tenancy-response";
+import { describe, expect, it, vi } from "vitest";
+import {
+  applyPageMove,
+  changedPagePath,
+  pageAfterConflict,
+  pageAfterSave,
+  saveFailure,
+  showChangedNotice,
+  tenantsPagePath,
+  TENANCY_CONFLICT_MESSAGE,
+  TENANCY_NO_CONFIRMATION,
+} from "@/lib/tenancy-response";
 
 describe("saveFailure", () => {
   it("says the page was updated, and asks for a refresh, on a conflict", () => {
-    expect(TENANCY_CONFLICT_MESSAGE).toBe("This changed just now. The page was updated, please check and save again.");
+    expect(TENANCY_CONFLICT_MESSAGE).toBe("This changed just now. The page was updated. Please check and save again.");
     expect(
       saveFailure({ ok: false, error: { code: "conflict", message: "The tenancy of Asha was changed by someone else." } }),
     ).toEqual({ message: TENANCY_CONFLICT_MESSAGE, refresh: true });
@@ -27,5 +37,70 @@ describe("saveFailure", () => {
 
   it("gives a general message when the answer has no error", () => {
     expect(saveFailure({ ok: false })).toEqual({ message: "Something went wrong. Try again.", refresh: false });
+  });
+});
+
+describe("the address of the tenant details page", () => {
+  it("is the plain page for a normal visit, with the portion id encoded", () => {
+    expect(tenantsPagePath("p1")).toBe("/tenants/p1");
+    expect(tenantsPagePath("first floor/2")).toBe("/tenants/first%20floor%2F2");
+  });
+
+  it("asks the page to show the notice after a conflict", () => {
+    expect(changedPagePath("p1")).toBe("/tenants/p1?changed=1");
+    expect(changedPagePath("first floor/2")).toBe("/tenants/first%20floor%2F2?changed=1");
+  });
+});
+
+describe("showChangedNotice", () => {
+  it("shows the notice only when the address says changed=1", () => {
+    expect(showChangedNotice({ changed: "1" })).toBe(true);
+    expect(showChangedNotice({ changed: ["0", "1"] })).toBe(true);
+  });
+
+  it("does not show it on a normal visit, or for any other value", () => {
+    expect(showChangedNotice(undefined)).toBe(false);
+    expect(showChangedNotice({})).toBe(false);
+    expect(showChangedNotice({ changed: undefined })).toBe(false);
+    expect(showChangedNotice({ changed: "" })).toBe(false);
+    expect(showChangedNotice({ changed: "0" })).toBe(false);
+    expect(showChangedNotice({ changed: "true" })).toBe(false);
+    expect(showChangedNotice({ other: "1" })).toBe(false);
+  });
+});
+
+describe("where the page goes after a save or a conflict", () => {
+  it("opens the page with the notice after a conflict, scrolled to the top so the notice is seen", () => {
+    expect(pageAfterConflict("p1", false)).toEqual({ kind: "replace", url: "/tenants/p1?changed=1", scroll: true });
+  });
+
+  it("only reloads after a conflict when the notice is already there", () => {
+    expect(pageAfterConflict("p1", true)).toEqual({ kind: "refresh" });
+  });
+
+  it("only reloads after a save on a normal visit", () => {
+    expect(pageAfterSave("p1", false)).toEqual({ kind: "refresh" });
+  });
+
+  it("goes back to the plain page after a save when the notice is showing, so it goes away, without jumping", () => {
+    expect(pageAfterSave("p1", true)).toEqual({ kind: "replace", url: "/tenants/p1", scroll: false });
+  });
+});
+
+describe("applyPageMove", () => {
+  it("reloads the page for a refresh", () => {
+    const router = { refresh: vi.fn(), replace: vi.fn() };
+    applyPageMove(router, { kind: "refresh" });
+    expect(router.refresh).toHaveBeenCalledTimes(1);
+    expect(router.replace).not.toHaveBeenCalled();
+  });
+
+  it("replaces the address, with the scroll choice, for a replace", () => {
+    const router = { refresh: vi.fn(), replace: vi.fn() };
+    applyPageMove(router, { kind: "replace", url: "/tenants/p1?changed=1", scroll: true });
+    expect(router.replace).toHaveBeenCalledWith("/tenants/p1?changed=1", { scroll: true });
+    expect(router.refresh).not.toHaveBeenCalled();
+    applyPageMove(router, { kind: "replace", url: "/tenants/p1", scroll: false });
+    expect(router.replace).toHaveBeenLastCalledWith("/tenants/p1", { scroll: false });
   });
 });

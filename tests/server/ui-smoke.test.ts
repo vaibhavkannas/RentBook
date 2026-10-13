@@ -161,11 +161,25 @@ describe("TenancyForm", () => {
     expect(out).toContain('value="2026-10-05"');
     expect(out).toContain("Save details");
     expect(out).toContain('maxLength="500"');
-    // the status and alert regions are on the page from the start, empty, so their text is announced when it appears
+    // the status region is on the page from the start, empty, so its text is announced when it appears
     expect(out).toContain('<div role="status"></div>');
-    expect(out).toContain('<div role="alert"></div>');
     expect(out).not.toContain('<p role="alert"');
+    // a conflict is shown by the page itself, not by the form
+    expect(out).not.toContain('role="alert"');
     expect(out).not.toContain(">Cancel<");
+  });
+
+  it("hints under the move-in date of the Add details form that it can be changed, and links the hint to the field", () => {
+    const out = html(
+      createElement(TenancyForm, {
+        target: { mode: "create", portionId: "p1", tenant: "Asha" },
+        initial: emptyTenancyForm("2026-10-05"),
+      }),
+    );
+    expect(out).toContain("Change this if the tenant moved in earlier.");
+    const hintId = out.match(/<p id="([^"]+)"[^>]*>Change this if the tenant moved in earlier\./)?.[1];
+    expect(hintId).toBeTruthy();
+    expect(out).toContain(`aria-describedby="${hintId}"`);
   });
 
   it("renders the edit form closed, behind an Edit button", () => {
@@ -177,7 +191,7 @@ describe("TenancyForm", () => {
     );
     expect(out).toContain(">Edit<");
     expect(out).toContain('<div role="status"></div>');
-    expect(out).toContain('<div role="alert"></div>');
+    expect(out).not.toContain('role="alert"');
     expect(out).not.toContain("<form");
   });
 });
@@ -187,13 +201,15 @@ describe("MoveOutForm", () => {
     const out = html(
       createElement(MoveOutForm, {
         tenant: "Asha",
+        portionId: "p1",
         target: { id: "t-1", expectedUpdatedAt: "x", hasAdvance: true, initialNotes: "" },
         initial: emptyMoveOutForm("2026-10-05", { advanceStatus: "Held", notes: "" }),
       }),
     );
     expect(out).toContain('aria-label="Move out Asha"');
     expect(out).toContain(">Move out<");
-    expect(out).toContain('<div role="alert"></div>');
+    // a conflict is shown by the page itself, not by the form
+    expect(out).not.toContain('role="alert"');
     expect(out).not.toContain("<form");
   });
 });

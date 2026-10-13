@@ -1,8 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
+  addDetailsHint,
   advanceOutcome,
   advanceSummary,
   lastUpdatedText,
+  MOVE_OUT_OUTCOME_HINT,
+  MOVE_OUT_RUPEES_HINT,
   noCurrentTenancyNote,
   phoneHref,
   tenancyPeriod,
@@ -154,5 +157,25 @@ describe("noCurrentTenancyNote", () => {
     expect(
       noCurrentTenancyNote({ scheduleTenant: null, mismatched: null, lastPast: { tenant: "Asha", moveOut: "2026-09-30" } }),
     ).toBeNull();
+  });
+});
+
+describe("addDetailsHint", () => {
+  it("names the tenant the Schedule has and says where a new tenant is added", () => {
+    expect(addDetailsHint("Asha")).toBe(
+      "Adding details for Asha. A new tenant is added with New tenant on the month screen.",
+    );
+  });
+});
+
+describe("the move-out form hints", () => {
+  it("explain the three outcomes of the advance in plain words", () => {
+    expect(MOVE_OUT_OUTCOME_HINT).toBe(
+      "Refunded: given back to the tenant. Adjusted: used against rent or damage. Held: still kept.",
+    );
+  });
+
+  it("say that Refund and Deductions are whole rupees and may stay blank", () => {
+    expect(MOVE_OUT_RUPEES_HINT).toBe("Whole rupees, leave blank if none.");
   });
 });

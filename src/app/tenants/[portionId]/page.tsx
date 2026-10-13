@@ -12,7 +12,9 @@ import { getSheetsContext } from "@/lib/server/context";
 import { readWrittenAt } from "@/lib/server/freshness";
 import { getPortionTenants, type PortionTenants } from "@/lib/sheets/tenancy-service";
 import { emptyMoveOutForm, emptyTenancyForm, tenancyFormText } from "@/lib/tenancy-input";
+import { showChangedNotice, TENANCY_CONFLICT_MESSAGE } from "@/lib/tenancy-response";
 import {
+  addDetailsHint,
   advanceOutcome,
   advanceSummary,
   lastUpdatedText,
@@ -58,11 +60,20 @@ function Header({ title }: { title: string }) {
   );
 }
 
-export default async function TenantsPage({ params }: { params: Promise<{ portionId: string }> }) {
+export default async function TenantsPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ portionId: string }>;
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const viewer = await getViewer();
   if (!viewer) redirect("/signin");
 
   const { portionId } = await params;
+  // A form that met a conflict opens this page again with ?changed=1, so the notice is the page's own and stays
+  // until the next normal visit or save. A normal visit never has it.
+  const changed = showChangedNotice(await searchParams);
 
   let data: PortionTenants | null = null;
   let problem: string | null = null;
@@ -114,6 +125,11 @@ export default async function TenantsPage({ params }: { params: Promise<{ portio
   return (
     <main className="mx-auto min-h-dvh max-w-md px-4 pb-10 pt-4">
       <Header title={portion.name} />
+      {changed && (
+        <p role="status" className="mt-3 mb-2 rounded-lg bg-warn-bg px-3 py-2 text-sm text-warn-ink">
+          {TENANCY_CONFLICT_MESSAGE}
+        </p>
+      )}
       <p className="mt-1 text-sm text-muted">
         {scheduleTenant === null ? "No tenant recorded yet." : `Tenant in the Schedule: ${scheduleTenant}`}
       </p>
@@ -152,6 +168,7 @@ export default async function TenantsPage({ params }: { params: Promise<{ portio
                 expectedUpdatedAt: current.updatedAt,
               }}
               initial={tenancyFormText(current)}
+              noticeShown={changed}
             />
           </>
         ) : scheduleTenant === null ? (
@@ -161,11 +178,13 @@ export default async function TenantsPage({ params }: { params: Promise<{ portio
         ) : (
           <>
             <h3 className="mt-2 text-sm font-medium">Add details</h3>
+            <p className="mt-1 text-sm text-muted">{addDetailsHint(scheduleTenant)}</p>
             {note && <p className="mt-1 text-sm text-muted">{note}</p>}
             <TenancyForm
               key={`create-${scheduleTenant}`}
               target={{ mode: "create", portionId: portion.id, tenant: scheduleTenant }}
               initial={emptyTenancyForm(today)}
+              noticeShown={changed}
             />
           </>
         )}
@@ -182,6 +201,8 @@ export default async function TenantsPage({ params }: { params: Promise<{ portio
           <MoveOutForm
             key={`move-out-${current.id}`}
             tenant={current.tenant}
+            portionId={portion.id}
+            noticeShown={changed}
             target={{
               id: current.id,
               expectedUpdatedAt: current.updatedAt,
