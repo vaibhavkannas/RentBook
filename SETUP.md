@@ -165,12 +165,30 @@ The first time the new version loads, it adds two new header columns, "Logged by
 
 RentBook keeps each portion's tenancy details (phone, move-in date, agreement end, advance, move-out and notes) in a `Tenants` tab of the same Sheet. The app creates the tab, with its headers, by itself the first time it loads. You do not need to make it. Try it on the test copy first (step 1).
 
-- The tab must keep these 15 headers in columns A to O, in this order: `Tenancy ID`, `Portion`, `Tenant`, `Phone`, `Move-in date`, `Agreement end`, `Advance`, `Advance date`, `Advance status`, `Refund`, `Deductions`, `Notes`, `Move-out date`, `Updated by`, `Updated at`. If one is missing or different, the app stops with a message naming it and writes nothing. You may add your own columns to the right of column O. The app ignores them.
+### Before you deploy
+
+- If your live Sheet already has a tab called `Tenants` that holds something else, rename that tab before you deploy (for example to `Tenants old`). RentBook uses the name `Tenants` for its own tab, so it would otherwise try to use yours, and could add its headers to it.
+- Old cell comments on the Schedule are not imported. If you want to keep what they say, copy it into the `Notes` of the tenant's details after you deploy.
+
+### How to use it
+
+1. On the month screen, each portion card that has a tenant has a small link under the tenant's name: **Details** when the tenant already has details, **Add details** when not. Tap it to open that portion's details page.
+2. **Add details:** on the details page, under Current tenancy, fill in the move-in date and whatever else you know, then tap Save details. Only the move-in date is needed. It starts as today, so change it if the tenant moved in earlier.
+3. **Edit:** tap Edit under the details, change what you want, then tap Save details. Only what you changed is written to the Sheet.
+4. **Move out:** tap Move out, choose the move-out date, say what happened to the advance (Refunded, Adjusted or Held), type the refund and deductions if there are any, then tap Record move-out. The tenant moves to Past tenants on the same page. Your Schedule is not changed.
+5. **New tenant:** tap New tenant on the month screen. The sheet has an optional "Tenancy details (optional)" section. Open it to add the move-in date, advance, advance date, agreement end and phone together with the first payment. Leave it closed to add the details later from the card. Either way, a previous tenant of that portion who still has open details is marked as moved out for you.
+6. If a screen shows "This changed just now", someone else (or another tab of yours) changed the same details. The page has already loaded the latest version. Check it, then make your change again.
+
+Undoing a New tenant payment does not reverse tenancy changes. The previous tenant's details stay marked as moved out, and the new tenant's details stay as they are. If you need to put that right, open the details page and use Edit, or edit the row in the `Tenants` tab.
+
+### The `Tenants` tab
+
+- The tab must keep these 15 headers in columns A to O, in this order: `Tenancy ID`, `Portion`, `Tenant`, `Phone`, `Move-in date`, `Agreement end`, `Advance`, `Advance date`, `Advance status`, `Refund`, `Deductions`, `Notes`, `Move-out date`, `Updated by`, `Updated at`. If one is missing or different, the tenant details pages show a message that names it, and no tenant details are saved until you put the header back. Logging rent, undo, Activity and Settings keep working. The app checks the headers every time it reads the tab, so the pages work again as soon as the header is right. You may add your own columns to the right of column O. The app ignores them.
 - You can edit rows by hand. When the app saves a change it writes only the columns that change belongs to, so what you typed in the other columns of that row stays. Leave `Tenancy ID` alone: it is how the app finds the row.
 - Type the date columns (`Move-in date`, `Agreement end`, `Advance date`, `Move-out date`) as plain text in the form `YYYY-MM-DD`, for example `2026-10-07`. The app also reads real Sheet dates, so a cell that Google Sheets turned into a date still works.
 - `Advance status` must be exactly `Held`, `Refunded` or `Adjusted` (capital first letter). Leave it blank when there is no advance. Any other text is ignored.
 - `Advance`, `Refund` and `Deductions` are whole rupees typed as numbers. Text typed into a number column is ignored.
-- A blank `Move-out date` means the tenancy is current. A portion's current tenancy is the last row for that portion with a blank move-out date. Adding a date there moves the tenant out.
+- A blank `Move-out date` means the tenancy is current. A cell that holds only spaces counts as blank. A portion's current tenancy is the last row for that portion with a blank move-out date. Adding a date there moves the tenant out.
 - A card shows a tenancy's details only while its `Tenant` is the name the Schedule shows for that portion (capitals and surrounding spaces do not matter).
 - `Updated by` and `Updated at` are written by the app. `Updated at` is also how it notices that someone changed a row after you opened it.
 
