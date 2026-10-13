@@ -45,6 +45,24 @@ describe("describeDifference", () => {
   });
 });
 
+describe("describeDifference while some portions have not paid yet", () => {
+  it('adds "so far", because the total can still change', () => {
+    expect(describeDifference(64, true)).toEqual({ tone: "more", text: "₹ 64 more than rent so far" });
+    expect(describeDifference(-3, true)).toEqual({ tone: "less", text: "₹ 3 less than rent so far" });
+  });
+
+  it("is the plain wording when everything has been paid", () => {
+    expect(describeDifference(64, false)).toEqual(describeDifference(64));
+    expect(describeDifference(64, false)?.text).toBe("₹ 64 more than rent");
+    expect(describeDifference(-3, false)?.text).toBe("₹ 3 less than rent");
+  });
+
+  it("still has nothing to say about a zero difference", () => {
+    expect(describeDifference(0, true)).toBeNull();
+    expect(describeDifference(0.4, true)).toBeNull();
+  });
+});
+
 describe("cardDifferenceText", () => {
   it("adds the reference rent in brackets", () => {
     expect(cardDifferenceText(30, 6330)).toBe("₹ 30 more than rent (₹ 6,330)");

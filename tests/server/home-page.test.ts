@@ -134,6 +134,56 @@ describe("the month summary: received against rent due", () => {
     expect(out).not.toMatch(/₹\s*[-−]/);
   });
 
+  describe("when some portions have not paid yet", () => {
+    const two = (paidCount: number, difference: number) =>
+      view({
+        cards: [card(), card({ portionId: "p2", name: "First floor" })],
+        received: 5514,
+        due: 10900,
+        difference,
+        paidCount,
+      });
+
+    it('says "so far" after the extra, because the total can still change', async () => {
+      mocks.loadMonthView.mockResolvedValue(two(1, 64));
+      const out = summary(await render());
+      expect(out).toMatch(/<p class="[^"]*text-success-ink[^"]*">₹ 64 more than rent so far<\/p>/);
+      expect(out).toContain("1 of 2 portions");
+    });
+
+    it('says "so far" after the shortfall too, in the warning colour', async () => {
+      mocks.loadMonthView.mockResolvedValue(two(1, -3));
+      expect(summary(await render())).toMatch(/<p class="[^"]*text-warn-ink[^"]*">₹ 3 less than rent so far<\/p>/);
+    });
+
+    it("says nothing when the difference is nil, even though some portions are unpaid", async () => {
+      mocks.loadMonthView.mockResolvedValue(two(1, 0));
+      expect(summary(await render())).not.toContain("than rent");
+    });
+
+    it('does not say "so far" once every portion has paid', async () => {
+      mocks.loadMonthView.mockResolvedValue(two(2, 64));
+      const out = summary(await render());
+      expect(out).toContain("₹ 64 more than rent</p>");
+      expect(out).not.toContain("so far");
+    });
+
+    it('never says "so far" on a card', async () => {
+      const paidCard = card({
+        status: "paid",
+        entry: { tenant: "Asha", count: 4, amount: 5514 },
+        rentReference: 5450,
+        rentDifference: 64,
+      });
+      mocks.loadMonthView.mockResolvedValue(
+        view({ cards: [paidCard, card({ portionId: "p2" })], difference: 64, paidCount: 1 }),
+      );
+      const html = await render();
+      expect(html).toContain("₹ 64 more than rent (₹ 5,450)");
+      expect(html.match(/so far/g)).toHaveLength(1);
+    });
+  });
+
   it("keeps the progress bar at 100% when more than the rent due was received", async () => {
     mocks.loadMonthView.mockResolvedValue(
       view({ received: 5480, due: 5450, difference: 30, paidCount: 1 }),
@@ -169,5 +219,21 @@ describe("the cards on the home page", () => {
     expect(html).toContain("₹ 30 more than rent (₹ 5,450)");
     // once on the card and once in the summary, which has no brackets
     expect(html.match(/more than rent/g)).toHaveLength(2);
+  });
+
+  it("shows each card's own difference while extra and short cancel in the summary, which then has no line", async () => {
+    mocks.loadMonthView.mockResolvedValue(
+      view({
+        cards: [paid(1, 5450, 5451), paid(-1, 5450, 5449)].map((c, i) => ({ ...c, portionId: `p${i + 1}` })),
+        received: 10900,
+        due: 10900,
+        difference: 0,
+        paidCount: 2,
+      }),
+    );
+    const html = await render();
+    expect(html).toContain("₹ 1 more than rent (₹ 5,450)");
+    expect(html).toContain("₹ 1 less than rent (₹ 5,450)");
+    expect(summary(html)).not.toContain("than rent");
   });
 });

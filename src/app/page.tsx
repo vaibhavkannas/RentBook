@@ -41,7 +41,10 @@ export default async function Home({
 
   const title = formatMonthTitle(month);
   const progress = view ? progressPercent(view.received, view.due) : 0;
-  const difference = view ? describeDifference(view.difference) : null;
+  // While some portions have not paid yet, the total can still change: "so far".
+  const difference = view
+    ? describeDifference(view.difference, view.paidCount < view.cards.length)
+    : null;
 
   return (
     <main className="mx-auto min-h-dvh max-w-md px-4 pb-10 pt-4">

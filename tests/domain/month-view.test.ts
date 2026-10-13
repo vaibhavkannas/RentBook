@@ -332,6 +332,13 @@ describe("rent due against received (October after the base schedule)", () => {
     expect(view.paidCount).toBe(1);
   });
 
+  it("lets extra and short cancel in the total while each paid card still has its own difference", () => {
+    const view = october([["Asha", 4, 5451], ["Bala", 1, 13334], null, null, null]);
+    expect(card(view, "p1")).toMatchObject({ rentReference: 5450, rentDifference: 1 });
+    expect(card(view, "p2")).toMatchObject({ rentReference: 13335, rentDifference: -1 });
+    expect(view.difference).toBe(0);
+  });
+
   it("makes received minus due equal the difference once every portion has paid", () => {
     const view = october([
       ["Asha", 4, 5500],

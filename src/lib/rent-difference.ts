@@ -6,14 +6,21 @@ export type DifferenceTone = "more" | "less";
  * How an amount received compares with the rent, in plain words that name no one: "₹ 30 more than
  * rent" or "₹ 1 less than rent". The amount is rounded to a whole rupee like every amount on the
  * page; null when that leaves nothing to say (equal, or not a number).
+ *
+ * `soFar`: some portions have not paid yet, so the total can still change. The text then ends with
+ * "so far" ("₹ 64 more than rent so far").
  */
-export function describeDifference(difference: number): { tone: DifferenceTone; text: string } | null {
+export function describeDifference(
+  difference: number,
+  soFar = false,
+): { tone: DifferenceTone; text: string } | null {
   if (!Number.isFinite(difference)) return null;
   const whole = Math.round(difference);
   if (whole === 0) return null;
+  const tail = soFar ? " so far" : "";
   return whole > 0
-    ? { tone: "more", text: `${formatRupees(whole)} more than rent` }
-    : { tone: "less", text: `${formatRupees(-whole)} less than rent` };
+    ? { tone: "more", text: `${formatRupees(whole)} more than rent${tail}` }
+    : { tone: "less", text: `${formatRupees(-whole)} less than rent${tail}` };
 }
 
 /**
