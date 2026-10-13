@@ -21,7 +21,7 @@
 - Touch targets are at least 44 px (`min-h-11`, `min-w-11`). Use only the existing Tailwind colour tokens (`bg-surface`, `text-muted`, `bg-accent`, `text-accent-ink`, `bg-danger-bg`, `text-danger-ink`, `bg-warn-bg`, `text-warn-ink`, `bg-success-bg`, `text-success-ink`, `border-line`, `border-control`). Money is shown with `formatRupees`.
 - Every commit message ends with a blank line and `Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>`. Work on branch `wave-b`. Never push.
 - At the end of every task `npm test`, `npm run typecheck` and `npm run lint` pass (run from `D:\Repos\RentBook`; all 315 existing tests keep passing, updated only where a signature changes). Tasks 4 and 5 also run `npm run build` (if it fails fetching Google Fonts with a certificate error, retry with `NODE_OPTIONS=--use-system-ca npm run build`).
-- Header rule (refines the spec): the `Tenants` tab must hold exactly the 15 headers below in columns A to O, in this order. Columns to the right of O may be added by hand and are ignored. A missing or different header is a `sheet-structure` error naming the header.
+- Header rule (refines the spec): the `Tenants` tab must hold exactly the 15 headers below in columns A to O, in this order. Columns to the right of O may be added by hand and are ignored. A missing or different header is reported by name; since the final review this no longer stops the app (see the spec: only tenant details are switched off).
 
 ## The Tenants tab (columns A to O)
 

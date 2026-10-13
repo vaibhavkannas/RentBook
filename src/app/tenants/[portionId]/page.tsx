@@ -126,7 +126,7 @@ export default async function TenantsPage({
     <main className="mx-auto min-h-dvh max-w-md px-4 pb-10 pt-4">
       <Header title={portion.name} />
       {changed && (
-        <p role="status" className="mt-3 mb-2 rounded-lg bg-warn-bg px-3 py-2 text-sm text-warn-ink">
+        <p role="alert" className="mt-3 mb-2 rounded-lg bg-warn-bg px-3 py-2 text-sm text-warn-ink">
           {TENANCY_CONFLICT_MESSAGE}
         </p>
       )}

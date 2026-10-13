@@ -127,7 +127,7 @@ describe("the tenant details page", () => {
   it("shows a changed-just-now notice at the top when the page was opened after a conflict", async () => {
     const html = await render("p1", { changed: "1" });
     expect(html).toContain("This changed just now. The page was updated. Please check and save again.");
-    expect(html).toMatch(/role="status" class="[^"]*bg-warn-bg[^"]*text-warn-ink[^"]*">This changed just now/);
+    expect(html).toMatch(/role="alert" class="[^"]*bg-warn-bg[^"]*text-warn-ink[^"]*">This changed just now/);
     // above the tenant line and the cards
     expect(html.indexOf("This changed just now")).toBeLessThan(html.indexOf("Tenant in the Schedule"));
   });
