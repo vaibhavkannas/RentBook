@@ -23,6 +23,8 @@ function card(overrides: Partial<PortionCard> = {}): PortionCard {
     status: "pending",
     entry: null,
     next: { tenant: "Asha", count: 4, suggestedAmount: 10000, previousAmount: 10000, startsNewCycle: false },
+    rentReference: 10000,
+    rentDifference: null,
     undoBlockedReason: null,
     tenancy: null,
     ...overrides,
@@ -94,6 +96,56 @@ describe("PortionBoard", () => {
 
   it("gives the link a tap target of at least 44 px", () => {
     expect(board([card()])).toMatch(/<a [^>]*class="[^"]*min-h-11[^"]*"/);
+  });
+});
+
+describe("PortionBoard: rent against the amount received", () => {
+  const paid = (amount: number, rentReference: number | null, rentDifference: number | null) =>
+    card({
+      status: "paid",
+      entry: { tenant: "Asha", count: 4, amount },
+      next: null,
+      rentReference,
+      rentDifference,
+    });
+
+  /** The amount line and everything after it up to the buttons. */
+  const lines = (out: string) => out.match(/<p class="mt-2 text-lg font-medium">[\s\S]*?<div class="mt-3/)?.[0] ?? "";
+
+  it("says how much more than the rent a paid card received, in a small muted line under the amount", () => {
+    const out = board([paid(10030, 10000, 30)]);
+    expect(lines(out)).toContain('<p class="mt-2 text-lg font-medium">₹ 10,030</p>');
+    expect(lines(out)).toMatch(
+      /<\/p><p class="[^"]*text-sm[^"]*text-muted[^"]*">₹ 30 more than rent \(₹ 10,000\)<\/p>/,
+    );
+  });
+
+  it("says how much less, with no minus sign", () => {
+    const out = board([paid(9999, 10000, -1)]);
+    expect(out).toContain("₹ 1 less than rent (₹ 10,000)");
+    expect(out).not.toMatch(/₹\s*[-−]/);
+  });
+
+  it("says nothing extra when the rent was paid exactly", () => {
+    const out = board([paid(10000, 10000, 0)]);
+    expect(out).not.toContain("than rent");
+  });
+
+  it("says nothing when there is no earlier entry to compare with", () => {
+    const out = board([paid(7000, null, null)]);
+    expect(out).toContain("₹ 7,000");
+    expect(out).not.toContain("than rent");
+  });
+
+  it("says nothing on a pending card, even though it has a reference rent", () => {
+    const out = board([card({ rentReference: 10000, rentDifference: null })]);
+    expect(out).not.toContain("than rent");
+  });
+
+  it("keeps the Edit amount and Undo buttons on a paid card with a difference", () => {
+    const out = board([paid(10030, 10000, 30)]);
+    expect(out).toContain("Edit amount");
+    expect(out).toContain(">Undo<");
   });
 });
 

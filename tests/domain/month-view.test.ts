@@ -7,7 +7,7 @@ import {
 } from "@/lib/domain/month-view";
 import { summarize, type Tenancy } from "@/lib/domain/tenancy";
 import { parseSchedule } from "@/lib/sheets/schedule";
-import { baseSchedule, PORTIONS, TOTAL_HEADER } from "../support/fixtures";
+import { baseSchedule, monthCell, PORTIONS, scheduleRow, TOTAL_HEADER } from "../support/fixtures";
 
 const { rows } = parseSchedule(baseSchedule(), PORTIONS, TOTAL_HEADER);
 const card = (view: ReturnType<typeof deriveMonthView>, id: string) =>
@@ -34,10 +34,17 @@ describe("deriveMonthView for a month with no entries yet (Oct-26)", () => {
     expect(card(view, "p4")).toMatchObject({ status: "needs-tenant", next: null });
   });
 
-  it("totals what is expected and what is received", () => {
+  it("totals the rent due and what is received", () => {
     expect(view.received).toBe(0);
     expect(view.paidCount).toBe(0);
-    expect(view.expected).toBe(5450 + 13335 + 9000 + 5100);
+    expect(view.due).toBe(5450 + 13335 + 9000 + 5100);
+    expect(view.difference).toBe(0);
+  });
+
+  it("gives every pending card the suggested rent as its reference, and no difference", () => {
+    expect(card(view, "p1")).toMatchObject({ rentReference: 5450, rentDifference: null });
+    expect(card(view, "p2")).toMatchObject({ rentReference: 13335, rentDifference: null });
+    expect(card(view, "p4")).toMatchObject({ rentReference: null, rentDifference: null });
   });
 });
 
@@ -56,10 +63,19 @@ describe("deriveMonthView for a month that is already recorded (Sep-26)", () => 
     expect(card(view, "p5")).toMatchObject({ status: "paid", next: null });
   });
 
-  it("sums received and expected from recorded amounts", () => {
+  it("sums received and due from recorded amounts, with nothing extra or short", () => {
     expect(view.received).toBe(5450 + 12700 + 9000 + 5100);
-    expect(view.expected).toBe(view.received);
+    expect(view.due).toBe(view.received);
+    expect(view.difference).toBe(0);
     expect(view.paidCount).toBe(4);
+  });
+
+  it("has a zero difference and a reference for a paid card that paid exactly the rent", () => {
+    expect(card(view, "p1")).toMatchObject({ rentReference: 5450, rentDifference: 0 });
+  });
+
+  it("has no reference and no difference for a portion that started this month", () => {
+    expect(card(view, "p5")).toMatchObject({ rentReference: null, rentDifference: null });
   });
 });
 
@@ -192,7 +208,140 @@ describe("card tenancy summary", () => {
     expect(without).toEqual(withEmpty);
     expect(without.cards.map((c) => c.tenancy)).toEqual([null, null, null, null, null]);
     const { cards, ...totals } = deriveMonthView(rows, PORTIONS, OCT, [tenancy()]);
-    expect(totals).toEqual({ month: OCT, received: 0, expected: 5450 + 13335 + 9000 + 5100, paidCount: 0 });
+    expect(totals).toEqual({
+      month: OCT,
+      received: 0,
+      due: 5450 + 13335 + 9000 + 5100,
+      difference: 0,
+      paidCount: 0,
+    });
     expect(cards[0]).toMatchObject({ status: "pending", next: { count: 4 } });
+  });
+});
+
+describe("rent due against received (October after the base schedule)", () => {
+  const OCT = { year: 2026, month: 10 };
+  type Entry = [tenant: string, count: number, amount: number] | null;
+
+  // After Sep-26 the suggested rent for October is p1 5450, p2 13335 (new cycle, hike), p3 9000,
+  // p4 none (no tenant ever), p5 5100.
+  const SUGGESTED_TOTAL = 5450 + 13335 + 9000 + 5100;
+
+  /** October with the given entries for p1 to p5. */
+  function october(entries: Entry[]) {
+    const { rows } = parseSchedule(
+      [...baseSchedule(), scheduleRow(monthCell("text", 2026, 10), entries, 6)],
+      PORTIONS,
+      TOTAL_HEADER,
+    );
+    return deriveMonthView(rows, PORTIONS, OCT);
+  }
+
+  it("shows extra when a tenant paid more than the suggested rent, and does not inflate the due total", () => {
+    const view = october([["Asha", 4, 5480], null, null, null, null]);
+    expect(card(view, "p1")).toMatchObject({
+      status: "paid",
+      rentReference: 5450,
+      rentDifference: 30,
+    });
+    expect(view.received).toBe(5480);
+    expect(view.due).toBe(SUGGESTED_TOTAL);
+    expect(view.difference).toBe(30);
+  });
+
+  it("shows a shortfall when a tenant paid less", () => {
+    const view = october([["Asha", 4, 5449], null, null, null, null]);
+    expect(card(view, "p1")).toMatchObject({ rentReference: 5450, rentDifference: -1 });
+    expect(view.received).toBe(5449);
+    expect(view.due).toBe(SUGGESTED_TOTAL);
+    expect(view.difference).toBe(-1);
+  });
+
+  it("shows nothing extra or short when the exact rent was paid", () => {
+    const view = october([["Asha", 4, 5450], null, null, null, null]);
+    expect(card(view, "p1")).toMatchObject({ rentReference: 5450, rentDifference: 0 });
+    expect(view.due).toBe(SUGGESTED_TOTAL);
+    expect(view.difference).toBe(0);
+  });
+
+  it("measures a payment on a new cycle against the rent with the hike", () => {
+    const view = october([null, ["Bala", 1, 13365], null, null, null]);
+    expect(card(view, "p2")).toMatchObject({ rentReference: 13335, rentDifference: 30 });
+    expect(view.due).toBe(SUGGESTED_TOTAL);
+    expect(view.difference).toBe(30);
+  });
+
+  it("has no reference for a portion with no earlier entry: due is the amount entered", () => {
+    const view = october([null, null, null, ["Dev", 1, 7000], null]);
+    expect(card(view, "p4")).toMatchObject({
+      status: "paid",
+      next: null,
+      rentReference: null,
+      rentDifference: null,
+    });
+    expect(view.received).toBe(7000);
+    expect(view.due).toBe(5450 + 13335 + 9000 + 7000 + 5100);
+    expect(view.difference).toBe(0);
+  });
+
+  it("has no reference for a new tenant's first payment on a portion that had another tenant", () => {
+    const view = october([["Farah", 1, 7000], null, null, null, null]);
+    expect(card(view, "p1")).toMatchObject({
+      status: "paid",
+      rentReference: null,
+      rentDifference: null,
+    });
+    expect(view.due).toBe(7000 + 13335 + 9000 + 5100);
+    expect(view.difference).toBe(0);
+  });
+
+  it("still has a reference when the same tenant is written with other capitals or spaces", () => {
+    const view = october([[" ASHA ", 4, 5480], null, null, null, null]);
+    expect(card(view, "p1")).toMatchObject({ rentReference: 5450, rentDifference: 30 });
+  });
+
+  it("adds up extra and short across paid cards, and counts pending cards at the suggested rent", () => {
+    const view = october([["Asha", 4, 5480], ["Bala", 1, 13300], null, null, null]);
+    expect(card(view, "p1").rentDifference).toBe(30);
+    expect(card(view, "p2").rentDifference).toBe(-35);
+    expect(card(view, "p3")).toMatchObject({ status: "pending", rentReference: 9000, rentDifference: null });
+    expect(card(view, "p5")).toMatchObject({ status: "pending", rentReference: 5100, rentDifference: null });
+    expect(view.received).toBe(5480 + 13300);
+    // due uses the suggested rent for every portion that has one, paid or not
+    expect(view.due).toBe(SUGGESTED_TOTAL);
+    expect(view.difference).toBe(-5);
+    expect(view.paidCount).toBe(2);
+  });
+
+  it("leaves pending portions out of the difference and counts a paid portion with no reference at its amount", () => {
+    const view = october([["Asha", 4, 5480], null, null, ["Dev", 1, 7000], null]);
+    expect(view.received).toBe(5480 + 7000);
+    expect(view.due).toBe(5450 + 13335 + 9000 + 7000 + 5100);
+    expect(view.difference).toBe(30);
+  });
+
+  it("keeps the statuses as they were", () => {
+    const view = october([["Asha", 4, 5480], null, null, null, null]);
+    expect(view.cards.map((c) => c.status)).toEqual([
+      "paid",
+      "pending",
+      "pending",
+      "needs-tenant",
+      "pending",
+    ]);
+    expect(view.paidCount).toBe(1);
+  });
+
+  it("makes received minus due equal the difference once every portion has paid", () => {
+    const view = october([
+      ["Asha", 4, 5500],
+      ["Bala", 1, 13000],
+      ["Chitra", 6, 9000],
+      ["Dev", 1, 7000],
+      ["Esha", 2, 5100],
+    ]);
+    expect(view.cards.every((c) => c.status === "paid")).toBe(true);
+    expect(view.difference).toBe(50 - 335);
+    expect(view.received - view.due).toBe(view.difference);
   });
 });

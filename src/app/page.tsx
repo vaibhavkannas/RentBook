@@ -8,6 +8,7 @@ import type { MonthView } from "@/lib/domain/types";
 import { currentYm, parseYmKey, todayIso, ymKey } from "@/lib/domain/year-month";
 import { AppError } from "@/lib/errors";
 import { formatMonthTitle, formatRupees } from "@/lib/format";
+import { describeDifference, progressPercent } from "@/lib/rent-difference";
 import { getViewer } from "@/lib/server/auth-guard";
 import { getSheetsContext } from "@/lib/server/context";
 import { loadMonthView } from "@/lib/server/freshness";
@@ -38,8 +39,8 @@ export default async function Home({
   }
 
   const title = formatMonthTitle(month);
-  const progress =
-    view && view.expected > 0 ? Math.min(100, Math.round((view.received / view.expected) * 100)) : 0;
+  const progress = view ? progressPercent(view.received, view.due) : 0;
+  const difference = view ? describeDifference(view.difference) : null;
 
   return (
     <main className="mx-auto min-h-dvh max-w-md px-4 pb-10 pt-4">
@@ -57,8 +58,17 @@ export default async function Home({
               </div>
               <p className="mt-0.5 text-2xl font-semibold">
                 {formatRupees(view.received)}{" "}
-                <span className="text-sm font-normal text-muted">of {formatRupees(view.expected)}</span>
+                <span className="text-sm font-normal text-muted">of {formatRupees(view.due)}</span>
               </p>
+              {difference && (
+                <p
+                  className={`mt-0.5 text-sm ${
+                    difference.tone === "more" ? "text-success-ink" : "text-warn-ink"
+                  }`}
+                >
+                  {difference.text}
+                </p>
+              )}
               <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-line" role="presentation">
                 <div className="h-full bg-accent" style={{ width: `${progress}%` }} />
               </div>

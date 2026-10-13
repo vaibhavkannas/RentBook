@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import type { PortionCard } from "@/lib/domain/types";
 import { formatRupees } from "@/lib/format";
 import { sheetKey } from "@/lib/month-nav";
+import { cardDifferenceText } from "@/lib/rent-difference";
 import { tenancyChips } from "@/lib/tenancy-chips";
 import PaymentSheet, { type SheetMode } from "./PaymentSheet";
 import UndoSheet from "./UndoSheet";
@@ -60,6 +61,9 @@ export default function PortionBoard({ monthKey, monthLabel, cards, defaultDate 
           const tenant = card.entry?.tenant ?? card.next?.tenant;
           const lastOfCycle =
             card.cycleLength !== null && count !== undefined && count === card.cycleLength;
+          // Only a paid card says how the amount received compares with the rent.
+          const rentLine =
+            card.status === "paid" ? cardDifferenceText(card.rentDifference, card.rentReference) : null;
           return (
             <li key={card.portionId}>
               <article className="rounded-2xl border border-line bg-surface p-4">
@@ -104,6 +108,7 @@ export default function PortionBoard({ monthKey, monthLabel, cards, defaultDate 
                     <p className="mt-2 text-lg font-medium">
                       {formatRupees(card.entry?.amount ?? card.next!.suggestedAmount)}
                     </p>
+                    {rentLine && <p className="mt-0.5 text-sm text-muted">{rentLine}</p>}
                   </>
                 )}
 

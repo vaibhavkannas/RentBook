@@ -83,6 +83,17 @@ export function nextPayment(
   };
 }
 
+/**
+ * The rent a month is measured against: the suggested amount for the payment after the earlier
+ * entry. None when there is no earlier entry, and none for a paid card whose tenant is not the
+ * earlier entry's tenant: a new tenant's first payment has no previous rent to compare with.
+ */
+function rentReference(entry: PortionEntry | null, next: NextPayment | null): number | null {
+  if (!next) return null;
+  if (entry && !sameTenantName(entry.tenant, next.tenant)) return null;
+  return next.suggestedAmount;
+}
+
 export function deriveMonthView(
   rows: ScheduleRow[],
   portions: PortionConfig[],
@@ -93,6 +104,7 @@ export function deriveMonthView(
     const entry = findEntryForMonth(rows, portion.id, month);
     const prior = findPriorEntry(rows, portion.id, month);
     const next = prior ? nextPayment(prior, portion) : null;
+    const reference = rentReference(entry, next);
     // Details are shown only for the tenant the card shows, so they never outlive a change of tenant.
     const name = entry?.tenant ?? next?.tenant;
     const current = currentTenancy(tenancies, portion.id);
@@ -103,6 +115,8 @@ export function deriveMonthView(
       status: entry ? "paid" : next ? "pending" : "needs-tenant",
       entry,
       next,
+      rentReference: reference,
+      rentDifference: entry && reference !== null ? entry.amount - reference : null,
       undoBlockedReason:
         entry && hasLaterEntry(rows, portion.id, month) ? LATER_ENTRY_REASON : null,
       tenancy:
@@ -116,9 +130,8 @@ export function deriveMonthView(
     month,
     cards,
     received: sumAmounts(cards.map((card) => card.entry?.amount)),
-    expected: sumAmounts(
-      cards.map((card) => card.entry?.amount ?? card.next?.suggestedAmount),
-    ),
+    due: sumAmounts(cards.map((card) => card.rentReference ?? card.entry?.amount)),
+    difference: sumAmounts(cards.map((card) => card.rentDifference)),
     paidCount: cards.filter((card) => card.status === "paid").length,
   };
 }

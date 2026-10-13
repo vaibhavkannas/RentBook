@@ -7,6 +7,7 @@ A phone-first web app for recording monthly rent receipts for a building with fi
 - Per-portion cycle length (or "never resets") and hike percent.
 - Each payment also lands in a `Payments Log` tab with the date it was received and who logged it.
 - Undo a mistaken payment, see who did what on the Activity screen, and let several people sign in (the first one listed is the owner).
+- The month summary shows what was received against the rent due, and any extra or shortfall. A paid card says when the amount was more or less than the usual rent (the suggested amount, hike included).
 - Tenant details for each portion (phone, move-in, agreement end, advance, move-out) kept in a `Tenants` tab of the same Sheet, shown on the card and on a tenant page with past tenants.
 
 ## Develop
