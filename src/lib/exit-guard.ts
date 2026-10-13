@@ -26,6 +26,11 @@
  *    three presses. Leaving the entry bare while the toast shows lets the second Back do what it
  *    always does. The next tap, once the toast is gone, puts the sentinel back.
  *
+ * One cost of this, accepted: switching months replaces the sentinel entry (that is the point of
+ * replacing rather than pushing), while the entry under it keeps the address the screen was opened
+ * on. After switching months, the first Back can therefore show the opening month together with the
+ * toast, not the month that was last on screen.
+ *
  * So the guard never calls history.back() or history.go(): on a second Back inside the window the
  * browser has already done the leaving, and the guard only switches itself off.
  */
@@ -60,9 +65,15 @@ export function guardEntryState(current: unknown): Record<string, unknown> {
 }
 
 /**
- * Whether the guard may run here: only in an installed app (the standalone display mode, or the
- * flag older iPhones set on the navigator) and only when the history API is there. Anything else,
- * including a browser that throws while being asked, answers false: the guard fails open.
+ * Whether the guard may run here: only in an installed app that the Back button can really leave
+ * (the standalone display mode) and only when the history API is there. Anything else, including a
+ * browser that throws while being asked, answers false: the guard fails open.
+ *
+ * Home-screen apps on iPhone and iPad are left out on purpose. `navigator.standalone` exists only
+ * on iOS WebKit (a boolean there: true in a home-screen app, false in a browser tab), and there the
+ * edge swipe at the first history entry does nothing, so the app can never be exited by Back and a
+ * toast saying "Press back again to exit" would be untrue. A boolean flag therefore switches the
+ * guard off, whatever the display mode says.
  */
 export function canGuardBack(win: unknown): boolean {
   const w = win as
@@ -75,11 +86,7 @@ export function canGuardBack(win: unknown): boolean {
     | undefined;
   if (!w || typeof w.history?.pushState !== "function") return false;
   try {
-    if (w.navigator?.standalone === true) return true;
-  } catch {
-    // fall through to the display mode
-  }
-  try {
+    if (typeof w.navigator?.standalone === "boolean") return false;
     return typeof w.matchMedia === "function" && w.matchMedia("(display-mode: standalone)").matches === true;
   } catch {
     return false;
@@ -113,6 +120,8 @@ export type GuardAction =
   | "none"
   /** Push the sentinel entry. */
   | "arm"
+  /** Push the sentinel entry, and hide the toast that is still on screen: a tap came after the window but before the timer. */
+  | "arm-and-hide-toast"
   /** Show the toast. */
   | "warn"
   /** Hide the toast. */
@@ -143,13 +152,17 @@ export function stepGuard(
       if (state.armed) return { state, action: "none" };
       // While the toast shows, the person is one Back away from leaving: do not put the sentinel back yet.
       if (state.toastUntil !== null && event.now < state.toastUntil) return { state, action: "none" };
-      return { state: { ...state, armed: true, toastUntil: null }, action: "arm" };
+      // A tap at or after the end of the window can arrive before the timer does: the toast is then
+      // still on screen, and goes with the tap.
+      return {
+        state: { ...state, armed: true, toastUntil: null },
+        action: state.toastUntil === null ? "arm" : "arm-and-hide-toast",
+      };
     }
 
+    // Always hide: hiding a toast that is already gone is harmless, leaving a late one up is not.
     case "toast-expired":
-      return state.toastUntil === null
-        ? { state, action: "none" }
-        : { state: { ...state, toastUntil: null }, action: "hide-toast" };
+      return { state: { ...state, toastUntil: null }, action: "hide-toast" };
 
     case "back": {
       // The sentinel is under the person again (a forward step, or a return from another page).

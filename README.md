@@ -8,7 +8,7 @@ A phone-first web app for recording monthly rent receipts for a building with fi
 - Each payment also lands in a `Payments Log` tab with the date it was received and who logged it.
 - Undo a mistaken payment, see who did what on the Activity screen, and let several people sign in (the first one listed is the owner).
 - The month summary shows what was received against the rent due, and any extra or shortfall. A paid card says when the amount was more or less than the usual rent (the suggested amount, hike included).
-- Switching months does not add browser history, so Back leaves the month screen instead of stepping through every month. In the installed app, Back on the month screen first shows "Press back again to exit" (it needs a tap on the screen first, and does nothing in an ordinary browser tab).
+- Switching months does not add browser history, so Back leaves the month screen instead of stepping through every month. In an installed Android app, Back on the month screen first shows "Press back again to exit". It needs a tap on the screen first, and does nothing in an ordinary browser tab or in an iPhone or iPad home-screen app (Back cannot exit those). If Back is pressed again after the message has gone, without tapping anything in between, the app simply exits.
 - Tenant details for each portion (phone, move-in, agreement end, advance, move-out) kept in a `Tenants` tab of the same Sheet, shown on the card and on a tenant page with past tenants.
 
 ## Develop

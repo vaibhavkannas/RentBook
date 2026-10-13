@@ -56,8 +56,15 @@ export default function ExitGuard() {
       guard.current = step.state;
       switch (step.action) {
         case "arm":
+        case "arm-and-hide-toast":
           // Same address, so nothing changes on screen; the state keeps what Next.js stored in it.
+          // (The entry under the sentinel keeps the address the screen was opened on, so after
+          // switching months the first Back can show the opening month with the toast: see
+          // src/lib/exit-guard.ts.)
           window.history.pushState(guardEntryState(window.history.state), "", window.location.href);
+          // A tap that came after the window but before the timer: the toast goes now, and the
+          // timer with it, so it can never stay on screen.
+          if (step.action === "arm-and-hide-toast") hideToast();
           break;
         case "warn":
           clearTimeout(timer);
@@ -123,9 +130,10 @@ export default function ExitGuard() {
     }
   });
 
-  // The live region is always on the page, so screen readers announce text that appears in it.
+  // The live region is always on the page, so screen readers announce text that appears in it. It sits
+  // higher than the payment toast's region (bottom-4), so the two stack instead of covering each other.
   return (
-    <div role="status" className="pointer-events-none fixed inset-x-4 bottom-4 z-50 mx-auto max-w-md">
+    <div role="status" className="pointer-events-none fixed inset-x-4 bottom-20 z-50 mx-auto max-w-md">
       {showToast && (
         <p className="rounded-xl bg-foreground px-4 py-3 text-center text-sm text-background">
           {EXIT_TOAST_TEXT}

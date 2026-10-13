@@ -159,8 +159,16 @@ describe("ExitGuard", () => {
     expect(out).not.toContain("Press back again to exit");
   });
 
-  it("uses the same toast placement as the payment toast, and does not catch taps itself", () => {
-    expect(out).toContain("pointer-events-none fixed inset-x-4 bottom-4 z-50 mx-auto max-w-md");
+  it("has the payment toast's look, and does not catch taps itself", () => {
+    expect(out).toContain("pointer-events-none fixed inset-x-4");
+    expect(out).toContain("z-50 mx-auto max-w-md");
+  });
+
+  it("sits higher than the payment toast, so the two stack instead of covering each other", () => {
+    expect(out).toContain("bottom-20");
+    expect(out).not.toContain("bottom-4");
+    // the payment toast's region is at bottom-4
+    expect(board([card()])).toContain("fixed inset-x-4 bottom-4 z-50");
   });
 });
 
