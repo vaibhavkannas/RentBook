@@ -70,9 +70,12 @@ const isBlank = (cell: unknown) => cell === undefined || cell === null || String
 
 const text = (cell: unknown) => (cell === undefined || cell === null ? "" : String(cell));
 
-/** A date column: text stays as it is, a number (a date typed into a Sheet date cell) becomes YYYY-MM-DD. */
+/**
+ * A date column: a number (a date typed into a Sheet date cell) becomes YYYY-MM-DD, text is trimmed. A cell that
+ * holds only spaces is blank, so a Move-out date of " " still means the tenancy is current.
+ */
 const day = (cell: unknown) =>
-  typeof cell === "number" ? (isoDayFromSerial(cell) ?? String(cell)) : text(cell);
+  typeof cell === "number" ? (isoDayFromSerial(cell) ?? String(cell)) : text(cell).trim();
 
 const amount = (cell: unknown) => (typeof cell === "number" && Number.isFinite(cell) ? cell : null);
 
@@ -94,7 +97,7 @@ export async function readTenancies(gateway: SheetsGateway): Promise<Tenancy[]> 
     tenancies.push({
       rowNumber: index + 1,
       id: text(cells[0]),
-      portionId: text(cells[1]),
+      portionId: text(cells[1]).trim(),
       tenant: text(cells[2]),
       phone: text(cells[3]),
       moveIn: day(cells[4]),
@@ -188,25 +191,45 @@ function columnWrites(
   });
 }
 
+/** Which of the editable columns an edit writes. The others keep whatever the Sheet holds. */
+export type EditColumns = {
+  /** Phone (D). */
+  phone: boolean;
+  /** Move-in date (E). */
+  moveIn: boolean;
+  /** Agreement end (F). */
+  agreementEnd: boolean;
+  /** Advance (G). */
+  advance: boolean;
+  /** Advance date (H). */
+  advanceDate: boolean;
+  /** Advance status (I). */
+  status: boolean;
+  /** Notes (L). */
+  notes: boolean;
+};
+
 /**
- * Saves an edit of a tenancy: writes Phone to Advance status (D to I), Notes (L), Updated by and Updated at
- * (N, O), with one updateValues call. The ID, portion, tenant, refund, deductions and move-out cells, and any
- * column added to the right of O, are never touched, so hand-typed text in them survives.
+ * Saves an edit of a tenancy with one updateValues call: always Updated by and Updated at (N, O), and only the
+ * editable columns named in `columns` (Phone, Move-in date, Agreement end, Advance, Advance date, Advance
+ * status, Notes). Every other cell of the row, including hand-typed text the app cannot read in a column the
+ * edit did not change, and any column added to the right of O, is never touched.
  */
 export async function writeTenancyEdit(
   gateway: SheetsGateway,
   rowNumber: number,
   row: Omit<Tenancy, "rowNumber">,
+  columns: EditColumns,
 ): Promise<void> {
   await gateway.updateValues(
     columnWrites(rowNumber, row, [
-      "Phone",
-      "Move-in date",
-      "Agreement end",
-      "Advance",
-      "Advance date",
-      "Advance status",
-      "Notes",
+      ...(columns.phone ? ["Phone"] : []),
+      ...(columns.moveIn ? ["Move-in date"] : []),
+      ...(columns.agreementEnd ? ["Agreement end"] : []),
+      ...(columns.advance ? ["Advance"] : []),
+      ...(columns.advanceDate ? ["Advance date"] : []),
+      ...(columns.status ? ["Advance status"] : []),
+      ...(columns.notes ? ["Notes"] : []),
       "Updated by",
       "Updated at",
     ]),

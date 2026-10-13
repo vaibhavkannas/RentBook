@@ -492,6 +492,175 @@ describe("saveTenancy: update", () => {
     expect(after.slice(13, 15)).toEqual(["member@example.com", "2026-10-06T09:00:00.000Z"]);
   });
 
+  describe("on a hand-edited row only what the person changed is written", () => {
+    // A clean row typed straight into the Sheet; each test changes the cells it is about.
+    const CELLS = [
+      "t-hand", "p1", "Asha", "98765 43210", "2026-01-15", "2027-01-14", 20000, "2026-01-10",
+      "Held", "", "", "Paid by cheque", "", "owner@example.com", "2026-01-15T05:00:00.000Z",
+    ];
+    const typed = (changes: Record<number, unknown>) =>
+      CELLS.map((cell, index) => (index in changes ? changes[index] : cell));
+
+    /** The fields an edit screen sends back when it was shown this tenancy and the person changed `changes`. */
+    const sent = (stored: Tenancy, changes: Partial<TenancyFields> = {}): TenancyFields => ({
+      phone: stored.phone,
+      moveIn: stored.moveIn,
+      agreementEnd: stored.agreementEnd,
+      advance: stored.advance,
+      advanceDate: stored.advanceDate,
+      notes: stored.notes,
+      ...changes,
+    });
+
+    async function handTyped(cells: unknown[]) {
+      const { fake, ctx } = await ready();
+      pushRawRow(fake, cells);
+      const [stored] = await tenancies(ctx);
+      const before = [...fake.tabs.get(TENANTS_TAB)![1]];
+      fake.calls = [];
+      const writes = recordUpdates(fake);
+      return { fake, ctx, stored, before, writes };
+    }
+
+    it("leaves text typed into Advance, the status next to it and the notes when only the phone changes", async () => {
+      const { fake, ctx, stored, before, writes } = await handTyped(HAND_TYPED_ROW);
+      expect(stored).toMatchObject({ advance: null, advanceStatus: null });
+
+      const { tenancy: saved } = await edit(ctx, stored, sent(stored, { phone: "99999 11111" }), { id: stored.id });
+
+      expect(fake.calls.filter((call) => call === "updateValues")).toHaveLength(1);
+      expect(writes).toEqual([
+        { a1: "D2", values: [["99999 11111"]] },
+        { a1: "N2:O2", values: [["member@example.com", "2026-10-06T09:00:00.000Z"]] },
+      ]);
+      const after = fake.tabs.get(TENANTS_TAB)![1];
+      expect(after[6]).toBe("20,000 rupees");
+      expect(after[8]).toBe("paid back");
+      expect(after[11]).toBe("=HYPERLINK(1)");
+      // everything but Phone, Updated by and Updated at is as it was, the extra column too
+      expect(unchangedColumns(before, after)).toEqual([0, 1, 2, 4, 5, 6, 7, 8, 9, 10, 11, 12, 15]);
+      // the person is told what the Sheet holds, not a value that was never written
+      expect(saved).toMatchObject({ phone: "99999 11111", advance: null, advanceStatus: null });
+    });
+
+    it("writes only Updated by and Updated at when nothing was changed", async () => {
+      const { fake, ctx, stored, before, writes } = await handTyped(HAND_TYPED_ROW);
+
+      await edit(ctx, stored, sent(stored), { id: stored.id });
+
+      expect(writes).toEqual([
+        { a1: "N2:O2", values: [["member@example.com", "2026-10-06T09:00:00.000Z"]] },
+      ]);
+      expect(unchangedColumns(before, fake.tabs.get(TENANTS_TAB)![1])).toEqual([
+        0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 15,
+      ]);
+    });
+
+    it("does not touch the notes when they come back the same apart from surrounding spaces", async () => {
+      const { ctx, stored, writes } = await handTyped(typed({ 11: "  two keys  ", 3: " 98765 43210 " }));
+
+      await edit(ctx, stored, sent(stored, { notes: "two keys", phone: "98765 43210" }), { id: stored.id });
+
+      expect(writes.map((write) => write.a1)).toEqual(["N2:O2"]);
+    });
+
+    it("does not rewrite an unknown status when the advance did not change", async () => {
+      const { fake, ctx, stored, writes } = await handTyped(typed({ 8: "paid back" }));
+      expect(stored).toMatchObject({ advance: 20000, advanceStatus: null });
+
+      await edit(ctx, stored, sent(stored, { notes: "Cheque cleared" }), { id: stored.id });
+
+      expect(writes.map((write) => write.a1)).toEqual(["L2", "N2:O2"]);
+      expect(fake.tabs.get(TENANTS_TAB)![1][8]).toBe("paid back");
+    });
+
+    it("does not rewrite an unknown status when only the advance amount changes", async () => {
+      const { fake, ctx, stored, writes } = await handTyped(typed({ 8: "paid back" }));
+
+      await edit(ctx, stored, sent(stored, { advance: 25000 }), { id: stored.id });
+
+      expect(writes.map((write) => write.a1)).toEqual(["G2", "N2:O2"]);
+      const after = fake.tabs.get(TENANTS_TAB)![1];
+      expect(after[6]).toBe(25000);
+      expect(after[8]).toBe("paid back");
+    });
+
+    it("clears the advance and its status, and leaves the advance date, when the advance is removed", async () => {
+      const { fake, ctx, stored, writes } = await handTyped(typed({ 8: "paid back" }));
+
+      await edit(ctx, stored, sent(stored, { advance: null }), { id: stored.id });
+
+      expect(writes.map((write) => write.a1)).toEqual(["G2", "I2", "N2:O2"]);
+      const after = fake.tabs.get(TENANTS_TAB)![1];
+      expect(after.slice(6, 9)).toEqual(["", "2026-01-10", ""]);
+    });
+
+    it("starts a new advance as Held, even over an unknown status", async () => {
+      const { fake, ctx, stored, writes } = await handTyped(typed({ 6: "twenty thousand", 8: "paid back" }));
+
+      await edit(ctx, stored, sent(stored, { advance: 15000 }), { id: stored.id });
+
+      expect(writes.map((write) => write.a1)).toEqual(["G2", "I2", "N2:O2"]);
+      expect(fake.tabs.get(TENANTS_TAB)![1].slice(6, 9)).toEqual([15000, "2026-01-10", "Held"]);
+    });
+
+    it("keeps a status that is readable when a hand-typed advance becomes a number", async () => {
+      const { fake, ctx, stored } = await handTyped(typed({ 6: "twenty thousand", 8: "Refunded" }));
+
+      await edit(ctx, stored, sent(stored, { advance: 15000 }), { id: stored.id });
+
+      expect(fake.tabs.get(TENANTS_TAB)![1][8]).toBe("Refunded");
+    });
+
+    it("counts a Move-out date of only spaces as still current: it can be edited, and the cell is not written", async () => {
+      const { fake, ctx, stored, writes } = await handTyped(typed({ 12: "   " }));
+      expect(stored.moveOut).toBe("");
+
+      await edit(ctx, stored, sent(stored, { phone: "99999 11111" }), { id: stored.id });
+
+      expect(writes.map((write) => write.a1)).toEqual(["D2", "N2:O2"]);
+      expect(fake.tabs.get(TENANTS_TAB)![1][12]).toBe("   ");
+      const view = await getPortionTenants(ctx, "p1");
+      expect(view.current).toMatchObject({ id: "t-hand", phone: "99999 11111", moveOut: "" });
+      expect(view.past).toEqual([]);
+    });
+
+    it("can move out a tenancy whose Move-out date holds only spaces", async () => {
+      const { fake, ctx, stored } = await handTyped(typed({ 12: "   " }));
+
+      await moveOutTenancy(
+        ctx,
+        { id: stored.id, expectedUpdatedAt: stored.updatedAt, moveOut: "2026-09-30" },
+        LATER_OPTIONS,
+      );
+
+      expect(fake.tabs.get(TENANTS_TAB)![1][12]).toBe("2026-09-30");
+    });
+
+    it("matches a portion id that has a stray space around it", async () => {
+      const { fake, ctx, stored, writes } = await handTyped(typed({ 1: " p1 " }));
+      expect(stored.portionId).toBe("p1");
+
+      expect((await getPortionTenants(ctx, "p1")).current).toMatchObject({ id: "t-hand" });
+      await edit(ctx, stored, sent(stored, { notes: "Spare key" }), { id: stored.id });
+
+      expect(writes.map((write) => write.a1)).toEqual(["L2", "N2:O2"]);
+      expect(fake.tabs.get(TENANTS_TAB)![1][1]).toBe(" p1 ");
+    });
+
+    it("closes a previous tenancy with a stray space in its portion id and spaces in its Move-out date for a new tenant", async () => {
+      const { fake, ctx } = await ready();
+      pushRawRow(fake, typed({ 1: " p1 ", 12: " " }));
+      setScheduleTenant(fake, "p1", "Hari");
+      const writes = recordUpdates(fake);
+
+      await create(ctx, { tenant: "Hari", fields: { moveIn: "2026-10-01" } }, LATER_OPTIONS);
+
+      expect(writes.map((write) => write.a1)).toEqual(["M2:O2"]);
+      expect(fake.tabs.get(TENANTS_TAB)![1][12]).toBe("2026-10-01");
+    });
+  });
+
   it("keeps the tenant, status, refund, deductions and move-out of the stored row", async () => {
     const { fake, ctx } = await ready();
     await appendTenancy(fake, row({ advance: 20000, advanceStatus: "Adjusted", refund: 100, deductions: 200 }));

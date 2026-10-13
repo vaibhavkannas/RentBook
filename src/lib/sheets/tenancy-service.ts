@@ -164,21 +164,36 @@ async function updateTenancy(
   }
   requireSeen(stored, input.expectedUpdatedAt);
 
+  // Only what the person actually changed is written. A cell the app cannot read (text typed into Advance, an
+  // unknown status) and a value that is the same as before are left exactly as they are in the Sheet.
+  const columns = {
+    phone: fields.phone !== stored.phone.trim(),
+    moveIn: fields.moveIn !== stored.moveIn,
+    agreementEnd: fields.agreementEnd !== stored.agreementEnd,
+    advance: fields.advance !== stored.advance,
+    advanceDate: fields.advanceDate !== stored.advanceDate,
+    // The status follows the advance only when the advance appears or goes away: no advance, no status; a new
+    // advance starts as Held; a changed amount keeps its status.
+    status: (fields.advance === null) !== (stored.advance === null),
+    notes: fields.notes !== stored.notes.trim(),
+  };
   const updated: Tenancy = {
     ...stored,
-    phone: fields.phone,
-    moveIn: fields.moveIn,
-    agreementEnd: fields.agreementEnd,
-    advance: fields.advance,
-    advanceDate: fields.advanceDate,
-    // No advance, no status. A new advance starts as Held. A changed amount keeps its status.
-    advanceStatus: fields.advance === null ? null : (stored.advanceStatus ?? "Held"),
-    notes: fields.notes,
+    phone: columns.phone ? fields.phone : stored.phone,
+    moveIn: columns.moveIn ? fields.moveIn : stored.moveIn,
+    agreementEnd: columns.agreementEnd ? fields.agreementEnd : stored.agreementEnd,
+    advance: columns.advance ? fields.advance : stored.advance,
+    advanceDate: columns.advanceDate ? fields.advanceDate : stored.advanceDate,
+    advanceStatus: columns.status
+      ? fields.advance === null
+        ? null
+        : (stored.advanceStatus ?? "Held")
+      : stored.advanceStatus,
+    notes: columns.notes ? fields.notes : stored.notes,
     updatedBy: stamp.updatedBy,
     updatedAt: stamp.now.toISOString(),
   };
-  // Only the columns an edit changes are written: the rest of the row stays as it is in the Sheet.
-  await writeTenancyEdit(ctx.gateway, stored.rowNumber, updated);
+  await writeTenancyEdit(ctx.gateway, stored.rowNumber, updated, columns);
   return { tenancy: updated };
 }
 

@@ -300,6 +300,23 @@ describe("readTenancies", () => {
     expect(only.advanceDate).toBe("15 Jan 2026");
   });
 
+  it("trims the portion id and the dates, and reads a Move-out date of only spaces as blank", async () => {
+    const fake = await ensured();
+    fake.tabs.get(TENANTS_TAB)!.push(
+      ["t-1", " p1 ", "Asha", "", " 2026-01-15 ", " 2027-01-14", "", "2026-01-10 ", "", "", "", "", "   ", "", ""],
+      ["t-2", "p2", "Bala", "", "2026-01-15", "", "", "", "", "", "", "", " 2026-09-30 ", "", ""],
+    );
+    const [spaced, closed] = await readTenancies(fake);
+    expect(spaced).toMatchObject({
+      portionId: "p1",
+      moveIn: "2026-01-15",
+      agreementEnd: "2027-01-14",
+      advanceDate: "2026-01-10",
+      moveOut: "",
+    });
+    expect(closed.moveOut).toBe("2026-09-30");
+  });
+
   it("keeps a number that cannot be a date as text instead of failing", async () => {
     const fake = await ensured();
     fake.tabs.get(TENANTS_TAB)!.push(["t-1", "p1", "Asha", "", 1e12, "", "", "", "", "", "", "", "", "", ""]);
@@ -555,6 +572,25 @@ function unchangedColumns(before: unknown[], after: unknown[]): number[] {
 }
 
 describe("writeTenancyEdit", () => {
+  const ALL_EDITABLE = {
+    phone: true,
+    moveIn: true,
+    agreementEnd: true,
+    advance: true,
+    advanceDate: true,
+    status: true,
+    notes: true,
+  };
+  const NO_EDITABLE = {
+    phone: false,
+    moveIn: false,
+    agreementEnd: false,
+    advance: false,
+    advanceDate: false,
+    status: false,
+    notes: false,
+  };
+
   // Everything the edit screen can change. Tenant, refund, deductions and move-out are different on purpose:
   // an edit must not write them.
   const EDITED = row({
@@ -579,7 +615,7 @@ describe("writeTenancyEdit", () => {
     fake.calls = [];
     const writes = recordWrites(fake);
 
-    await writeTenancyEdit(fake, 2, EDITED);
+    await writeTenancyEdit(fake, 2, EDITED, ALL_EDITABLE);
 
     expect(fake.calls).toEqual(["updateValues"]);
     expect(writes).toEqual([
@@ -597,7 +633,7 @@ describe("writeTenancyEdit", () => {
     const fake = await ensured();
     fake.tabs.get(TENANTS_TAB)!.push([...TYPED_ROW]);
 
-    await writeTenancyEdit(fake, 2, EDITED);
+    await writeTenancyEdit(fake, 2, EDITED, ALL_EDITABLE);
 
     const after = fake.tabs.get(TENANTS_TAB)![1];
     // A, B, C (0 to 2), J, K (9, 10), M (12) and the column right of O (15)
@@ -614,7 +650,7 @@ describe("writeTenancyEdit", () => {
     await appendTenancy(fake, row({ id: "c", portionId: "p3", tenant: "Chitra" }));
     const before = new Map(structuredClone([...fake.tabs.entries()]));
 
-    await writeTenancyEdit(fake, 3, EDITED);
+    await writeTenancyEdit(fake, 3, EDITED, ALL_EDITABLE);
 
     for (const [name, grid] of before) {
       if (name === TENANTS_TAB) continue;
@@ -631,7 +667,7 @@ describe("writeTenancyEdit", () => {
   it("clears the advance and its status cells when they become null", async () => {
     const fake = await ensured();
     await appendTenancy(fake, row({ advance: 20000, advanceStatus: "Held" }));
-    await writeTenancyEdit(fake, 2, row({ advance: null, advanceStatus: null }));
+    await writeTenancyEdit(fake, 2, row({ advance: null, advanceStatus: null }), ALL_EDITABLE);
     const [only] = await readTenancies(fake);
     expect(only).toMatchObject({ advance: null, advanceStatus: null });
   });
@@ -639,10 +675,49 @@ describe("writeTenancyEdit", () => {
   it("stores text that starts with = as text", async () => {
     const fake = await ensured();
     await appendTenancy(fake, row());
-    await writeTenancyEdit(fake, 2, row({ notes: "=SUM(A1:A9)", phone: "=1+1" }));
+    await writeTenancyEdit(fake, 2, row({ notes: "=SUM(A1:A9)", phone: "=1+1" }), ALL_EDITABLE);
     const cells = fake.tabs.get(TENANTS_TAB)![1];
     expect(cells[11]).toBe("=SUM(A1:A9)");
     expect(cells[3]).toBe("=1+1");
+  });
+
+  it("with nothing changed writes only Updated by and Updated at (N to O), and leaves every other cell as typed", async () => {
+    const fake = await ensured();
+    fake.tabs.get(TENANTS_TAB)!.push([...TYPED_ROW]);
+    fake.calls = [];
+    const writes = recordWrites(fake);
+
+    await writeTenancyEdit(fake, 2, EDITED, NO_EDITABLE);
+
+    expect(fake.calls).toEqual(["updateValues"]);
+    expect(writes).toEqual([
+      { tab: TENANTS_TAB, a1: "N2:O2", values: [["member@example.com", "2026-10-06T09:00:00.000Z"]] },
+    ]);
+    const after = fake.tabs.get(TENANTS_TAB)![1];
+    expect(unchangedColumns(TYPED_ROW, after)).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 15]);
+  });
+
+  it.each([
+    ["the phone", { phone: true }, ["D2", "N2:O2"], [["99999 11111"]]],
+    ["the move-in date", { moveIn: true }, ["E2", "N2:O2"], [["2026-02-01"]]],
+    ["the agreement end", { agreementEnd: true }, ["F2", "N2:O2"], [["2027-02-01"]]],
+    ["the advance", { advance: true }, ["G2", "N2:O2"], [[25000]]],
+    ["the advance date", { advanceDate: true }, ["H2", "N2:O2"], [["2026-01-20"]]],
+    ["the advance status", { status: true }, ["I2", "N2:O2"], [["Held"]]],
+    ["the notes", { notes: true }, ["L2", "N2:O2"], [["Raised advance"]]],
+    ["the phone and the move-in date", { phone: true, moveIn: true }, ["D2:E2", "N2:O2"], [["99999 11111", "2026-02-01"]]],
+    ["the advance and its status", { advance: true, status: true }, ["G2", "I2", "N2:O2"], [[25000], ["Held"]]],
+  ])("with only %s changed writes just that and Updated by and Updated at", async (_name, flags, ranges, values) => {
+    const fake = await ensured();
+    fake.tabs.get(TENANTS_TAB)!.push([...TYPED_ROW]);
+    fake.calls = [];
+    const writes = recordWrites(fake);
+
+    await writeTenancyEdit(fake, 2, EDITED, { ...NO_EDITABLE, ...flags });
+
+    expect(fake.calls).toEqual(["updateValues"]);
+    expect(writes.map((write) => write.a1)).toEqual(ranges);
+    expect(writes.slice(0, -1).map((write) => write.values[0])).toEqual(values);
   });
 });
 
