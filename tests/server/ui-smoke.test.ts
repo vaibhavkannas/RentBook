@@ -118,6 +118,19 @@ describe("PaymentSheet", () => {
     expect(out.match(/value="2026-10-05"/g)).toHaveLength(2);
   });
 
+  it("draws the section as a box with a visible border and a chevron that turns when it is open", () => {
+    const out = html(createElement(PaymentSheet, { ...props, mode: "new-tenant" }));
+    // a native disclosure: details and summary, still at least 44px tall
+    expect(out).toMatch(/<details[^>]*class="[^"]*\bgroup\b[^"]*border-control[^"]*"/);
+    expect(out).not.toMatch(/<details[^>]*border-line/);
+    const summary = out.match(/<summary[^>]*>[\s\S]*?<\/summary>/)?.[0] ?? "";
+    expect(summary).toContain("min-h-11");
+    expect(summary).toContain("Tenancy details (optional)");
+    // the chevron is drawn, hidden from screen readers, and rotates with the details element
+    expect(summary).toMatch(/<svg[^>]*aria-hidden="true"/);
+    expect(summary).toContain("group-open:rotate-90");
+  });
+
   it("has its status region on the page from the start, empty, for the tenancy warning", () => {
     const out = html(createElement(PaymentSheet, { ...props, mode: "new-tenant" }));
     expect(out).toContain('<div role="status"></div>');

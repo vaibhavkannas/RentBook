@@ -376,10 +376,23 @@ export default function PaymentSheet({
               <details
                 open={detailsOpen}
                 onToggle={(event) => setDetailsOpen(event.currentTarget.open)}
-                className="rounded-xl border border-line px-3"
+                className="group rounded-xl border border-control px-3"
               >
-                <summary className="flex min-h-11 cursor-pointer items-center text-sm font-medium">
+                {/* flex takes away the browser's own arrow, so the chevron is drawn here; it turns down when open. */}
+                <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-2 text-sm font-medium [&::-webkit-details-marker]:hidden">
                   Tenancy details (optional)
+                  <svg
+                    aria-hidden="true"
+                    viewBox="0 0 20 20"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    className="h-5 w-5 shrink-0 text-muted transition-transform group-open:rotate-90 motion-reduce:transition-none"
+                  >
+                    <path d="M7 4l6 6-6 6" />
+                  </svg>
                 </summary>
                 <div className="space-y-3 pb-3">
                   <label className="block text-sm">
