@@ -9,6 +9,7 @@ import type { PortionCard } from "@/lib/domain/types";
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
 
 import TenantsLoading from "@/app/tenants/[portionId]/loading";
+import ExitGuard from "@/components/ExitGuard";
 import MoveOutForm from "@/components/MoveOutForm";
 import PaymentSheet from "@/components/PaymentSheet";
 import PortionBoard from "@/components/PortionBoard";
@@ -146,6 +147,20 @@ describe("PortionBoard: rent against the amount received", () => {
     const out = board([paid(10030, 10000, 30)]);
     expect(out).toContain("Edit amount");
     expect(out).toContain(">Undo<");
+  });
+});
+
+describe("ExitGuard", () => {
+  const out = html(createElement(ExitGuard));
+
+  it("renders an always-present, empty live region, so a normal visit shows nothing", () => {
+    expect(out).toMatch(/^<div role="status" class="[^"]*"><\/div>$/);
+    expect(out).not.toContain("<p");
+    expect(out).not.toContain("Press back again to exit");
+  });
+
+  it("uses the same toast placement as the payment toast, and does not catch taps itself", () => {
+    expect(out).toContain("pointer-events-none fixed inset-x-4 bottom-4 z-50 mx-auto max-w-md");
   });
 });
 

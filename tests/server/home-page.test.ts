@@ -84,6 +84,19 @@ describe("the home page", () => {
   });
 });
 
+describe("the exit guard on the home page", () => {
+  it("has its empty live region on the page, with no toast on a normal visit", async () => {
+    const html = await render();
+    expect(html).toMatch(/<div role="status" class="pointer-events-none fixed[^"]*"><\/div>/);
+    expect(html).not.toContain("Press back again to exit");
+  });
+
+  it("is there when the Sheet could not be read, too", async () => {
+    mocks.loadMonthView.mockRejectedValue(new AppError("sheet-structure", "The Schedule tab has no Month header."));
+    expect(await render()).toMatch(/<div role="status" class="pointer-events-none fixed[^"]*"><\/div>/);
+  });
+});
+
 describe("the month summary: received against rent due", () => {
   it("shows what was received of the rent due, and no difference line when they match", async () => {
     mocks.loadMonthView.mockResolvedValue(

@@ -1,7 +1,8 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   monthHref,
   monthPickerCells,
+  openMonth,
   sheetKey,
   shouldCloseOnBackdrop,
   shouldStartSwipe,
@@ -23,6 +24,26 @@ describe("monthHref", () => {
   it("links the current month to the plain home page and others with a month", () => {
     expect(monthHref("2026-10", "2026-10")).toBe("/");
     expect(monthHref("2026-11", "2026-10")).toBe("/?month=2026-11");
+  });
+});
+
+describe("openMonth", () => {
+  const router = () => ({ push: vi.fn(), replace: vi.fn(), back: vi.fn() });
+
+  it("replaces the history entry instead of adding one, so Back does not walk through every month visited", () => {
+    const r = router();
+    openMonth(r, "2026-11", "2026-10");
+    expect(r.replace).toHaveBeenCalledTimes(1);
+    expect(r.replace).toHaveBeenCalledWith("/?month=2026-11");
+    expect(r.push).not.toHaveBeenCalled();
+    expect(r.back).not.toHaveBeenCalled();
+  });
+
+  it("goes to the plain home page for the current month (the Today pill)", () => {
+    const r = router();
+    openMonth(r, "2026-10", "2026-10");
+    expect(r.replace).toHaveBeenCalledWith("/");
+    expect(r.push).not.toHaveBeenCalled();
   });
 });
 

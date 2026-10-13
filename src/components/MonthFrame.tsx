@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { useRef, useState, useTransition, type ReactNode, type TouchEvent } from "react";
 import { addMonths, parseYmKey, ymKey } from "@/lib/domain/year-month";
 import { formatMonthTitle } from "@/lib/format";
-import { monthHref, shouldStartSwipe, swipeDirection } from "@/lib/month-nav";
+import { openMonth, shouldStartSwipe, swipeDirection } from "@/lib/month-nav";
 import MonthPicker from "./MonthPicker";
 
 type Props = {
@@ -33,7 +33,7 @@ export default function MonthFrame({ monthKey, currentKey, children }: Props) {
     setPickerOpen(false);
     setTarget(key);
     startTransition(() => {
-      router.push(monthHref(key, currentKey));
+      openMonth(router, key, currentKey);
     });
   }
 

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { signOut } from "@/auth";
+import ExitGuard from "@/components/ExitGuard";
 import LoadProblem from "@/components/LoadProblem";
 import MonthFrame from "@/components/MonthFrame";
 import PortionBoard from "@/components/PortionBoard";
@@ -83,6 +84,8 @@ export default async function Home({
           </>
         )}
       </MonthFrame>
+
+      <ExitGuard />
 
       <footer className="mt-6 space-y-1 text-sm">
         <p className="break-words text-muted">Signed in as {viewer.email}</p>

@@ -14,6 +14,20 @@ export function monthHref(key: string, currentKey: string): string {
   return key === currentKey ? "/" : `/?month=${key}`;
 }
 
+/**
+ * Opens a month on the month screen. It replaces the history entry instead of adding one: every
+ * month visited would otherwise add an entry, and Back would walk through all of them. (The router
+ * is typed with `replace` only, so a push cannot sneak back in.) Links to other pages (Details,
+ * Activity, Settings) still push, so Back returns to the month screen.
+ */
+export function openMonth(
+  router: { replace: (href: string) => void },
+  key: string,
+  currentKey: string,
+): void {
+  router.replace(monthHref(key, currentKey));
+}
+
 /** Which way a finger drag means, or null when it is too short or mostly vertical. */
 export function swipeDirection(
   dx: number,
