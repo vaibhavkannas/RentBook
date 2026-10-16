@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { serialFromYm } from "@/lib/domain/year-month";
 import { AppError } from "@/lib/errors";
 import { parseSchedule } from "@/lib/sheets/schedule";
 import {
@@ -71,6 +72,150 @@ describe("parseSchedule", () => {
     expect(() => parseSchedule([["nothing"]], PORTIONS, TOTAL_HEADER)).toThrow(AppError);
     const headerOnly = baseSchedule().slice(0, 3);
     expect(() => parseSchedule(headerOnly, PORTIONS, TOTAL_HEADER)).toThrow(/no month rows/);
+  });
+
+  it("reads every Month cell on its own: dates and text can be mixed", () => {
+    const values = baseSchedule();
+    (values[3] as unknown[])[0] = serialFromYm({ year: 2026, month: 8 });
+    (values[4] as unknown[])[0] = "Sept-26";
+    values.push(scheduleRow("October 2026", [null, null, null, null, null], 6));
+    values.push(scheduleRow("2026-11", [null, null, null, null, null], 7));
+    const { rows, layout } = parseSchedule(values, PORTIONS, TOTAL_HEADER);
+    expect(rows.map((row) => row.month)).toEqual([
+      { year: 2026, month: 8 },
+      { year: 2026, month: 9 },
+      { year: 2026, month: 10 },
+      { year: 2026, month: 11 },
+    ]);
+    expect(rows.map((row) => row.rowNumber)).toEqual([4, 5, 6, 7]);
+    expect(rows[1].entries.p1).toEqual({ tenant: "Asha", count: 3, amount: 5450 });
+    expect(layout.lastDataRow).toBe(7);
+    // The format used to write a new row comes from the bottom-most month cell only.
+    expect(layout.codec).toEqual({ kind: "iso" });
+  });
+
+  it("reads a text row in a sheet whose bottom row is a date, and the other way round", () => {
+    const dateBottom = baseSchedule();
+    (dateBottom[4] as unknown[])[0] = serialFromYm({ year: 2026, month: 9 });
+    const a = parseSchedule(dateBottom, PORTIONS, TOTAL_HEADER);
+    expect(a.rows).toHaveLength(2);
+    expect(a.layout.codec).toEqual({ kind: "serial" });
+
+    const textBottom = baseSchedule("serial");
+    (textBottom[4] as unknown[])[0] = "Sep-26";
+    const b = parseSchedule(textBottom, PORTIONS, TOTAL_HEADER);
+    expect(b.rows.map((row) => row.month)).toEqual([
+      { year: 2026, month: 8 },
+      { year: 2026, month: 9 },
+    ]);
+    expect(b.layout.codec).toEqual({
+      kind: "text",
+      style: { longName: false, separator: "-", fourDigitYear: false },
+    });
+  });
+
+  it("reads Sept-26 and other three-or-more-letter prefixes", () => {
+    const values = baseSchedule();
+    (values[3] as unknown[])[0] = "sept. 26";
+    (values[4] as unknown[])[0] = "Sept-26";
+    const { rows } = parseSchedule(values, PORTIONS, TOTAL_HEADER);
+    expect(rows.map((row) => row.month)).toEqual([
+      { year: 2026, month: 9 },
+      { year: 2026, month: 9 },
+    ]);
+  });
+
+  describe("a Month cell that cannot be read", () => {
+    const expectStructure = (run: () => unknown) => {
+      let thrown: unknown;
+      try {
+        run();
+      } catch (error) {
+        thrown = error;
+      }
+      expect(thrown).toBeInstanceOf(AppError);
+      expect((thrown as AppError).code).toBe("sheet-structure");
+      return (thrown as AppError).message;
+    };
+
+    it("inside the table is an error that names the row and the cell text", () => {
+      const values = baseSchedule();
+      (values[3] as unknown[])[0] = "Agust-26";
+      const message = expectStructure(() => parseSchedule(values, PORTIONS, TOTAL_HEADER));
+      expect(message).toMatch(/Row 4\b/);
+      expect(message).toContain('"Agust-26"');
+    });
+
+    it("is cut to 40 characters in the message", () => {
+      const values = baseSchedule();
+      const long = "x".repeat(25) + "y".repeat(25);
+      (values[3] as unknown[])[0] = long;
+      const message = expectStructure(() => parseSchedule(values, PORTIONS, TOTAL_HEADER));
+      expect(message).toContain(long.slice(0, 40));
+      expect(message).not.toContain(long.slice(0, 41));
+    });
+
+    it("is ignored below the last month row, like a footer label", () => {
+      const values = baseSchedule();
+      values.push(["Total"], ["Grand total", undefined, undefined, 123], [5], ["garbled'cell"]);
+      const { rows, layout } = parseSchedule(values, PORTIONS, TOTAL_HEADER);
+      expect(rows).toHaveLength(2);
+      expect(layout.lastDataRow).toBe(5);
+    });
+
+    it("is an error for a stray number such as 5 in a sheet of dates, never a 1900-01 row", () => {
+      const values = baseSchedule("serial");
+      (values[3] as unknown[])[0] = 5;
+      const message = expectStructure(() => parseSchedule(values, PORTIONS, TOTAL_HEADER));
+      expect(message).toMatch(/Row 4\b/);
+      expect(message).toContain('"5"');
+    });
+
+    it("is an error for a date in a sheet of text months (it used to be dropped silently)", () => {
+      const values = baseSchedule();
+      (values[3] as unknown[])[0] = 7;
+      expectStructure(() => parseSchedule(values, PORTIONS, TOTAL_HEADER));
+    });
+
+    it("is ignored when it is a stray number below the last month row", () => {
+      const values = baseSchedule("serial");
+      values.push(scheduleRow(5, [null, null, null, null, null], 6));
+      const { rows, layout } = parseSchedule(values, PORTIONS, TOTAL_HEADER);
+      expect(rows).toHaveLength(2);
+      expect(layout.lastDataRow).toBe(5);
+    });
+
+    it.each([
+      ["before 2000", serialFromYm({ year: 1999, month: 12 })],
+      ["after 2100", serialFromYm({ year: 2101, month: 1 })],
+    ])("treats a date serial %s as unreadable", (_label, serial) => {
+      const inside = baseSchedule("serial");
+      (inside[3] as unknown[])[0] = serial;
+      expectStructure(() => parseSchedule(inside, PORTIONS, TOTAL_HEADER));
+
+      const below = baseSchedule("serial");
+      below.push(scheduleRow(serial, [null, null, null, null, null], 6));
+      expect(parseSchedule(below, PORTIONS, TOTAL_HEADER).rows).toHaveLength(2);
+    });
+
+    it("never turns a blank Month cell, or one of only spaces, into an error", () => {
+      const values = baseSchedule();
+      values.splice(4, 0, [], ["   ", undefined, undefined, 10], [""]);
+      const { rows } = parseSchedule(values, PORTIONS, TOTAL_HEADER);
+      expect(rows.map((row) => row.month)).toEqual([
+        { year: 2026, month: 8 },
+        { year: 2026, month: 9 },
+      ]);
+      expect(rows[1].rowNumber).toBe(8);
+    });
+
+    it("leaves the 'no month rows' message when nothing in the column can be read", () => {
+      const values = baseSchedule().slice(0, 3);
+      values.push(["Notes"], ["More notes"]);
+      expect(expectStructure(() => parseSchedule(values, PORTIONS, TOTAL_HEADER))).toMatch(
+        /no month rows/,
+      );
+    });
   });
 
   it("treats a row with a month but no numbers as vacant for every portion", () => {

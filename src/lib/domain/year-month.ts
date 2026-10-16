@@ -86,10 +86,18 @@ export function monthName(month: number, long: boolean): string {
   return long ? name : name.slice(0, 3);
 }
 
+/** The full English name when `name` is one. Used to tell "September" (long style) from "Sept" (short). */
+export function isFullMonthName(name: string): boolean {
+  return LONG_NAMES.some((long) => long.toLowerCase() === name.toLowerCase());
+}
+
+/**
+ * 1 to 12 for an English month name or a prefix of one of at least three letters, with an optional trailing
+ * dot: "Sep", "Sept", "sept.", "September". Three letters tell every month apart.
+ */
 export function monthIndexFromName(name: string): number | null {
-  const lower = name.toLowerCase();
-  const index = LONG_NAMES.findIndex(
-    (long) => long.toLowerCase() === lower || long.slice(0, 3).toLowerCase() === lower,
-  );
+  const lower = name.toLowerCase().replace(/\.$/, "");
+  if (lower.length < 3) return null;
+  const index = LONG_NAMES.findIndex((long) => long.toLowerCase().startsWith(lower));
   return index === -1 ? null : index + 1;
 }

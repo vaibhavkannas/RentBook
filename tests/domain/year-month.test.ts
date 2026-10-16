@@ -102,6 +102,12 @@ describe("month names", () => {
     expect(monthName(9, true)).toBe("September");
     expect(monthIndexFromName("sep")).toBe(9);
     expect(monthIndexFromName("September")).toBe(9);
-    expect(monthIndexFromName("Sept")).toBeNull();
+    // a prefix of at least three letters, with an optional trailing dot
+    expect(monthIndexFromName("Sept")).toBe(9);
+    expect(monthIndexFromName("sept.")).toBe(9);
+    expect(monthIndexFromName("Marc")).toBe(3);
+    expect(monthIndexFromName("Ju")).toBeNull();
+    expect(monthIndexFromName("Septembers")).toBeNull();
+    expect(monthIndexFromName("Sepx")).toBeNull();
   });
 });
