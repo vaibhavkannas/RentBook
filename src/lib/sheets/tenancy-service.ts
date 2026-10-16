@@ -1,6 +1,8 @@
 import { findLatestEntry } from "@/lib/domain/month-view";
 import {
   currentTenancy,
+  isAdvanceStatus,
+  MAX_NOTES_LENGTH,
   MAX_RUPEES,
   pastTenancies,
   sameTenantName,
@@ -16,9 +18,6 @@ import { loadSnapshot, type SheetsContext, type Snapshot } from "./service";
 import { withWriteLock } from "./write-lock";
 import { checkNewTenancy, recordNewTenant, type WriteStamp } from "./tenancy-writes";
 import { writeTenancyEdit, writeTenancyMoveOut } from "./tenants-store";
-
-const ADVANCE_STATUSES: readonly string[] = ["Held", "Refunded", "Adjusted"] satisfies AdvanceStatus[];
-const MAX_NOTES_LENGTH = 500;
 
 export type SaveTenancyInput = {
   portionId: string;
@@ -239,7 +238,7 @@ async function moveOutUnchecked(
   if (
     input.advanceStatus !== undefined &&
     input.advanceStatus !== null &&
-    !ADVANCE_STATUSES.includes(input.advanceStatus)
+    !isAdvanceStatus(input.advanceStatus)
   ) {
     throw validation("Advance outcome must be Held, Refunded or Adjusted.");
   }

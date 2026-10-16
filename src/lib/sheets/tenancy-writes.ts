@@ -64,7 +64,7 @@ async function appendNewTenancy(
     throw conflict(`Details already exist for ${tenant}. Refresh the page.`);
   }
   const row: Omit<Tenancy, "rowNumber"> = {
-    id: newTenancyId(stamp.now),
+    id: newTenancyId(),
     portionId,
     tenant,
     phone: fields.phone,

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   buildPaymentRequest,
+  existingEntryFrom,
   LOG_RETRY_FAILED_MESSAGE,
   LOG_RETRY_UNCONFIRMED_MESSAGE,
   logRetryFailureMessage,
@@ -21,6 +22,38 @@ const base: PaymentRequestInput = {
 };
 
 const SEEN = { tenant: "Asha", count: 4, amount: 5450 };
+
+describe("existingEntryFrom", () => {
+  it("reads tenant, count and amount from the details of a duplicate warning", () => {
+    expect(
+      existingEntryFrom({ existingAmount: 5450, existingTenant: "Asha", existingCount: 4 }),
+    ).toEqual(SEEN);
+  });
+
+  it("allows a tenant name that is empty, as a payment recorded without one can be", () => {
+    expect(existingEntryFrom({ existingAmount: 5450, existingTenant: "", existingCount: 1 })).toEqual({
+      tenant: "",
+      count: 1,
+      amount: 5450,
+    });
+  });
+
+  it("gives nothing when any of the three is missing or of the wrong kind, so no Replace is offered", () => {
+    for (const details of [
+      undefined,
+      {},
+      { existingAmount: 5450, existingTenant: "Asha" },
+      { existingTenant: "Asha", existingCount: 4 },
+      { existingAmount: 5450, existingCount: 4 },
+      { existingAmount: "5450", existingTenant: "Asha", existingCount: 4 },
+      { existingAmount: 5450, existingTenant: "Asha", existingCount: "4" },
+      { existingAmount: 5450, existingTenant: 7, existingCount: 4 },
+      { existingAmount: Number.NaN, existingTenant: "Asha", existingCount: 4 },
+    ]) {
+      expect(existingEntryFrom(details)).toBeNull();
+    }
+  });
+});
 
 describe("buildPaymentRequest", () => {
   it("sends a plain log with no overwrite and no expected entry", () => {
@@ -52,9 +85,36 @@ describe("buildPaymentRequest", () => {
     expect(result.ok ? "" : result.message).toMatch(/no longer recorded/);
   });
 
-  it("sends overwrite for a confirmed replace without an expected entry", () => {
-    const result = buildPaymentRequest({ ...base, confirmedReplace: true });
-    expect(result).toMatchObject({ ok: true, body: { overwrite: true, expected: undefined } });
+  it("makes a confirmed replace carry the entry the duplicate warning named", () => {
+    const result = buildPaymentRequest({ ...base, amount: 6000, confirmedReplace: true, seenEntry: SEEN });
+    expect(result).toMatchObject({ ok: true, body: { overwrite: true, expected: SEEN, amount: 6000 } });
+  });
+
+  it("does the same for a replace in the new tenant sheet", () => {
+    const result = buildPaymentRequest({
+      ...base,
+      mode: "new-tenant",
+      tenantName: "Farah",
+      confirmedReplace: true,
+      seenEntry: SEEN,
+    });
+    expect(result).toMatchObject({
+      ok: true,
+      body: { overwrite: true, expected: SEEN, newTenantName: "Farah" },
+    });
+  });
+
+  it("refuses to build a replace that has no entry to compare against", () => {
+    for (const mode of ["log", "new-tenant"] as const) {
+      const result = buildPaymentRequest({ ...base, mode, confirmedReplace: true, seenEntry: undefined });
+      expect(result.ok).toBe(false);
+      expect(result.ok ? "" : result.message).toMatch(/no longer recorded/);
+    }
+  });
+
+  it("sends no expected entry unless the person replaced or edited, even when an entry is given", () => {
+    const result = buildPaymentRequest({ ...base, seenEntry: SEEN });
+    expect(result).toMatchObject({ ok: true, body: { overwrite: undefined, expected: undefined } });
   });
 
   it("sends the new tenant's name only in the new tenant sheet", () => {

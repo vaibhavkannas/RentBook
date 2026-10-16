@@ -1,7 +1,8 @@
 import type { PortionConfig } from "@/lib/domain/types";
 import { sheetStructure, tabMissing, validation } from "@/lib/errors";
-import { findHeaderRowIndex, isBlankCell, shorten } from "./schedule";
+import { isBlankCell } from "./cells";
 import type { SheetsGateway } from "./gateway";
+import { findHeaderRowIndex, shorten } from "./schedule";
 import { addTabIfMissing } from "./tabs";
 import { ensureTenantsTab, TENANTS_TAB } from "./tenants-store";
 
@@ -120,8 +121,7 @@ export function resetBootstrap(gateway: SheetsGateway): void {
 const SETTINGS_MISSING =
   "The Settings tab is missing. Restore it from File > Version history or rename it back. RentBook will not recreate it because that would reset your rent cycle lengths and hike percentages.";
 
-const isBlankRow = (row: unknown[]) =>
-  row.every((cell) => cell === undefined || cell === null || String(cell).trim() === "");
+const isBlankRow = (row: unknown[]) => row.every(isBlankCell);
 
 /**
  * True when a Settings tab holds nothing but, at most, its header row, so it is safe to fill in. Anything

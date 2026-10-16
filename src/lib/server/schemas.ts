@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { ADVANCE_STATUSES } from "@/lib/domain/tenancy";
 
 const monthString = z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, "month must look like 2026-10");
 
@@ -79,7 +80,7 @@ export const moveOutBody = z.object({
   id: z.string().min(1),
   expectedUpdatedAt: z.string(),
   moveOut: z.string(),
-  advanceStatus: z.enum(["Held", "Refunded", "Adjusted"]).nullable().optional(),
+  advanceStatus: z.enum(ADVANCE_STATUSES).nullable().optional(),
   refund: z.number().nullable().optional(),
   deductions: z.number().nullable().optional(),
   notes: z.string().optional(),

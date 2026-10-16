@@ -52,6 +52,53 @@ describe("suggestAmount", () => {
     expect(suggestAmount(10000, 10, true)).toBe(11000);
     expect(suggestAmount(10000, 0, true)).toBe(10000);
   });
+  it("works in whole basis points, so a half rupee is never lost to floating point", () => {
+    // 20500 at 0.1% is exactly 20520.5; in floating point it came out as 20520.4999...
+    expect(suggestAmount(20500, 0.1, true)).toBe(20521);
+    expect(suggestAmount(1250, 1.32, true)).toBe(1267);
+    expect(suggestAmount(2500, 0.46, true)).toBe(2512);
+  });
+  it("takes a percent with more than two decimals to the nearest basis point", () => {
+    expect(suggestAmount(10000, 5.555, true)).toBe(10556);
+    expect(suggestAmount(10000, 5.554, true)).toBe(10555);
+  });
+  it("matches exact BigInt arithmetic, rounding half up, for many amounts and percents", () => {
+    const exact = (amount: number, percent: number) => {
+      const [whole, half] = [BigInt(10_000), BigInt(5_000)];
+      const basisPoints = BigInt(Math.round(percent * 100));
+      return Number((BigInt(amount) * (whole + basisPoints) + half) / whole);
+    };
+    let checked = 0;
+    // every amount that is a multiple of 50 up to 60,000 (rents are round figures), at every hundredth of a percent up to 25
+    for (let amount = 50; amount <= 60_000; amount += 50) {
+      for (let hundredths = 0; hundredths <= 2_500; hundredths++) {
+        const percent = hundredths / 100;
+        const got = suggestAmount(amount, percent, true);
+        if (got !== exact(amount, percent)) {
+          throw new Error(`${amount} at ${percent}%: got ${got}, exact ${exact(amount, percent)}`);
+        }
+        checked++;
+      }
+    }
+    // and a fixed pseudo-random set of any whole rupee amount, at percents with up to two decimals
+    let seed = 12345;
+    const next = () => (seed = (seed * 1_103_515_245 + 12_345) % 2_147_483_648) / 2_147_483_648;
+    for (let i = 0; i < 100_000; i++) {
+      const amount = 1 + Math.floor(next() * 10_000_000);
+      const percent = Math.floor(next() * 10_001) / 100;
+      expect(suggestAmount(amount, percent, true)).toBe(exact(amount, percent));
+      checked++;
+    }
+    expect(checked).toBeGreaterThan(3_000_000);
+  });
+  it("always gives a whole rupee, and nothing below the previous rent for a hike of zero or more", () => {
+    for (const [amount, percent] of [[5450.5, 5], [999, 0.01], [1, 100], [10_000_000, 100]]) {
+      const result = suggestAmount(amount, percent, true);
+      expect(Number.isInteger(result)).toBe(true);
+      expect(result).toBeGreaterThanOrEqual(Math.floor(amount));
+    }
+    expect(suggestAmount(10_000_000, 100, true)).toBe(20_000_000);
+  });
 });
 
 describe("isHikeRounding", () => {

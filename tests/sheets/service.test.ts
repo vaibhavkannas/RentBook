@@ -120,7 +120,61 @@ describe("logPayment: duplicates", () => {
     const { ctx } = setup();
     await pay(ctx, { portionId: "p1" });
     const error = await expectCode(pay(ctx, { portionId: "p1", amount: 6000 }), "conflict");
-    expect(error.details).toEqual({ existingAmount: 5450, existingTenant: "Asha" });
+    expect(error.details).toEqual({ existingAmount: 5450, existingTenant: "Asha", existingCount: 4 });
+  });
+
+  describe("a replace after the duplicate warning", () => {
+    /** The warning for p1 in October, and the entry it named, as the sheet sends it back with the Replace. */
+    async function warned() {
+      const { fake, ctx } = setup();
+      await pay(ctx, { portionId: "p1" });
+      const warning = await expectCode(pay(ctx, { portionId: "p1", amount: 6000 }), "conflict");
+      const expected = {
+        tenant: String(warning.details!.existingTenant),
+        count: Number(warning.details!.existingCount),
+        amount: Number(warning.details!.existingAmount),
+      };
+      return { fake, ctx, expected };
+    }
+
+    it("goes through when the entry is still what the warning named", async () => {
+      const { fake, ctx, expected } = await warned();
+      const result = await pay(ctx, { portionId: "p1", amount: 6000, overwrite: true, expected });
+      expect(result.entry).toEqual({ tenant: "Asha", count: 4, amount: 6000 });
+      expect(cell(fake, "Schedule", "D", 6)).toBe(6000);
+    });
+
+    it("is refused when someone changed the amount after the warning, and writes nothing", async () => {
+      const { fake, ctx, expected } = await warned();
+      fake.tabs.get("Schedule")![5][3] = 5700; // another person's edit in the Sheet itself
+      const logBefore = structuredClone(fake.tabs.get(LOG_TAB));
+      const error = await expectCode(
+        pay(ctx, { portionId: "p1", amount: 6000, overwrite: true, expected }),
+        "conflict",
+      );
+      expect(error.message).toMatch(/was changed by someone else/);
+      expect(cell(fake, "Schedule", "D", 6)).toBe(5700);
+      expect(fake.tabs.get(LOG_TAB)).toEqual(logBefore);
+    });
+
+    it("is refused when the count or the tenant changed after the warning", async () => {
+      for (const [col, value] of [[2, 9], [1, "Someone Else"]] as const) {
+        const { fake, ctx, expected } = await warned();
+        fake.tabs.get("Schedule")![5][col] = value;
+        await expectCode(pay(ctx, { portionId: "p1", amount: 6000, overwrite: true, expected }), "conflict");
+      }
+    });
+
+    it("is refused when the entry was undone after the warning, instead of recreating it", async () => {
+      const { fake, ctx, expected } = await warned();
+      await undoPayment(ctx, { month: OCT, portionId: "p1", expected }, OPTIONS);
+      const error = await expectCode(
+        pay(ctx, { portionId: "p1", amount: 6000, overwrite: true, expected }),
+        "conflict",
+      );
+      expect(error.message).toMatch(/no payment recorded/);
+      expect(cell(fake, "Schedule", "D", 6)).toBe("");
+    });
   });
 
   it("overwrites when confirmed, keeping the same count", async () => {

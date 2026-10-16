@@ -4,10 +4,11 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { HIKE_ROUNDING_ALLOWANCE, roundedChoices } from "@/lib/domain/rent-rules";
 import type { TenancyFields } from "@/lib/domain/tenancy";
-import type { PortionCard } from "@/lib/domain/types";
+import type { PortionCard, PortionEntry } from "@/lib/domain/types";
 import { formatRupees } from "@/lib/format";
 import {
   buildPaymentRequest,
+  existingEntryFrom,
   logRetryFailureMessage,
   paymentOutcome,
   TENANCY_NOT_SAVED_MESSAGE,
@@ -71,7 +72,8 @@ export default function PaymentSheet({
   const [tenantName, setTenantName] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [conflict, setConflict] = useState<{ amount: number; tenant: string } | null>(null);
+  // The payment a duplicate warning named: the Replace it offers is checked against this entry.
+  const [conflict, setConflict] = useState<PortionEntry | null>(null);
   const [notice, setNotice] = useState<Notice | null>(null);
   // The optional "Tenancy details" part of the New tenant sheet.
   const [details, setDetails] = useState<NewTenantDetailsForm>({
@@ -116,7 +118,7 @@ export default function PaymentSheet({
       dateReceived: date,
       tenantName,
       confirmedReplace: overwrite,
-      seenEntry,
+      seenEntry: seenEntry ?? (overwrite ? (conflict ?? undefined) : undefined),
       tenancy,
     });
     if (!request.ok) return setError(request.message);
@@ -133,12 +135,8 @@ export default function PaymentSheet({
       return setNotice({ logRow: outcome.pendingLogRow, tenancyNotSaved: outcome.tenancyNotSaved });
     }
     const failure = body.error ?? { code: "unknown", message: "Something went wrong. Try again." };
-    if (failure.code === "conflict" && typeof failure.details?.existingAmount === "number") {
-      return setConflict({
-        amount: failure.details.existingAmount,
-        tenant: String(failure.details.existingTenant ?? ""),
-      });
-    }
+    const duplicate = failure.code === "conflict" ? existingEntryFrom(failure.details) : null;
+    if (duplicate) return setConflict(duplicate);
     // Someone else changed this payment, so the screen behind this sheet is out of date.
     if (failure.code === "conflict") router.refresh();
     // The details are in the collapsed section, so open it when the server found something wrong in them.

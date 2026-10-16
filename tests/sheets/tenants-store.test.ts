@@ -8,7 +8,6 @@ import {
   readTenancies,
   TENANT_HEADERS,
   TENANTS_TAB,
-  writeTenancy,
   writeTenancyEdit,
   writeTenancyMoveOut,
 } from "@/lib/sheets/tenants-store";
@@ -427,66 +426,6 @@ describe("appendTenancy", () => {
     expect(cells[2]).toBe("=1+1");
     expect(cells[11]).toBe("=HYPERLINK(1)");
     expect(cells[3]).toBe("+91 98765");
-  });
-});
-
-describe("writeTenancy", () => {
-  it("rewrites exactly one row with exactly one updateValues call", async () => {
-    const fake = await ensured();
-    await appendTenancy(fake, row({ id: "a" }));
-    await appendTenancy(fake, row({ id: "b", portionId: "p2", tenant: "Bala" }));
-    await appendTenancy(fake, row({ id: "c", portionId: "p3", tenant: "Chitra" }));
-    const before = structuredClone(fake.tabs.get(TENANTS_TAB)!);
-    fake.calls = [];
-
-    const changed = row({
-      id: "b",
-      portionId: "p2",
-      tenant: "Bala",
-      advanceStatus: "Refunded",
-      refund: 20000,
-      moveOut: "2026-09-30",
-      updatedAt: "2026-09-30T05:00:00.000Z",
-    });
-    await writeTenancy(fake, 3, changed);
-
-    expect(fake.calls).toEqual(["updateValues"]);
-    const after = fake.tabs.get(TENANTS_TAB)!;
-    expect(after[2]).toEqual(stored(changed)); // sheet row 3
-    expect(after[0]).toEqual(before[0]);
-    expect(after[1]).toEqual(before[1]);
-    expect(after[3]).toEqual(before[3]);
-    expect(after).toHaveLength(before.length);
-    expect((await readTenancies(fake))[1]).toEqual({ rowNumber: 3, ...changed });
-  });
-
-  it("targets A{r}:O{r} of the Tenants tab", async () => {
-    const fake = await ensured();
-    await appendTenancy(fake, row());
-    const writes: unknown[] = [];
-    const original = fake.updateValues.bind(fake);
-    fake.updateValues = async (cellWrites) => {
-      writes.push(...cellWrites);
-      return original(cellWrites);
-    };
-    await writeTenancy(fake, 2, row({ notes: "Changed" }));
-    expect(writes).toEqual([{ tab: TENANTS_TAB, a1: "A2:O2", values: [stored(row({ notes: "Changed" }))] }]);
-  });
-
-  it("clears a cell that becomes null instead of leaving the old number", async () => {
-    const fake = await ensured();
-    await appendTenancy(fake, row({ advance: 20000, advanceStatus: "Held" }));
-    await writeTenancy(fake, 2, row({ advance: null, advanceStatus: null }));
-    const [only] = await readTenancies(fake);
-    expect(only.advance).toBeNull();
-    expect(only.advanceStatus).toBeNull();
-  });
-
-  it("stores text that starts with = as text", async () => {
-    const fake = await ensured();
-    await appendTenancy(fake, row());
-    await writeTenancy(fake, 2, row({ notes: "=SUM(A1:A9)" }));
-    expect(fake.tabs.get(TENANTS_TAB)![1][11]).toBe("=SUM(A1:A9)");
   });
 });
 

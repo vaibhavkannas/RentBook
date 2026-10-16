@@ -1,7 +1,12 @@
 import { validation } from "@/lib/errors";
 import { isValidIsoDay } from "./year-month";
 
-export type AdvanceStatus = "Held" | "Refunded" | "Adjusted";
+/** What became of a tenant's advance. */
+export const ADVANCE_STATUSES = ["Held", "Refunded", "Adjusted"] as const;
+export type AdvanceStatus = (typeof ADVANCE_STATUSES)[number];
+
+export const isAdvanceStatus = (value: unknown): value is AdvanceStatus =>
+  ADVANCE_STATUSES.some((status) => status === value);
 
 export type Tenancy = {
   /** 1-based row in the Tenants tab. Not stored. */
@@ -39,10 +44,11 @@ export type TenancyFields = {
   notes?: string;
 };
 
+/** The most one amount of rent, advance, refund or deduction may be, in whole rupees. */
 export const MAX_RUPEES = 10_000_000;
 
 const MAX_PHONE_LENGTH = 30;
-const MAX_NOTES_LENGTH = 500;
+export const MAX_NOTES_LENGTH = 500;
 const MAX_NAME_LENGTH = 60;
 /** Line breaks, tabs and other control characters: a phone is one line of free text. */
 const CONTROL_CHARACTERS = /[\u0000-\u001f\u007f]/;
@@ -83,13 +89,9 @@ export function summarize(t: Tenancy): TenancySummary {
   };
 }
 
-/** "t-" then the time in base 36 then four random base 36 characters. */
-export function newTenancyId(now: Date, random: () => number = Math.random): string {
-  let suffix = "";
-  for (let i = 0; i < 4; i++) {
-    suffix += Math.min(35, Math.floor(random() * 36)).toString(36);
-  }
-  return `t-${now.getTime().toString(36)}${suffix}`;
+/** "t-" then a random UUID: two tenancies saved at the same moment, from any server, never share an id. */
+export function newTenancyId(): string {
+  return `t-${crypto.randomUUID()}`;
 }
 
 /** Returns cleaned fields or throws validation() with a clear message. */

@@ -1,7 +1,8 @@
-import type { AdvanceStatus, Tenancy } from "@/lib/domain/tenancy";
+import { isAdvanceStatus, type AdvanceStatus, type Tenancy } from "@/lib/domain/tenancy";
 import { isoDayFromSerial } from "@/lib/domain/year-month";
 import { sheetStructure } from "@/lib/errors";
 import { colLetter } from "./a1";
+import { isBlankCell, text } from "./cells";
 import type { CellWrite, SheetsGateway } from "./gateway";
 import { addTabIfMissing } from "./tabs";
 
@@ -31,7 +32,6 @@ const LAST_COLUMN = colLetter(TENANT_HEADERS.length - 1);
 /** The Tenants cells the app reads: the header and every row, columns A to O. */
 export const TENANTS_RANGE = `A1:${LAST_COLUMN}`;
 
-const ADVANCE_STATUSES: readonly string[] = ["Held", "Refunded", "Adjusted"] satisfies AdvanceStatus[];
 
 /**
  * Creates the Tenants tab with its headers when it is missing, and writes the headers into a tab that is empty.
@@ -71,10 +71,6 @@ function headerProblem(header: unknown[]): string | null {
   return null;
 }
 
-const isBlank = (cell: unknown) => cell === undefined || cell === null || String(cell).trim() === "";
-
-const text = (cell: unknown) => (cell === undefined || cell === null ? "" : String(cell));
-
 /**
  * A date column: a number (a date typed into a Sheet date cell) becomes YYYY-MM-DD, text is trimmed. A cell that
  * holds only spaces is blank, so a Move-out date of " " still means the tenancy is current.
@@ -84,8 +80,7 @@ const day = (cell: unknown) =>
 
 const amount = (cell: unknown) => (typeof cell === "number" && Number.isFinite(cell) ? cell : null);
 
-const status = (cell: unknown): AdvanceStatus | null =>
-  typeof cell === "string" && ADVANCE_STATUSES.includes(cell) ? (cell as AdvanceStatus) : null;
+const status = (cell: unknown): AdvanceStatus | null => (isAdvanceStatus(cell) ? cell : null);
 
 /**
  * Every tenancy row of the Tenants tab's raw values (what `TENANTS_RANGE` returns, unformatted), with its true
@@ -98,7 +93,7 @@ export function parseTenancies(values: unknown[][]): Tenancy[] {
   if (problem !== null) throw sheetStructure(problem);
   const tenancies: Tenancy[] = [];
   values.forEach((cells, index) => {
-    if (index === 0 || cells.every(isBlank)) return;
+    if (index === 0 || cells.every(isBlankCell)) return;
     tenancies.push({
       rowNumber: index + 1,
       id: text(cells[0]),
@@ -152,24 +147,6 @@ export async function appendTenancy(
   row: Omit<Tenancy, "rowNumber">,
 ): Promise<void> {
   await gateway.appendRow(TENANTS_TAB, toCells(row));
-}
-
-/**
- * Rewrites a whole row (columns A to O) in a single call. The services do not use it for edits or move-outs:
- * they write only the columns they change (writeTenancyEdit, writeTenancyMoveOut), so hand-typed cells survive.
- */
-export async function writeTenancy(
-  gateway: SheetsGateway,
-  rowNumber: number,
-  row: Omit<Tenancy, "rowNumber">,
-): Promise<void> {
-  await gateway.updateValues([
-    {
-      tab: TENANTS_TAB,
-      a1: `A${rowNumber}:${LAST_COLUMN}${rowNumber}`,
-      values: [toCells(row)],
-    },
-  ]);
 }
 
 const columnOf = (header: string) => TENANT_HEADERS.indexOf(header);

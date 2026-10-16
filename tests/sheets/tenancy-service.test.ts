@@ -159,7 +159,7 @@ describe("saveTenancy: create", () => {
     const { tenancy } = await create(ctx);
 
     expect(fake.calls.filter((call) => call === "appendRow")).toHaveLength(1);
-    expect(tenancy.id).toMatch(/^t-[0-9a-z]+$/);
+    expect(tenancy.id).toMatch(/^t-[0-9a-f-]{36}$/);
     expect(await tenancies(ctx)).toEqual([
       {
         rowNumber: 2,

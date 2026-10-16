@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
+  ADVANCE_STATUSES,
   currentTenancy,
+  isAdvanceStatus,
   MAX_RUPEES,
   newTenancyId,
   pastTenancies,
@@ -124,29 +126,24 @@ describe("summarize", () => {
   });
 });
 
+describe("advance statuses", () => {
+  it("are Held, Refunded and Adjusted, and nothing else is one", () => {
+    expect([...ADVANCE_STATUSES]).toEqual(["Held", "Refunded", "Adjusted"]);
+    for (const status of ADVANCE_STATUSES) expect(isAdvanceStatus(status)).toBe(true);
+    for (const other of ["held", "Held ", "", "Returned", null, undefined, 1]) {
+      expect(isAdvanceStatus(other)).toBe(false);
+    }
+  });
+});
+
 describe("newTenancyId", () => {
-  const now = new Date("2026-10-07T10:00:00.000Z");
-
-  it("is t- then the time in base 36 then four random base 36 characters", () => {
-    const id = newTenancyId(now);
-    expect(id).toMatch(/^t-[0-9a-z]+[0-9a-z]{4}$/);
-    expect(id.startsWith(`t-${now.getTime().toString(36)}`)).toBe(true);
-    expect(id).toHaveLength(2 + now.getTime().toString(36).length + 4);
+  it("is t- then a random UUID", () => {
+    expect(newTenancyId()).toMatch(/^t-[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
   });
 
-  it("is deterministic with an injected random source", () => {
-    expect(newTenancyId(now, () => 0)).toBe(`t-${now.getTime().toString(36)}0000`);
-    expect(newTenancyId(now, () => 0.999999)).toBe(`t-${now.getTime().toString(36)}zzzz`);
-    expect(newTenancyId(now, () => 0.5)).toBe(newTenancyId(now, () => 0.5));
-  });
-
-  it("never lets a random value of 1 add a fifth character", () => {
-    expect(newTenancyId(now, () => 1)).toBe(`t-${now.getTime().toString(36)}zzzz`);
-  });
-
-  it("differs when the time or the random source differs", () => {
-    expect(newTenancyId(now, () => 0)).not.toBe(newTenancyId(new Date(now.getTime() + 1), () => 0));
-    expect(newTenancyId(now, () => 0)).not.toBe(newTenancyId(now, () => 0.5));
+  it("is different every time, even for ids made in the same millisecond", () => {
+    const ids = new Set(Array.from({ length: 2_000 }, () => newTenancyId()));
+    expect(ids.size).toBe(2_000);
   });
 });
 

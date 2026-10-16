@@ -1,4 +1,4 @@
-import { colIndex, parseA1 } from "@/lib/sheets/a1";
+import { colIndex } from "@/lib/sheets/a1";
 import type {
   CellWrite,
   RangeRequest,
@@ -6,6 +6,7 @@ import type {
   SheetsGateway,
   ValueRender,
 } from "@/lib/sheets/gateway";
+import { parseA1 } from "./a1";
 
 type Grid = unknown[][];
 

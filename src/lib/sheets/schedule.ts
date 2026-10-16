@@ -5,6 +5,7 @@ import {
 } from "@/lib/domain/month-codec";
 import type { PortionConfig, PortionEntry, ScheduleRow } from "@/lib/domain/types";
 import { sheetStructure } from "@/lib/errors";
+import { isBlankCell } from "./cells";
 
 export type ScheduleLayout = {
   /** 1-based row number of the header row. */
@@ -22,8 +23,6 @@ export type ScheduleLayout = {
 const HEADER_SEARCH_ROWS = 25;
 
 const norm = (value: unknown) => String(value ?? "").trim().toLowerCase();
-
-export const isBlankCell = (cell: unknown) => cell === undefined || cell === null || String(cell).trim() === "";
 
 const MESSAGE_CELL_LENGTH = 40;
 

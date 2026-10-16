@@ -10,7 +10,11 @@ export function nextCount(lastCount: number, cycleLength: number | null): number
 
 /**
  * Suggested rent for the next payment. Only a new cycle raises the rent; the
- * result is a whole rupee and the owner can always edit it before saving.
+ * result is a whole rupee (halves round up) and the owner can always edit it before saving.
+ *
+ * The hike is taken in whole basis points (hundredths of a percent) and worked out with whole numbers,
+ * because with fractions a half rupee can land just below the half: 20500 at 0.1% is exactly 20520.5,
+ * which floating point turns into 20520.4999... and rounds down.
  */
 export function suggestAmount(
   previousAmount: number,
@@ -18,7 +22,8 @@ export function suggestAmount(
   newCycle: boolean,
 ): number {
   if (!newCycle) return previousAmount;
-  return Math.round((previousAmount * (100 + hikePercent)) / 100);
+  const basisPoints = Math.round(hikePercent * 100);
+  return Math.floor((previousAmount * (10_000 + basisPoints) + 5_000) / 10_000);
 }
 
 /**

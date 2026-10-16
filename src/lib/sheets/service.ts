@@ -7,7 +7,7 @@ import {
   LATER_ENTRY_REASON,
 } from "@/lib/domain/month-view";
 import { nextCount, sumAmounts } from "@/lib/domain/rent-rules";
-import type { Tenancy, TenancyFields } from "@/lib/domain/tenancy";
+import { MAX_RUPEES, type Tenancy, type TenancyFields } from "@/lib/domain/tenancy";
 import type {
   MonthView,
   PortionConfig,
@@ -19,6 +19,7 @@ import { addMonths, compareYm, isValidIsoDay, ymKey } from "@/lib/domain/year-mo
 import { AppError, conflict, sheetStructure, validation } from "@/lib/errors";
 import { formatMonthTitle } from "@/lib/format";
 import { colLetter } from "./a1";
+import { text } from "./cells";
 import type { SheetsGateway } from "./gateway";
 import { columnsOf, parseSchedule, type ScheduleLayout } from "./schedule";
 import {
@@ -267,8 +268,6 @@ export type LogPaymentOptions = {
   retryDelayMs?: number;
 };
 
-const MAX_AMOUNT = 10_000_000;
-
 function validateMonth({ year, month }: YearMonth): void {
   if (
     !Number.isInteger(year) ||
@@ -284,7 +283,7 @@ function validateMonth({ year, month }: YearMonth): void {
 
 function validateInput(input: LogPaymentInput): string | undefined {
   validateMonth(input.month);
-  if (!Number.isInteger(input.amount) || input.amount < 1 || input.amount > MAX_AMOUNT) {
+  if (!Number.isInteger(input.amount) || input.amount < 1 || input.amount > MAX_RUPEES) {
     throw validation("Amount must be a whole number of rupees from 1 to 10,000,000.");
   }
   if (!isValidIsoDay(input.dateReceived)) {
@@ -365,7 +364,8 @@ async function logPaymentUnchecked(
   if (existing && !input.overwrite) {
     throw conflict(
       `${portion.name} already has ₹${existing.amount} recorded for ${ymKey(input.month)}.`,
-      { existingAmount: existing.amount, existingTenant: existing.tenant },
+      // The whole entry, so a Replace can send it back as `expected` and be refused if it changed since.
+      { existingAmount: existing.amount, existingTenant: existing.tenant, existingCount: existing.count },
     );
   }
   if (!existing && monthRow && !input.overwrite) {
@@ -594,7 +594,6 @@ export type ActivityItem = {
 
 const ACTIONS: readonly LogAction[] = ["Logged", "Edited", "Undone"];
 
-const text = (value: unknown) => (value === undefined || value === null ? "" : String(value));
 const num = (value: unknown) => (typeof value === "number" ? value : null);
 
 /** The latest Payments Log rows, newest first. Rows from before "Logged by" and "Action" existed have no logged-by and no action. */

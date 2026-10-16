@@ -10,7 +10,11 @@ export type PaymentRequestInput = {
   tenantName: string;
   /** The person confirmed "Replace amount" after a duplicate warning. */
   confirmedReplace: boolean;
-  /** The paid card's entry as it was when the Edit sheet opened. Never read from a refreshed card. */
+  /**
+   * The entry the person was shown, which the server checks the Sheet still holds before it changes it: the paid
+   * card's entry as it was when the Edit sheet opened, or the entry a duplicate warning named (see
+   * `existingEntryFrom`). Never read from a refreshed card.
+   */
   seenEntry: PortionEntry | undefined;
   /**
    * Details of the new tenant. The new tenant sheet decides whether there are any (see
@@ -37,12 +41,26 @@ export type PaymentRequest =
   | { ok: false; message: string };
 
 /**
- * The body of POST /api/payments. An edit always says which entry it was shown, so the server
- * can refuse it if someone else has since changed or undone that payment.
+ * The entry a duplicate warning names, from the `details` of the server's conflict answer. Null unless it names
+ * the tenant, the count and the amount: a Replace that cannot be checked against all three is not offered.
+ */
+export function existingEntryFrom(details: Record<string, unknown> | undefined): PortionEntry | null {
+  const tenant = details?.existingTenant;
+  const count = details?.existingCount;
+  const amount = details?.existingAmount;
+  if (typeof tenant !== "string" || typeof count !== "number" || typeof amount !== "number") return null;
+  if (!Number.isFinite(count) || !Number.isFinite(amount)) return null;
+  return { tenant, count, amount };
+}
+
+/**
+ * The body of POST /api/payments. An edit, and a Replace after a duplicate warning, always say which entry the
+ * person was shown, so the server can refuse them if someone else has since changed or undone that payment.
  */
 export function buildPaymentRequest(input: PaymentRequestInput): PaymentRequest {
   const editing = input.mode === "edit";
-  if (editing && !input.seenEntry) {
+  const replacing = editing || input.confirmedReplace;
+  if (replacing && !input.seenEntry) {
     return {
       ok: false,
       message: "This payment is no longer recorded. Close this and refresh the page.",
@@ -56,8 +74,8 @@ export function buildPaymentRequest(input: PaymentRequestInput): PaymentRequest 
       amount: input.amount,
       dateReceived: input.dateReceived,
       newTenantName: input.mode === "new-tenant" ? input.tenantName : undefined,
-      overwrite: input.confirmedReplace || editing ? true : undefined,
-      expected: editing ? input.seenEntry : undefined,
+      overwrite: replacing ? true : undefined,
+      expected: replacing ? input.seenEntry : undefined,
       tenancy: input.mode === "new-tenant" ? input.tenancy : undefined,
     },
   };
