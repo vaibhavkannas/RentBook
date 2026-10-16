@@ -1,0 +1,3 @@
+# How to report a security problem in RentBook (RFC 9116). Renew Expires before it passes.
+Contact: https://github.com/vaibhavkannas/RentBook/security/advisories/new
+Expires: 2027-10-16T00:00:00Z
