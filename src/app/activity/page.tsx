@@ -1,11 +1,14 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import LoadProblem from "@/components/LoadProblem";
-import { AppError } from "@/lib/errors";
 import { formatMonthKey, formatRupees, formatSavedAt } from "@/lib/format";
 import { getViewer } from "@/lib/server/auth-guard";
 import { getSheetsContext } from "@/lib/server/context";
+import { problemMessage } from "@/lib/server/problem";
 import { readActivity, type ActivityItem } from "@/lib/sheets/service";
+
+// A Google call gives up after 10 seconds; the whole request is cut off after 15.
+export const maxDuration = 15;
 
 const PILL = {
   Logged: "bg-success-bg text-success-ink",
@@ -14,19 +17,15 @@ const PILL = {
 } as const;
 
 export default async function ActivityPage() {
-  if (!(await getViewer())) redirect("/signin");
+  const viewer = await getViewer();
+  if (!viewer) redirect("/signin");
 
   let items: ActivityItem[] | null = null;
   let problem: string | null = null;
   try {
     items = await readActivity(getSheetsContext());
   } catch (error) {
-    if (error instanceof AppError) {
-      problem = error.message;
-    } else {
-      console.error(error);
-      problem = "Couldn't reach Google Sheets. Try again.";
-    }
+    problem = problemMessage(error, viewer);
   }
 
   return (

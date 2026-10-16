@@ -27,6 +27,10 @@ export const TENANT_HEADERS = [
 ];
 
 const LAST_COLUMN = colLetter(TENANT_HEADERS.length - 1);
+
+/** The Tenants cells the app reads: the header and every row, columns A to O. */
+export const TENANTS_RANGE = `A1:${LAST_COLUMN}`;
+
 const ADVANCE_STATUSES: readonly string[] = ["Held", "Refunded", "Adjusted"] satisfies AdvanceStatus[];
 
 /**
@@ -84,12 +88,12 @@ const status = (cell: unknown): AdvanceStatus | null =>
   typeof cell === "string" && ADVANCE_STATUSES.includes(cell) ? (cell as AdvanceStatus) : null;
 
 /**
- * Every tenancy row, with its true 1-based row number. The header and fully blank rows are skipped.
- * Row 1 is compared with the headers on EVERY call, because everything else here (and every write) goes by
- * column position: a wrong or missing header is a sheet-structure error that names it.
+ * Every tenancy row of the Tenants tab's raw values (what `TENANTS_RANGE` returns, unformatted), with its true
+ * 1-based row number. The header and fully blank rows are skipped. Row 1 is compared with the headers on EVERY
+ * call, because everything else here (and every write) goes by column position: a wrong or missing header is a
+ * sheet-structure error that names it. Reads nothing itself.
  */
-export async function readTenancies(gateway: SheetsGateway): Promise<Tenancy[]> {
-  const values = await gateway.getValues(TENANTS_TAB, `A1:${LAST_COLUMN}`, "UNFORMATTED_VALUE");
+export function parseTenancies(values: unknown[][]): Tenancy[] {
   const problem = headerProblem(values[0] ?? []);
   if (problem !== null) throw sheetStructure(problem);
   const tenancies: Tenancy[] = [];
@@ -115,6 +119,11 @@ export async function readTenancies(gateway: SheetsGateway): Promise<Tenancy[]> 
     });
   });
   return tenancies;
+}
+
+/** Reads the Tenants tab and parses it (see `parseTenancies`). */
+export async function readTenancies(gateway: SheetsGateway): Promise<Tenancy[]> {
+  return parseTenancies(await gateway.getValues(TENANTS_TAB, TENANTS_RANGE, "UNFORMATTED_VALUE"));
 }
 
 /** The cells of a row: amounts as numbers, or "" when empty. Writes through the gateway are RAW. */

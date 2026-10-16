@@ -24,13 +24,16 @@ import { columnsOf, parseSchedule, type ScheduleLayout } from "./schedule";
 import {
   ensureTabs,
   LOG_TAB,
+  parseSettings,
   readSettings,
+  SETTINGS_RANGE,
+  SETTINGS_TAB,
   updateSettings,
   type SettingsUpdate,
 } from "./settings-store";
 import { createSnapshotCache, type SnapshotCache } from "./snapshot-cache";
 import { checkNewTenancy, recordNewTenant } from "./tenancy-writes";
-import { readTenancies } from "./tenants-store";
+import { parseTenancies, readTenancies, TENANTS_RANGE, TENANTS_TAB } from "./tenants-store";
 import { withWriteLock } from "./write-lock";
 
 export type Snapshot = {
@@ -59,11 +62,9 @@ export type SheetsContext = {
  * The Tenants tab's rows, or none and what is wrong with the tab when its structure is wrong. Only a
  * sheet-structure problem is turned into a message: any other failure is still a failure of the whole read.
  */
-async function readTenanciesOrProblem(
-  gateway: SheetsGateway,
-): Promise<{ tenancies: Tenancy[]; tenantsProblem?: string }> {
+function parseTenanciesOrProblem(values: unknown[][]): { tenancies: Tenancy[]; tenantsProblem?: string } {
   try {
-    return { tenancies: await readTenancies(gateway) };
+    return { tenancies: parseTenancies(values) };
   } catch (error) {
     if (error instanceof AppError && error.code === "sheet-structure") {
       return { tenancies: [], tenantsProblem: error.message };
@@ -73,17 +74,22 @@ async function readTenanciesOrProblem(
 }
 
 /**
- * Reads Settings, the Schedule and the Tenants tab, all at the same time. Never cached. A problem with the
- * Tenants tab alone does not fail the read: see `Snapshot.tenantsProblem`.
+ * Reads Settings, the Schedule and the Tenants tab with ONE request to Google (after the one-time tab check),
+ * so the three always describe the same moment and a page view costs one call against the quota. Never cached.
+ * A problem with the Tenants tab alone does not fail the read: see `Snapshot.tenantsProblem`.
  */
 export async function loadSnapshot(ctx: SheetsContext): Promise<Snapshot> {
   await ensureTabs(ctx.gateway, ctx.scheduleTab);
-  const [portions, values, tenants] = await Promise.all([
-    readSettings(ctx.gateway),
-    ctx.gateway.getValues(ctx.scheduleTab, "A1:ZZ", "UNFORMATTED_VALUE"),
-    readTenanciesOrProblem(ctx.gateway),
-  ]);
-  return { portions, ...parseSchedule(values, portions, ctx.totalHeader), ...tenants };
+  const [settings, schedule, tenants] = await ctx.gateway.getManyValues(
+    [
+      { tab: SETTINGS_TAB, a1: SETTINGS_RANGE },
+      { tab: ctx.scheduleTab, a1: "A1:ZZ" },
+      { tab: TENANTS_TAB, a1: TENANTS_RANGE },
+    ],
+    "UNFORMATTED_VALUE",
+  );
+  const portions = parseSettings(settings);
+  return { portions, ...parseSchedule(schedule, portions, ctx.totalHeader), ...parseTenanciesOrProblem(tenants) };
 }
 
 export const SNAPSHOT_TTL_MS = 15_000;

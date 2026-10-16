@@ -1,6 +1,7 @@
 import { colIndex, parseA1 } from "@/lib/sheets/a1";
 import type {
   CellWrite,
+  RangeRequest,
   RowOverride,
   SheetsGateway,
   ValueRender,
@@ -63,6 +64,16 @@ export class FakeGateway implements SheetsGateway {
 
   async getValues(tab: string, a1: string, render: ValueRender) {
     await this.enter("getValues");
+    return this.read(tab, a1, render);
+  }
+
+  /** One call, like batchGet: the answers are all read at the same moment, and one missing tab fails them all. */
+  async getManyValues(requests: RangeRequest[], render: ValueRender) {
+    await this.enter("getManyValues");
+    return requests.map(({ tab, a1 }) => this.read(tab, a1, render));
+  }
+
+  private read(tab: string, a1: string, render: ValueRender): Grid {
     const range = parseA1(a1);
     const grid = this.grid(tab);
     const lastRow = range.endRow ?? grid.length;

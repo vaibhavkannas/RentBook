@@ -257,7 +257,8 @@ describe("the tenant details page", () => {
   });
 
   it("treats another AppError code as a problem, not a 404", async () => {
-    mocks.getPortionTenants.mockRejectedValue(new AppError("config", "Missing settings."));
+    // (A connection problem, code "config", is shown to a member only as "ask the owner": see page-problems.test.ts.)
+    mocks.getPortionTenants.mockRejectedValue(new AppError("sheet-structure", "Missing settings."));
     expect(await render()).toContain("Missing settings.");
   });
 });

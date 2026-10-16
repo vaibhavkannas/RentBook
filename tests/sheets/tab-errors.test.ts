@@ -168,11 +168,12 @@ describe("a tab that was removed or renamed while the app is running", () => {
       "Google Sheets request failed (HTTP 400): Invalid value at 'data'",
     );
 
-    // a 500 that happens to say the same words is not a missing tab
+    // a 500 that happens to say the same words is not a missing tab: it is Google not responding
+    const once = new GoogleSheetsGateway(api, "sheet-id", undefined, { retries: 0 });
     failure.next = googleError(500, "Unable to parse range: Schedule!A1");
-    expect((await failureOf(gateway.getValues("Schedule", "A1", "FORMULA"))).message).toBe(
-      "Google Sheets request failed (HTTP 500): Unable to parse range: Schedule!A1",
-    );
+    const down = await failureOf(once.getValues("Schedule", "A1", "FORMULA"));
+    expect((down as AppError).code).toBe("unavailable");
+    expect(down.message).toBe("Google isn't responding. Try again in a minute.");
   });
 
   it("still reads a range below the grid as empty", async () => {

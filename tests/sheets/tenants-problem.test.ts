@@ -134,12 +134,10 @@ describe("loadSnapshot and a wrong Tenants header (b, c)", () => {
     expect(fixed.tenancies).toHaveLength(1);
   });
 
-  it("does not hide other failures of the Tenants read", async () => {
+  it("does not hide other failures of the read", async () => {
     const { fake, ctx } = await warm();
-    const original = fake.getValues.bind(fake);
-    fake.getValues = async (tab, a1, render) => {
-      if (tab === TENANTS_TAB) throw new Error("Google is down");
-      return original(tab, a1, render);
+    fake.getManyValues = async () => {
+      throw new Error("Google is down");
     };
     await expect(loadSnapshot(ctx)).rejects.toThrow("Google is down");
   });

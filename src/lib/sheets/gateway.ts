@@ -1,5 +1,7 @@
 export type ValueRender = "FORMATTED_VALUE" | "UNFORMATTED_VALUE" | "FORMULA";
 
+export type RangeRequest = { tab: string; a1: string };
+
 export type CellWrite = { tab: string; a1: string; values: unknown[][] };
 
 export type RowOverride = { col: number; value: string | number };
@@ -14,6 +16,12 @@ export interface SheetsGateway {
   addTab(title: string): Promise<void>;
   /** Rows may be ragged and trailing empty cells are omitted. */
   getValues(tab: string, a1: string, render: ValueRender): Promise<unknown[][]>;
+  /**
+   * Reads several ranges with ONE request to Google, so the answers all describe the same moment and cost one
+   * call against the quota. The answers come back in the order asked, each shaped like `getValues`' answer.
+   * If any named tab is missing the whole read fails.
+   */
+  getManyValues(requests: RangeRequest[], render: ValueRender): Promise<unknown[][][]>;
   updateValues(writes: CellWrite[]): Promise<void>;
   /** Appends one row after the last row of the tab's table. */
   appendRow(tab: string, row: unknown[]): Promise<void>;

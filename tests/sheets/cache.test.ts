@@ -18,7 +18,7 @@ const OPTIONS = { now: new Date("2026-10-05T04:30:00Z"), retryDelayMs: 0, logged
 function setup() {
   const fake = new FakeGateway({ Schedule: baseSchedule() });
   const ctx = withSnapshotCache({ gateway: fake, scheduleTab: "Schedule", totalHeader: TOTAL_HEADER } as SheetsContext);
-  const reads = () => fake.calls.filter((c) => c === "getValues").length;
+  const reads = () => fake.calls.filter((c) => c === "getValues" || c === "getManyValues").length;
   return { fake, ctx, reads };
 }
 
@@ -97,10 +97,10 @@ describe("cached tenancies", () => {
     await getSettings(ctx); // creates the missing tabs, so the reads below are plain ones
     const before = reads();
     await getMonthView(ctx, OCT);
-    expect(reads() - before).toBe(3);
+    expect(reads() - before).toBe(1); // one call reads all three tabs
     await getMonthView(ctx, { year: 2026, month: 9 });
     await getMonthView(ctx, { year: 2026, month: 11 });
-    expect(reads() - before).toBe(3);
+    expect(reads() - before).toBe(1);
   });
 
   it("shows a saved tenancy straight away", async () => {
@@ -164,25 +164,13 @@ describe("cached tenancies", () => {
 });
 
 describe("a single page view read", () => {
-  it("fetches the Settings, the Schedule and the Tenants tab at the same time", async () => {
+  it("fetches the Settings, the Schedule and the Tenants tab in one call", async () => {
     const fake = new FakeGateway({ Schedule: baseSchedule() });
     const ctx = { gateway: fake, scheduleTab: "Schedule", totalHeader: TOTAL_HEADER } as SheetsContext;
     await getMonthView(ctx, OCT); // creates the missing tabs, so the next read is a plain one
-    let active = 0;
-    let peak = 0;
-    const original = fake.getValues.bind(fake);
-    fake.getValues = async (...args) => {
-      active += 1;
-      peak = Math.max(peak, active);
-      try {
-        await new Promise((resolve) => setTimeout(resolve, 0));
-        return await original(...args);
-      } finally {
-        active -= 1;
-      }
-    };
+    fake.calls.length = 0;
     await getMonthView(ctx, OCT);
-    expect(peak).toBe(3);
+    expect(fake.calls).toEqual(["getManyValues"]);
   });
 });
 

@@ -5,6 +5,9 @@ import { moveOutBody } from "@/lib/server/schemas";
 import { runWrite } from "@/lib/server/writes";
 import { moveOutTenancy } from "@/lib/sheets/tenancy-service";
 
+// A Google call gives up after 10 seconds; the whole request is cut off after 15.
+export const maxDuration = 15;
+
 /** Moves a tenant out: records the date, what happened to the advance, the refund and the deductions. */
 export async function POST(request: Request) {
   return handle(async () => {

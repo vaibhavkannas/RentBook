@@ -6,6 +6,9 @@ import { paymentBody } from "@/lib/server/schemas";
 import { runWrite } from "@/lib/server/writes";
 import { logPayment } from "@/lib/sheets/service";
 
+// A Google call gives up after 10 seconds; the whole request is cut off after 15.
+export const maxDuration = 15;
+
 export async function POST(request: Request) {
   return handle(async () => {
     const viewer = await requireUser();

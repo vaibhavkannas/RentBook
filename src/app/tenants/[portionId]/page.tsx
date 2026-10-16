@@ -10,6 +10,7 @@ import { formatDay } from "@/lib/format";
 import { getViewer } from "@/lib/server/auth-guard";
 import { getSheetsContext } from "@/lib/server/context";
 import { readWrittenAt } from "@/lib/server/freshness";
+import { problemMessage } from "@/lib/server/problem";
 import { getPortionTenants, type PortionTenants } from "@/lib/sheets/tenancy-service";
 import { emptyMoveOutForm, emptyTenancyForm, tenancyFormText } from "@/lib/tenancy-input";
 import { showChangedNotice, TENANCY_CONFLICT_MESSAGE } from "@/lib/tenancy-response";
@@ -22,6 +23,9 @@ import {
   phoneHref,
   tenancyPeriod,
 } from "@/lib/tenancy-view";
+
+// A Google call gives up after 10 seconds; the whole request is cut off after 15.
+export const maxDuration = 15;
 
 const CARD = "rounded-2xl border border-line bg-surface p-4";
 
@@ -84,10 +88,9 @@ export default async function TenantsPage({
     if (error instanceof AppError) {
       // getPortionTenants answers an id that is not one of the portions with a validation error; nothing else on this page does.
       if (error.code === "validation") unknownPortion = true;
-      else problem = error.message;
+      else problem = problemMessage(error, viewer);
     } else {
-      console.error(error);
-      problem = "Couldn't reach Google Sheets. Try again.";
+      problem = problemMessage(error, viewer);
     }
   }
   // notFound() throws, so it must stay outside the try block above.

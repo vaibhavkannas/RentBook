@@ -38,6 +38,9 @@ export const DEFAULT_PORTION_NAMES = [
   "Third floor, hall and kitchen",
 ];
 
+/** The Settings cells the app reads: a header and up to 49 portions, columns A to G. */
+export const SETTINGS_RANGE = "A1:G50";
+
 export const DEFAULT_CYCLE_LENGTH = 11;
 export const DEFAULT_HIKE_PERCENT = 5;
 
@@ -148,7 +151,7 @@ async function seedSettings(
   }
   const portions = inferPortions(top[headerIndex]);
   if (!exists && !(await addTabIfMissing(gateway, SETTINGS_TAB))) {
-    const theirs = await gateway.getValues(SETTINGS_TAB, "A1:G50", "UNFORMATTED_VALUE");
+    const theirs = await gateway.getValues(SETTINGS_TAB, SETTINGS_RANGE, "UNFORMATTED_VALUE");
     if (!settingsIsEmpty(theirs)) return;
   }
   await gateway.updateValues([
@@ -177,7 +180,7 @@ export async function ensureTabs(gateway: SheetsGateway, scheduleTab: string): P
     throw sheetStructure(SETTINGS_MISSING);
   }
   const settings = hasSettings
-    ? await gateway.getValues(SETTINGS_TAB, "A1:G50", "UNFORMATTED_VALUE")
+    ? await gateway.getValues(SETTINGS_TAB, SETTINGS_RANGE, "UNFORMATTED_VALUE")
     : [];
   if (settingsIsEmpty(settings)) await seedSettings(gateway, scheduleTab, hasSettings);
 
@@ -207,8 +210,7 @@ const PORTION_ID = /^[A-Za-z0-9_-]{1,20}$/;
  * blank rows, and a note typed under the table (its Tenant, Count and Amount header cells, columns C to E, are
  * all blank). A row with only some of those three filled in is a half-typed portion: refused, by row number.
  */
-async function readSettingsRows(gateway: SheetsGateway): Promise<SettingsRow[]> {
-  const values = await gateway.getValues(SETTINGS_TAB, "A1:G50", "UNFORMATTED_VALUE");
+function parseSettingsRows(values: unknown[][]): SettingsRow[] {
   const portions: SettingsRow[] = [];
   values.slice(1).forEach((row, offset) => {
     const sheetRow = offset + 2;
@@ -253,6 +255,15 @@ async function readSettingsRows(gateway: SheetsGateway): Promise<SettingsRow[]> 
     throw sheetStructure("The Settings tab has no portions.");
   }
   return portions;
+}
+
+/** The portions in the Settings tab's raw values (what `SETTINGS_RANGE` returns, unformatted). Reads nothing itself. */
+export function parseSettings(values: unknown[][]): PortionConfig[] {
+  return parseSettingsRows(values).map((entry) => entry.portion);
+}
+
+async function readSettingsRows(gateway: SheetsGateway): Promise<SettingsRow[]> {
+  return parseSettingsRows(await gateway.getValues(SETTINGS_TAB, SETTINGS_RANGE, "UNFORMATTED_VALUE"));
 }
 
 export async function readSettings(gateway: SheetsGateway): Promise<PortionConfig[]> {

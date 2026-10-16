@@ -27,6 +27,42 @@ describe("FakeGateway.getValues", () => {
   });
 });
 
+describe("FakeGateway.getManyValues", () => {
+  it("answers each request like getValues, in the order asked, as ONE call", async () => {
+    const fake = new FakeGateway({ T: [["a", "b"], ["c"]], U: [["=A1", 5]] });
+    const out = await fake.getManyValues(
+      [
+        { tab: "U", a1: "A1:B1" },
+        { tab: "T", a1: "A1:ZZ" },
+        { tab: "T", a1: "B2" },
+      ],
+      "UNFORMATTED_VALUE",
+    );
+    expect(out).toEqual([[[0, 5]], [["a", "b"], ["c"]], []]);
+    expect(fake.calls).toEqual(["getManyValues"]);
+  });
+
+  it("returns formula text only for the FORMULA render, like getValues", async () => {
+    const fake = new FakeGateway({ T: [["=A2+B2", 5]] });
+    expect(await fake.getManyValues([{ tab: "T", a1: "A1" }], "FORMULA")).toEqual([[["=A2+B2"]]]);
+  });
+
+  it("fails as a whole when any tab is missing, and can be made to fail, and to take time", async () => {
+    const fake = new FakeGateway({ T: [["a"]] }, { delayMs: 20 });
+    await expect(
+      fake.getManyValues([{ tab: "T", a1: "A1" }, { tab: "Nope", a1: "A1" }], "FORMULA"),
+    ).rejects.toThrow(/No tab named Nope/);
+    fake.failOn.add("getManyValues");
+    const started = performance.now();
+    await expect(fake.getManyValues([], "FORMULA")).rejects.toThrow(/getManyValues failed/);
+    expect(performance.now() - started).toBeLessThan(15);
+  });
+
+  it("answers nothing for no requests", async () => {
+    expect(await new FakeGateway().getManyValues([], "FORMULA")).toEqual([]);
+  });
+});
+
 describe("FakeGateway writes", () => {
   it("updateValues writes into the right cells and creates rows as needed", async () => {
     const fake = new FakeGateway({ T: [["a"]] });

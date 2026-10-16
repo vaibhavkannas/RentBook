@@ -436,7 +436,7 @@ describe("saveTenancy: update", () => {
       notes: "Raised advance",
     });
 
-    expect(fake.calls.filter((call) => call !== "getValues")).toEqual(["updateValues"]);
+    expect(fake.calls.filter((call) => call !== "getValues" && call !== "getManyValues")).toEqual(["updateValues"]);
     expect(await tenancies(ctx)).toEqual([
       {
         rowNumber: 2,
@@ -885,7 +885,7 @@ describe("moveOutTenancy", () => {
       deductions: 5000,
     });
 
-    expect(fake.calls.filter((call) => call !== "getValues")).toEqual(["updateValues"]);
+    expect(fake.calls.filter((call) => call !== "getValues" && call !== "getManyValues")).toEqual(["updateValues"]);
     expect(await tenancies(ctx)).toEqual([
       {
         rowNumber: 2,

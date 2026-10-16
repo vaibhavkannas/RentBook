@@ -5,6 +5,9 @@ import { tenancyBody } from "@/lib/server/schemas";
 import { runWrite } from "@/lib/server/writes";
 import { saveTenancy } from "@/lib/sheets/tenancy-service";
 
+// A Google call gives up after 10 seconds; the whole request is cut off after 15.
+export const maxDuration = 15;
+
 /** Creates a tenancy (no `id`) or updates one (`id` and `expectedUpdatedAt`). Everyone on the allow-list may. */
 export async function POST(request: Request) {
   return handle(async () => {

@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from "vitest";
 
 const auth = vi.hoisted(() => vi.fn());
 const saveSettings = vi.hoisted(() => vi.fn(async () => []));
@@ -31,7 +31,7 @@ vi.mock("@/lib/sheets/tenancy-service", async (importOriginal) => ({
   moveOutTenancy,
 }));
 
-import { conflict, validation } from "@/lib/errors";
+import { conflict, configError, rateLimited, unavailable, validation } from "@/lib/errors";
 import { POST as postRetry } from "@/app/api/payments/log-retry/route";
 import { POST as postPayment } from "@/app/api/payments/route";
 import { POST as postUndo } from "@/app/api/payments/undo/route";
@@ -196,6 +196,48 @@ describe("POST /api/payments", () => {
     expect(res.status).toBe(409);
     expect((await res.json()).error.code).toBe("conflict");
     expect(markWritten).toHaveBeenCalledOnce();
+  });
+
+  describe("when Google cannot be used", () => {
+    const DETAIL = "Google rejected the service account key. Create a new key and update GOOGLE_SERVICE_ACCOUNT_JSON.";
+    let log: MockInstance<typeof console.error>;
+    beforeEach(() => {
+      log = vi.spyOn(console, "error").mockImplementation(() => {});
+    });
+    afterEach(() => log.mockRestore());
+
+    it("shows the owner the detail of a connection problem and a member only a short message", async () => {
+      logPayment.mockRejectedValueOnce(configError(DETAIL));
+      signedInAs("owner@example.com");
+      const asOwner = await postPayment(paymentRequest());
+      expect(asOwner.status).toBe(500);
+      expect((await asOwner.json()).error.message).toBe(DETAIL);
+
+      logPayment.mockRejectedValueOnce(configError(DETAIL));
+      signedInAs("member@example.com");
+      const asMember = await postPayment(paymentRequest());
+      expect(asMember.status).toBe(500);
+      const body = await asMember.json();
+      expect(body.error.code).toBe("config");
+      expect(body.error.message).toBe("The Sheet connection needs attention. Ask the owner.");
+      expect(JSON.stringify(body)).not.toContain("GOOGLE_SERVICE_ACCOUNT_JSON");
+      expect(log.mock.calls.flat().join(" ")).toContain(DETAIL);
+    });
+
+    it("answers 429 with Retry-After when Google is limiting requests, and 503 when it is not responding", async () => {
+      signedInAs("member@example.com");
+      logPayment.mockRejectedValueOnce(rateLimited());
+      const limited = await postPayment(paymentRequest());
+      expect(limited.status).toBe(429);
+      expect(limited.headers.get("Retry-After")).toBe("30");
+      expect((await limited.json()).error.code).toBe("rate-limited");
+
+      logPayment.mockRejectedValueOnce(unavailable());
+      const down = await postPayment(paymentRequest());
+      expect(down.status).toBe(503);
+      expect((await down.json()).error.code).toBe("unavailable");
+      expect(markWritten).not.toHaveBeenCalled();
+    });
   });
 
   it("answers 401 with the sign-in message for a visitor who is not signed in", async () => {

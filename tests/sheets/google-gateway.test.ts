@@ -7,23 +7,26 @@ import { GoogleSheetsGateway } from "@/lib/sheets/google-gateway";
 function mockApi(
   overrides: { rowCount?: number; failWith?: unknown; valuesGetFailWith?: unknown } = {},
 ) {
-  const fail = async () => {
-    throw overrides.failWith;
-  };
-  const get = overrides.failWith
-    ? fail
-    : vi.fn(async () => ({
-        data: {
-          sheets: [
-            { properties: { sheetId: 11, title: "Schedule", gridProperties: { rowCount: overrides.rowCount ?? 1000 } } },
-            { properties: { sheetId: 22, title: "Payments Log", gridProperties: { rowCount: 1000 } } },
-          ],
-        },
-      }));
+  const get = vi.fn(async (): Promise<{ data: sheets_v4.Schema$Spreadsheet }> => {
+    if (overrides.failWith) throw overrides.failWith;
+    return {
+      data: {
+        sheets: [
+          { properties: { sheetId: 11, title: "Schedule", gridProperties: { rowCount: overrides.rowCount ?? 1000 } } },
+          { properties: { sheetId: 22, title: "Payments Log", gridProperties: { rowCount: 1000 } } },
+        ],
+      },
+    };
+  });
   const valuesGet = vi.fn(async () => {
     if (overrides.valuesGetFailWith) throw overrides.valuesGetFailWith;
     return { data: { values: [["a", 1]] } };
   });
+  const valuesBatchGet = vi.fn(
+    async (request: { ranges: string[] }): Promise<{ data: sheets_v4.Schema$BatchGetValuesResponse }> => ({
+      data: { valueRanges: request.ranges.map((range, index) => ({ range, values: [[`answer ${index}`]] })) },
+    }),
+  );
   const valuesBatchUpdate = vi.fn(async () => ({}));
   const valuesAppend = vi.fn(async () => ({}));
   const batchUpdate = vi.fn(async () => ({}));
@@ -31,11 +34,180 @@ function mockApi(
     spreadsheets: {
       get,
       batchUpdate,
-      values: { get: valuesGet, batchUpdate: valuesBatchUpdate, append: valuesAppend },
+      values: {
+        get: valuesGet,
+        batchGet: valuesBatchGet,
+        batchUpdate: valuesBatchUpdate,
+        append: valuesAppend,
+      },
     },
   } as unknown as sheets_v4.Sheets;
-  return { api, get, valuesGet, valuesBatchUpdate, valuesAppend, batchUpdate };
+  return { api, get, valuesGet, valuesBatchGet, valuesBatchUpdate, valuesAppend, batchUpdate };
 }
+
+type SentBatch = [{ requestBody: sheets_v4.Schema$BatchUpdateSpreadsheetRequest }];
+
+describe("GoogleSheetsGateway.getManyValues", () => {
+  const requests = [
+    { tab: "Settings", a1: "A1:G50" },
+    { tab: "Payments Log", a1: "A1:ZZ" },
+    { tab: "Owner's rent", a1: "A1:O" },
+  ];
+
+  it("reads every range with ONE batchGet, quoted, in the render asked and with serial dates", async () => {
+    const { api, valuesBatchGet, valuesGet } = mockApi();
+    await new GoogleSheetsGateway(api, "sheet-id").getManyValues(requests, "UNFORMATTED_VALUE");
+    expect(valuesBatchGet).toHaveBeenCalledTimes(1);
+    expect(valuesBatchGet).toHaveBeenCalledWith({
+      spreadsheetId: "sheet-id",
+      ranges: ["'Settings'!A1:G50", "'Payments Log'!A1:ZZ", "'Owner''s rent'!A1:O"],
+      valueRenderOption: "UNFORMATTED_VALUE",
+      dateTimeRenderOption: "SERIAL_NUMBER",
+    });
+    expect(valuesGet).not.toHaveBeenCalled();
+  });
+
+  it("answers in the order asked, and with no rows for a range that has no values", async () => {
+    const { api, valuesBatchGet } = mockApi();
+    valuesBatchGet.mockResolvedValueOnce({
+      data: { valueRanges: [{ values: [["a", 1]] }, { range: "'Payments Log'!A1:ZZ" }, { values: [["x"], []] }] },
+    });
+    expect(await new GoogleSheetsGateway(api, "sheet-id").getManyValues(requests, "FORMULA")).toEqual([
+      [["a", 1]],
+      [],
+      [["x"], []],
+    ]);
+  });
+
+  it("answers an empty list without calling Google, and an answer with too few ranges as empty ones", async () => {
+    const { api, valuesBatchGet } = mockApi();
+    const gateway = new GoogleSheetsGateway(api, "sheet-id");
+    expect(await gateway.getManyValues([], "FORMULA")).toEqual([]);
+    expect(valuesBatchGet).not.toHaveBeenCalled();
+    valuesBatchGet.mockResolvedValueOnce({ data: {} });
+    expect(await gateway.getManyValues(requests, "FORMULA")).toEqual([[], [], []]);
+  });
+
+  it("reads a range that starts below the grid as empty, by reading the ranges one at a time", async () => {
+    const { api, valuesBatchGet, valuesGet } = mockApi();
+    valuesBatchGet.mockRejectedValueOnce(
+      Object.assign(new Error("Range ('Schedule'!A6:ZZ6) exceeds grid limits. Max rows: 5, max columns: 26"), {
+        status: 400,
+        code: 400,
+      }),
+    );
+    valuesGet.mockRejectedValueOnce(
+      Object.assign(new Error("Range ('Settings'!A9:G50) exceeds grid limits. Max rows: 5"), {
+        status: 400,
+        code: 400,
+      }),
+    );
+    expect(await new GoogleSheetsGateway(api, "sheet-id").getManyValues(requests, "FORMULA")).toEqual([
+      [],
+      [["a", 1]],
+      [["a", 1]],
+    ]);
+    expect(valuesGet).toHaveBeenCalledTimes(3);
+  });
+
+  it("names the tab Google says is missing, and translates other failures as for any read", async () => {
+    const { api, valuesBatchGet } = mockApi();
+    const gateway = new GoogleSheetsGateway(api, "sheet-id");
+    valuesBatchGet.mockRejectedValueOnce(
+      Object.assign(new Error("Unable to parse range: 'Payments Log'!A1:ZZ"), { status: 400, code: 400 }),
+    );
+    const error = await gateway.getManyValues(requests, "FORMULA").then(
+      () => null,
+      (e: unknown) => e as AppError,
+    );
+    expect(error).toBeInstanceOf(AppError);
+    expect(error!.code).toBe("sheet-structure");
+    expect(error!.message).toMatch(/tab "Payments Log" was not found/);
+
+    valuesBatchGet.mockRejectedValueOnce({ status: 403, code: 403, message: "The caller does not have permission" });
+    await expect(gateway.getManyValues(requests, "FORMULA")).rejects.toThrow(/Google denied access/);
+  });
+});
+
+describe("GoogleSheetsGateway remembers sheet ids and row counts", () => {
+  it("looks them up once for several clones", async () => {
+    const { api, get, batchUpdate } = mockApi();
+    const gateway = new GoogleSheetsGateway(api, "sheet-id");
+    await gateway.cloneRow("Schedule", 5, 6, [], []);
+    await gateway.cloneRow("Schedule", 6, 7, [], []);
+    expect(get).toHaveBeenCalledTimes(1);
+    expect(batchUpdate).toHaveBeenCalledTimes(2);
+  });
+
+  it("counts the rows it added itself, so the next clone adds only what is still missing", async () => {
+    const { api, batchUpdate } = mockApi({ rowCount: 5 });
+    const gateway = new GoogleSheetsGateway(api, "sheet-id");
+    await gateway.cloneRow("Schedule", 5, 6, [], []);
+    await gateway.cloneRow("Schedule", 6, 7, [], []);
+    await gateway.cloneRow("Schedule", 7, 7, [], []);
+    const sent = (index: number) => (batchUpdate.mock.calls[index] as unknown as SentBatch)[0].requestBody.requests!;
+    expect(sent(0)[0].appendDimension).toEqual({ sheetId: 11, dimension: "ROWS", length: 1 });
+    expect(sent(1)[0].appendDimension).toEqual({ sheetId: 11, dimension: "ROWS", length: 1 });
+    expect(sent(2)[0].appendDimension).toBeUndefined();
+  });
+
+  it("listTabs always asks Google, and what it learns replaces what was remembered", async () => {
+    const { api, get } = mockApi();
+    const gateway = new GoogleSheetsGateway(api, "sheet-id");
+    await gateway.listTabs();
+    await gateway.listTabs();
+    expect(get).toHaveBeenCalledTimes(2);
+    await gateway.cloneRow("Schedule", 5, 6, [], []);
+    expect(get).toHaveBeenCalledTimes(2);
+  });
+
+  it("looks again once when the tab asked for is not among those remembered", async () => {
+    const { api, get, batchUpdate } = mockApi();
+    const gateway = new GoogleSheetsGateway(api, "sheet-id");
+    await gateway.cloneRow("Schedule", 5, 6, [], []);
+    get.mockResolvedValueOnce({
+      data: {
+        sheets: [
+          { properties: { sheetId: 11, title: "Schedule", gridProperties: { rowCount: 1000 } } },
+          { properties: { sheetId: 33, title: "Late Rent", gridProperties: { rowCount: 1000 } } },
+        ],
+      },
+    });
+    await gateway.cloneRow("Late Rent", 2, 3, [], []);
+    expect(get).toHaveBeenCalledTimes(2);
+    const request = (batchUpdate.mock.calls[1] as unknown as SentBatch)[0].requestBody.requests![0];
+    expect(request.copyPaste?.destination?.sheetId).toBe(33);
+    // a tab that is nowhere is reported as missing after one more look, not before
+    await expect(gateway.cloneRow("Nope", 2, 3, [], [])).rejects.toThrow(/tab "Nope" was not found/);
+    expect(get).toHaveBeenCalledTimes(3);
+  });
+
+  it("forgets them when Google says a tab is gone", async () => {
+    const { api, get, valuesGet } = mockApi();
+    const gateway = new GoogleSheetsGateway(api, "sheet-id");
+    await gateway.cloneRow("Schedule", 5, 6, [], []);
+    valuesGet.mockRejectedValueOnce(
+      Object.assign(new Error("Unable to parse range: Schedule!A1"), { status: 400, code: 400 }),
+    );
+    await expect(gateway.getValues("Schedule", "A1", "FORMULA")).rejects.toThrow(/was not found/);
+    await gateway.cloneRow("Schedule", 6, 7, [], []);
+    expect(get).toHaveBeenCalledTimes(2);
+  });
+
+  it("forgets them when a tab is added, and when a clone fails", async () => {
+    const { api, get, batchUpdate } = mockApi();
+    const gateway = new GoogleSheetsGateway(api, "sheet-id");
+    await gateway.cloneRow("Schedule", 5, 6, [], []);
+    await gateway.addTab("Settings");
+    await gateway.cloneRow("Schedule", 6, 7, [], []);
+    expect(get).toHaveBeenCalledTimes(2);
+
+    batchUpdate.mockRejectedValueOnce(Object.assign(new Error("No grid with id: 11"), { status: 400, code: 400 }));
+    await expect(gateway.cloneRow("Schedule", 7, 8, [], [])).rejects.toThrow();
+    await gateway.cloneRow("Schedule", 7, 8, [], []);
+    expect(get).toHaveBeenCalledTimes(3);
+  });
+});
 
 describe("GoogleSheetsGateway", () => {
   it("lists tab titles", async () => {

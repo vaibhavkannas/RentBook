@@ -7,12 +7,15 @@ import MonthFrame from "@/components/MonthFrame";
 import PortionBoard from "@/components/PortionBoard";
 import type { MonthView } from "@/lib/domain/types";
 import { currentYm, parseYmKey, todayIso, ymKey } from "@/lib/domain/year-month";
-import { AppError } from "@/lib/errors";
 import { formatMonthTitle, formatRupees } from "@/lib/format";
 import { describeDifference, progressPercent } from "@/lib/rent-difference";
 import { getViewer } from "@/lib/server/auth-guard";
 import { getSheetsContext } from "@/lib/server/context";
 import { loadMonthView } from "@/lib/server/freshness";
+import { problemMessage } from "@/lib/server/problem";
+
+// A Google call gives up after 10 seconds; the whole request is cut off after 15.
+export const maxDuration = 15;
 
 export default async function Home({
   searchParams,
@@ -31,12 +34,7 @@ export default async function Home({
   try {
     view = await loadMonthView(getSheetsContext(), month);
   } catch (error) {
-    if (error instanceof AppError) {
-      problem = error.message;
-    } else {
-      console.error(error);
-      problem = "Couldn't reach Google Sheets. Try again.";
-    }
+    problem = problemMessage(error, viewer);
   }
 
   const title = formatMonthTitle(month);

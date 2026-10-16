@@ -2,10 +2,13 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import SettingsForm from "@/components/SettingsForm";
 import type { PortionConfig } from "@/lib/domain/types";
-import { AppError } from "@/lib/errors";
 import { getViewer } from "@/lib/server/auth-guard";
 import { getSheetsContext } from "@/lib/server/context";
+import { problemMessage } from "@/lib/server/problem";
 import { getSettings } from "@/lib/sheets/service";
+
+// A Google call gives up after 10 seconds; the whole request is cut off after 15.
+export const maxDuration = 15;
 
 export default async function SettingsPage() {
   const viewer = await getViewer();
@@ -17,12 +20,7 @@ export default async function SettingsPage() {
   try {
     portions = await getSettings(getSheetsContext());
   } catch (error) {
-    if (error instanceof AppError) {
-      problem = error.message;
-    } else {
-      console.error(error);
-      problem = "Couldn't reach Google Sheets. Try again.";
-    }
+    problem = problemMessage(error, viewer);
   }
 
   return (
