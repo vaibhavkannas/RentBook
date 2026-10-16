@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  AMOUNT_NOT_A_NUMBER_MESSAGE,
+  amountFromText,
   buildPaymentRequest,
   existingEntryFrom,
   LOG_RETRY_FAILED_MESSAGE,
@@ -52,6 +54,49 @@ describe("existingEntryFrom", () => {
       { existingAmount: Number.NaN, existingTenant: "Asha", existingCount: 4 },
     ]) {
       expect(existingEntryFrom(details)).toBeNull();
+    }
+  });
+});
+
+describe("amountFromText", () => {
+  it("reads a whole number, ignoring commas, spaces and a rupee sign", () => {
+    expect(amountFromText("5450")).toBe(5450);
+    expect(amountFromText("5,450")).toBe(5450);
+    expect(amountFromText("₹ 5 450")).toBe(5450);
+    expect(amountFromText(" 12,000 ")).toBe(12000);
+  });
+
+  it.each(["5k", "five thousand", "Infinity", "-Infinity", "NaN", "5,4a0", "1e999", "12.5.1", "₹"])(
+    "gives no number for %s",
+    (text) => {
+      expect(Number.isFinite(amountFromText(text))).toBe(false);
+    },
+  );
+});
+
+describe("buildPaymentRequest: an amount that is not a number", () => {
+  it("says to enter a whole number, and builds no request, for text such as 5k", () => {
+    expect(AMOUNT_NOT_A_NUMBER_MESSAGE).toBe("Enter the amount as a whole number.");
+    expect(buildPaymentRequest({ ...base, amount: amountFromText("5k") })).toEqual({
+      ok: false,
+      message: "Enter the amount as a whole number.",
+    });
+  });
+
+  it.each([Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY])("refuses %s the same way", (amount) => {
+    expect(buildPaymentRequest({ ...base, amount })).toEqual({ ok: false, message: AMOUNT_NOT_A_NUMBER_MESSAGE });
+  });
+
+  it("refuses Infinity typed in the field, in every mode", () => {
+    for (const mode of ["log", "edit", "new-tenant"] as const) {
+      const result = buildPaymentRequest({ ...base, mode, amount: amountFromText("Infinity"), seenEntry: SEEN });
+      expect(result).toEqual({ ok: false, message: AMOUNT_NOT_A_NUMBER_MESSAGE });
+    }
+  });
+
+  it("leaves the other checks of the amount to the server: zero, a negative number and a fraction are sent", () => {
+    for (const amount of [0, -5, 5450.5]) {
+      expect(buildPaymentRequest({ ...base, amount })).toMatchObject({ ok: true, body: { amount } });
     }
   });
 });

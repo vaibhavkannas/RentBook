@@ -7,6 +7,7 @@ import type { TenancyFields } from "@/lib/domain/tenancy";
 import type { PortionCard, PortionEntry } from "@/lib/domain/types";
 import { formatRupees } from "@/lib/format";
 import {
+  amountFromText,
   buildPaymentRequest,
   existingEntryFrom,
   logRetryFailureMessage,
@@ -114,7 +115,7 @@ export default function PaymentSheet({
       mode,
       monthKey,
       portionId,
-      amount: Number(amount.replace(/[,\s₹]/g, "")),
+      amount: amountFromText(amount),
       dateReceived: date,
       tenantName,
       confirmedReplace: overwrite,
@@ -247,7 +248,7 @@ export default function PaymentSheet({
               {card?.name ?? "This portion"} already has {formatRupees(conflict.amount)} recorded for{" "}
               {monthLabel}
               {conflict.tenant ? ` (${conflict.tenant})` : ""}. Replace it with{" "}
-              {formatRupees(Number(amount.replace(/[,\s₹]/g, "")))}
+              {formatRupees(amountFromText(amount))}
               {mode === "new-tenant"
                 ? ` and start ${tenantName.trim() || "the new tenant"} at payment 1`
                 : ""}

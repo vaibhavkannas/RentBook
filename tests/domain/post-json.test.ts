@@ -34,6 +34,29 @@ describe("postJson", () => {
     expect(init.signal).toBeInstanceOf(AbortSignal);
   });
 
+  it("sends the method it is given in place of POST, with the same timeout and the same body", async () => {
+    const fetchMock = vi.fn(async () => answer({ ok: true }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(postJson("/api/settings", { portions: [] }, POST_TIMEOUT_MS, "PUT")).resolves.toEqual({ ok: true });
+
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe("/api/settings");
+    expect(init.method).toBe("PUT");
+    expect(init.headers).toEqual({ "Content-Type": "application/json" });
+    expect(init.body).toBe(JSON.stringify({ portions: [] }));
+    expect(init.signal).toBeInstanceOf(AbortSignal);
+  });
+
+  it("gives up on a PUT that is not answered, like a POST", async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal("fetch", stalledFetch());
+    const pending = postJson("/x", {}, 500, "PUT").then((value) => value);
+    await vi.advanceTimersByTimeAsync(500);
+    await expect(pending).resolves.toBeNull();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
   it("returns null when the network fails", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => Promise.reject(new TypeError("Failed to fetch"))));
     await expect(postJson("/x", {})).resolves.toBeNull();

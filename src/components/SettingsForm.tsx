@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import type { PortionConfig } from "@/lib/domain/types";
+import { postJson, POST_TIMEOUT_MS } from "@/lib/post-json";
 import { parseSettingsRows, type SettingsRowInput } from "@/lib/settings-input";
 
 const toRow = (p: PortionConfig): SettingsRowInput => ({
@@ -34,25 +35,17 @@ export default function SettingsForm({ portions }: { portions: PortionConfig[] }
     }
     setBusy(true);
     setMessage(null);
-    try {
-      const res = await fetch("/api/settings", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ portions: parsed.portions }),
-      });
-      const body = (await res.json()) as SaveBody;
-      if (body.ok) {
-        // Show what was really stored, so the screen can never disagree with the Sheet.
-        if (body.portions) setRows(body.portions.map(toRow));
-        setMessage({ kind: "ok", text: "Saved" });
-        router.refresh();
-      } else {
-        setMessage({ kind: "error", text: body.error?.message ?? "Couldn't save settings." });
-      }
-    } catch {
+    const body = await postJson<SaveBody>("/api/settings", { portions: parsed.portions }, POST_TIMEOUT_MS, "PUT");
+    setBusy(false);
+    if (!body) {
       setMessage({ kind: "error", text: "Couldn't reach the server. Try again." });
-    } finally {
-      setBusy(false);
+    } else if (body.ok) {
+      // Show what was really stored, so the screen can never disagree with the Sheet.
+      if (body.portions) setRows(body.portions.map(toRow));
+      setMessage({ kind: "ok", text: "Saved" });
+      router.refresh();
+    } else {
+      setMessage({ kind: "error", text: body.error?.message ?? "Couldn't save settings." });
     }
   }
 

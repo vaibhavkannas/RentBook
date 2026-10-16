@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import type { PortionCard } from "@/lib/domain/types";
 import type { LogRetryResponse } from "@/lib/payment-request";
+import { postJson } from "@/lib/post-json";
 import {
   undoConfirmationText,
   undoLogRetryFailureMessage,
@@ -25,19 +26,6 @@ type ApiBody = LogRetryResponse & {
   /** Present when the log entry did not save: the signed token to send back to retry it. */
   retryToken?: string;
 };
-
-async function post(url: string, payload: unknown): Promise<ApiBody | null> {
-  try {
-    const res = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-    return (await res.json()) as ApiBody;
-  } catch {
-    return null;
-  }
-}
 
 const NO_CONFIRMATION =
   "Couldn't confirm that the undo went through. Check your connection and refresh the page before trying again.";
@@ -80,7 +68,7 @@ export default function UndoSheet({ monthKey, monthLabel, card, onClose, onDone 
   async function undo() {
     setBusy(true);
     setError(null);
-    const body = await post("/api/payments/undo", {
+    const body = await postJson<ApiBody>("/api/payments/undo", {
       month: monthKey,
       portionId: card.portionId,
       expected: entry,
@@ -103,7 +91,7 @@ export default function UndoSheet({ monthKey, monthLabel, card, onClose, onDone 
   async function retryLog() {
     setBusy(true);
     setError(null);
-    const body = await post("/api/payments/log-retry", { token: pendingToken });
+    const body = await postJson<ApiBody>("/api/payments/log-retry", { token: pendingToken });
     setBusy(false);
     if (body?.ok && body.logWritten) {
       onDone(toastText);

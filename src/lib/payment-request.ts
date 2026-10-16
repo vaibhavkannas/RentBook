@@ -40,6 +40,18 @@ export type PaymentRequest =
     }
   | { ok: false; message: string };
 
+/** Shown when the amount typed is not a number at all (text such as "5k", or "Infinity"). */
+export const AMOUNT_NOT_A_NUMBER_MESSAGE = "Enter the amount as a whole number.";
+
+/**
+ * The amount typed into the sheet as a number. Commas, spaces and a rupee sign are ignored, like in the other
+ * rupee fields. NaN, or Infinity, when it is not a number; a blank field is NaN too, not 0.
+ */
+export function amountFromText(text: string): number {
+  const cleaned = text.replace(/[,\s₹]/g, "");
+  return cleaned === "" ? Number.NaN : Number(cleaned);
+}
+
 /**
  * The entry a duplicate warning names, from the `details` of the server's conflict answer. Null unless it names
  * the tenant, the count and the amount: a Replace that cannot be checked against all three is not offered.
@@ -56,8 +68,12 @@ export function existingEntryFrom(details: Record<string, unknown> | undefined):
 /**
  * The body of POST /api/payments. An edit, and a Replace after a duplicate warning, always say which entry the
  * person was shown, so the server can refuse them if someone else has since changed or undone that payment.
+ * An amount that is not a number is refused here, before any request is sent. Whether it is a whole number of
+ * rupees in range is for the server to say.
  */
 export function buildPaymentRequest(input: PaymentRequestInput): PaymentRequest {
+  // JSON has no NaN or Infinity: they would reach the server as null and be refused with a message about the format.
+  if (!Number.isFinite(input.amount)) return { ok: false, message: AMOUNT_NOT_A_NUMBER_MESSAGE };
   const editing = input.mode === "edit";
   const replacing = editing || input.confirmedReplace;
   if (replacing && !input.seenEntry) {
