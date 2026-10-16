@@ -51,6 +51,7 @@ Copy `.env.example` to `.env.local` and fill it in. Put each value directly afte
 | `AUTH_GOOGLE_ID` / `AUTH_GOOGLE_SECRET` | From step 5 |
 | `AUTH_URL` | Optional while you run the app on your own computer. For the production deployment, the public address of the app, such as `https://rentbook.example.com`, with no path. Auth.js then builds the Google sign-in return address from it instead of trusting the request's Host header. Leave it out (do not leave it empty) on Vercel Preview deployments, which each have their own address |
 | `SESSION_NOT_BEFORE` | Optional, and normally left out. The "sign everyone out" switch: see "Signing everyone out" below |
+| `CSP_REPORT_ONLY` | Optional, and normally left out. An emergency switch that stops the browser blocking what the Content-Security-Policy forbids: see "Keeping your secrets safe" below. Only the value `1` turns it on |
 | `ALLOWED_EMAILS` | The Google accounts allowed to sign in, separated by commas. The first one is the owner and is the only person who can change Portion settings. |
 | `GOOGLE_SERVICE_ACCOUNT_JSON` | The key file as one line. Use the second command below and paste |
 | `SHEET_ID` | From step 1 (the test copy) |
@@ -117,11 +118,7 @@ $env:NODE_OPTIONS = "--use-system-ca"
 npm.cmd run recon
 ```
 
-The setting lasts for that PowerShell window. To keep it for every future window, run this once and then open a new PowerShell:
-
-```powershell
-setx NODE_OPTIONS "--use-system-ca"
-```
+The setting lasts only for that PowerShell window, so set it again in each new window that needs it. Do not make it permanent: it makes Node trust every certificate in the Windows certificate store, and a permanent setting would apply to every Node program you run later. Avoid it on a shared computer, where that store may hold certificates you did not choose. Use `NODE_EXTRA_CA_CERTS` with the one certificate you trust instead (see below).
 
 Set `NODE_OPTIONS` in the shell, not in `.env.local`. Node reads it at start-up, before it loads `.env.local`.
 
@@ -197,13 +194,23 @@ Undoing a New tenant payment does not reverse tenancy changes. The previous tena
 ## 7. Deploy to Vercel
 
 1. Sign in at https://vercel.com with GitHub, choose Add New, then Project, and import `vaibhavkannas/RentBook`.
-2. Under Environment Variables add every name from step 6: `AUTH_SECRET`, `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET`, `AUTH_URL` (for Production only, set to the production address), `ALLOWED_EMAILS` (the owner first), `GOOGLE_SERVICE_ACCOUNT_JSON` (paste it as one line, with no quotes), `SHEET_ID`, `SCHEDULE_TAB` and `TOTAL_HEADER`. Use the test copy's `SHEET_ID` for the first deploy. Add them for Production and Preview. A deployment that still has the older single `ALLOWED_EMAIL` keeps working until `ALLOWED_EMAILS` is set.
+2. Under Environment Variables add every name from step 6: `AUTH_SECRET`, `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET`, `AUTH_URL` (for Production only, set to the production address), `ALLOWED_EMAILS` (the owner first), `GOOGLE_SERVICE_ACCOUNT_JSON` (paste it as one line, with no quotes), `SHEET_ID`, `SCHEDULE_TAB` and `TOTAL_HEADER`. Use the test copy's `SHEET_ID` for the first deploy. Add them for Production and Preview, except the three secrets (`GOOGLE_SERVICE_ACCOUNT_JSON`, `AUTH_SECRET` and `AUTH_GOOGLE_SECRET`), which are set up as described in "Keeping your secrets safe" below. A deployment that still has the older single `ALLOWED_EMAIL` keeps working until `ALLOWED_EMAILS` is set.
 3. Deploy. A first import deploys the production branch (`main`). Work on a branch gets its own preview URL until its pull request is merged.
 4. Google does not accept wildcard redirect URIs. In Google Cloud, edit the OAuth client and add `https://<host>/api/auth/callback/google` for every host you sign in on: the preview URL now and the production URL later.
 5. Open the URL on your phone, sign in, and use the browser menu's Add to Home Screen.
 6. Switching to your live Sheet is a separate, later step: change `SHEET_ID` (and `SCHEDULE_TAB` if the tab name differs) in Vercel, then redeploy. Running deployments keep the old values. The end-to-end checklist in the implementation plan (Task 18) walks through it.
 
 If sign-in fails with an `UntrustedHost` error (more likely with `npm start` than on Vercel), set `AUTH_URL` to the address you are using, or add the environment variable `AUTH_TRUST_HOST=true`, and restart or redeploy. An empty `AUTH_URL` counts as set and turns trust off, so remove the line instead of leaving it empty.
+
+## Keeping your secrets safe
+
+Do these when you set up Vercel. They cost a few minutes and limit the damage if something leaks. How the app is protected, and what it cannot protect, is in `docs/product/THREAT-MODEL.md`.
+
+1. **Make the three secrets Sensitive and Production-only.** Add `GOOGLE_SERVICE_ACCOUNT_JSON`, `AUTH_SECRET` and `AUTH_GOOGLE_SECRET` in Vercel with Sensitive switched on and only the Production environment ticked. Vercel does not show a Sensitive value again after you save it, so keep your own copy in a password manager (not in the repo, and not in a OneDrive-synced folder). To change one later, replace it.
+2. **Use a separate test Sheet and service account for Preview deployments.** A Preview deployment runs the code of any branch or pull request, so it must not hold the live key or point at the live Sheet. Create a second service account (step 3), share only the test copy with it, and put that key and the test copy's `SHEET_ID` in the Preview environment. Give Preview its own `AUTH_SECRET` too (a different random string), and its own sign-in client if you want to sign in on previews. A preview that has no values of its own for the three secrets does not work, which is safe.
+3. **Rotate the service account key every 90 days.** Put a reminder in your calendar. In Cloud Console open Service Accounts, then Keys, then Add key, then Create new key (JSON). Put the new key in `GOOGLE_SERVICE_ACCOUNT_JSON` in Vercel and `.env.local`, redeploy, open the app and check that a month loads, then delete the old key in Cloud Console and the key file you downloaded. Do the same for the test service account. If a key leaks, do not wait: see "Rotating or revoking access".
+4. **Turn on 2-Step Verification on every Google account that is listed.** That means each address in `ALLOWED_EMAILS`, and the account that owns the Sheet and the Google Cloud project. RentBook relies on Google to say who someone is. Anyone who takes over a listed account can sign in to RentBook as that person. Anyone who takes over the account that owns the Sheet can also read and change the Sheet directly.
+5. **Know the `CSP_REPORT_ONLY` switch.** The app sends a Content-Security-Policy, which tells the browser what a page may load and run. If an update leaves a page blank or a button dead and the browser console mentions "Content Security Policy", set `CSP_REPORT_ONLY` to `1` in Vercel and redeploy (locally, set it in `.env.local` and restart `npm run dev`). The browser then only reports what the policy would have blocked and blocks nothing, so one layer of protection is off. Use it only until the problem is fixed, then delete the variable and redeploy. Any value other than `1` leaves the policy enforced.
 
 ## Rotating or revoking access
 

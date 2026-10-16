@@ -35,8 +35,8 @@ export function authSecret(env: Record<string, string | undefined>): string {
 /**
  * Checks the sign-in settings: AUTH_SECRET (at least 32 characters), AUTH_GOOGLE_ID and AUTH_GOOGLE_SECRET. Lists
  * every problem at once, in words, never with a value. This is not part of `readEnv`: the scripts that only read
- * the Sheet (recon, verify:testcopy) have no sign-in settings. The server checks it before it trusts a session,
- * and /api/health reports it.
+ * the Sheet (recon, verify:testcopy) have no sign-in settings. The server checks it before it trusts a session.
+ * /api/health does not: it is liveness-only and answers just { ok, version }, without reading any setting or the Sheet.
  */
 export function assertAuthConfig(env: Record<string, string | undefined>): void {
   const problems = [authSecretProblem(env)];

@@ -31,6 +31,10 @@ npm run dev
 
 See [SETUP.md](SETUP.md).
 
+## Security
+
+To report a vulnerability, see [SECURITY.md](SECURITY.md). How the app is protected, and what it cannot protect against, is in [docs/product/THREAT-MODEL.md](docs/product/THREAT-MODEL.md).
+
 ## How it works
 
 Rules live in `src/lib/domain` (pure, no I/O). Everything that touches the Sheet is in `src/lib/sheets`, behind one interface, so tests use an in-memory fake. Design notes are in `docs/superpowers/specs/`.
