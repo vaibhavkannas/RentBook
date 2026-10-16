@@ -179,10 +179,17 @@ export async function ensureTabs(gateway: SheetsGateway, scheduleTab: string): P
   if (!hasSettings && (tabs.includes(LOG_TAB) || tabs.includes(TENANTS_TAB))) {
     throw sheetStructure(SETTINGS_MISSING);
   }
-  const settings = hasSettings
-    ? await gateway.getValues(SETTINGS_TAB, SETTINGS_RANGE, "UNFORMATTED_VALUE")
-    : [];
-  if (settingsIsEmpty(settings)) await seedSettings(gateway, scheduleTab, hasSettings);
+  if (hasSettings) {
+    // An empty answer is read once more before it is believed: seeding writes over A1:G6, so a read that came
+    // back empty by mistake must never be what decides to replace the owner's settings.
+    let settings = await gateway.getValues(SETTINGS_TAB, SETTINGS_RANGE, "UNFORMATTED_VALUE");
+    if (settingsIsEmpty(settings)) {
+      settings = await gateway.getValues(SETTINGS_TAB, SETTINGS_RANGE, "UNFORMATTED_VALUE");
+    }
+    if (settingsIsEmpty(settings)) await seedSettings(gateway, scheduleTab, true);
+  } else {
+    await seedSettings(gateway, scheduleTab, false);
+  }
 
   // A Payments Log tab that another instance added a moment ago is treated as an existing one.
   if (!tabs.includes(LOG_TAB) && (await addTabIfMissing(gateway, LOG_TAB))) {
@@ -222,7 +229,8 @@ function parseSettingsRows(values: unknown[][]): SettingsRow[] {
       );
     }
     if (isBlankCell(row[0])) return;
-    const id = String(row[0]);
+    // A stray space or line break around a hand-typed id is not part of it (the Schedule header is matched trimmed too).
+    const id = String(row[0]).trim();
     if (!PORTION_ID.test(id)) {
       throw sheetStructure(
         `Settings row ${sheetRow}: the portion id "${shorten(id)}" can only use letters, numbers, - and _, up to 20 characters.`,

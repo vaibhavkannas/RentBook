@@ -174,7 +174,8 @@ describe("undoPayment", () => {
     );
     expect(result.logWritten).toBe(false);
     expect(result.logRow).toEqual(UNDONE_ROW);
-    expect(fake.calls.filter((call) => call === "appendRow")).toHaveLength(3);
+    // Not tried again: an error it does not know may have come back after the row was added.
+    expect(fake.calls.filter((call) => call === "appendRow")).toHaveLength(1);
     expect(blank(cell(fake, "Schedule", "D", 6))).toBe(true);
   });
 

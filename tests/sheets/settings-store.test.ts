@@ -227,8 +227,15 @@ describe("readSettings: rows typed by hand", () => {
     expect((await readSettings(fake)).map((p) => p.id)).toEqual(ids.map(String));
   });
 
+  it("keeps working when a hand-typed id has a space or line break around it", async () => {
+    for (const id of ["p1 ", " p1", "p1\n", "\tp1  "]) {
+      const fake = new FakeGateway({ [SETTINGS_TAB]: [["Portion"], [id, "Ground", "Tenant", "Count", "Amount", 11, 5]] });
+      expect((await readSettings(fake)).map((p) => p.id)).toEqual(["p1"]);
+    }
+  });
+
   it("refuses an id with other characters or more than 20, naming the row", async () => {
-    for (const id of ["p 1", "p.1", "p/1", "p1\n", " p1", "x".repeat(21), "naïve"]) {
+    for (const id of ["p 1", "p.1", "p/1", "p\n1", "x".repeat(21), "x".repeat(20) + " y", "naïve"]) {
       const fake = new FakeGateway({
         [SETTINGS_TAB]: [["Portion"], PORTION_ROW, [id, "Two", "Tenant2", "Count2", "Amount2", 11, 5]],
       });
@@ -244,6 +251,69 @@ describe("readSettings: rows typed by hand", () => {
     const message = await problemOf(fake);
     expect(message).toContain("y".repeat(40));
     expect(message).not.toContain("y".repeat(41));
+  });
+
+  it("echoes only printable text: line breaks and control characters become spaces, the row is still named", async () => {
+    const fake = new FakeGateway({
+      [SETTINGS_TAB]: [["Portion"], PORTION_ROW, ["bad\r\nid\u0007!\u2028", "Two", "Tenant2", "Count2", "Amount2", 11, 5]],
+    });
+    const message = await problemOf(fake);
+    expect(message).toMatch(/Settings row 3\b/);
+    expect(message).toContain('"bad id !"');
+    expect(message).not.toMatch(/[\u0000-\u001f\u007f-\u009f\u2028\u2029]/);
+  });
+});
+
+describe("ensureTabs: a Settings read that comes back empty", () => {
+  /** Answers the first `blanks` reads of the Settings tab with nothing, as a read that went wrong might. */
+  class BlankingGateway extends FakeGateway {
+    settingsReads = 0;
+    constructor(
+      initial: ConstructorParameters<typeof FakeGateway>[0],
+      private blanks: number,
+    ) {
+      super(initial);
+    }
+    async getValues(tab: string, a1: string, render: Parameters<FakeGateway["getValues"]>[2]) {
+      if (tab === SETTINGS_TAB) {
+        this.settingsReads++;
+        if (this.blanks > 0) {
+          this.blanks--;
+          return [];
+        }
+      }
+      return super.getValues(tab, a1, render);
+    }
+  }
+
+  const OWN_SETTINGS = [["Portion"], ["p1", "Ground", "Tenant", "Count", "Amount", 6, 8]];
+
+  it("is read once more, and Settings that are there are never seeded over", async () => {
+    const fake = new BlankingGateway({ Schedule: baseSchedule(), [SETTINGS_TAB]: OWN_SETTINGS }, 1);
+    await ensureTabs(fake, "Schedule");
+    expect(fake.settingsReads).toBe(2);
+    expect(fake.tabs.get(SETTINGS_TAB)).toEqual(OWN_SETTINGS);
+    expect(await readSettings(fake)).toHaveLength(1);
+  });
+
+  it("is read only once when it is not empty", async () => {
+    const fake = new BlankingGateway({ Schedule: baseSchedule(), [SETTINGS_TAB]: OWN_SETTINGS }, 0);
+    await ensureTabs(fake, "Schedule");
+    expect(fake.settingsReads).toBe(1);
+  });
+
+  it("still seeds a Settings tab that is empty on both reads", async () => {
+    const fake = new BlankingGateway({ Schedule: baseSchedule(), [SETTINGS_TAB]: [["Portion"]] }, 0);
+    await ensureTabs(fake, "Schedule");
+    expect(fake.settingsReads).toBe(2);
+    expect((await readSettings(fake)).map((p) => p.id)).toEqual(PORTIONS.map((p) => p.id));
+  });
+
+  it("does not read a Settings tab that is not there", async () => {
+    const fake = new BlankingGateway({ Schedule: baseSchedule() }, 0);
+    await ensureTabs(fake, "Schedule");
+    expect(fake.tabs.has(SETTINGS_TAB)).toBe(true);
+    expect((await readSettings(fake)).map((p) => p.id)).toEqual(PORTIONS.map((p) => p.id));
   });
 });
 

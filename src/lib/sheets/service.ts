@@ -322,10 +322,23 @@ const isEmptyCell = (cell: unknown) => cell === undefined || cell === null || ce
  * Reads the row just written (ONE read, unformatted) and refuses with a conflict when a cell this request
  * wrote does not hold what was written: the write did not land, or someone changed the cell a moment
  * later. Only the cells in `written` are compared; the rest of the row is nobody's business here.
+ *
+ * When the read itself fails (Google slow, limiting requests, a lost connection) nothing is known about the
+ * cells, and they are already written. That is "written but not verified", not a conflict: it is logged on
+ * the server and the caller carries on, so the Payments Log row is still added and the owner sees the
+ * normal result. Only a read that came back and did not match is refused.
  */
 async function confirmWritten(ctx: SheetsContext, row: number, written: WrittenCell[]): Promise<void> {
-  const stored =
-    (await ctx.gateway.getValues(ctx.scheduleTab, `A${row}:ZZ${row}`, "UNFORMATTED_VALUE"))[0] ?? [];
+  let stored: unknown[];
+  try {
+    stored = (await ctx.gateway.getValues(ctx.scheduleTab, `A${row}:ZZ${row}`, "UNFORMATTED_VALUE"))[0] ?? [];
+  } catch (error) {
+    console.error(
+      `Schedule row ${row} was written but could not be read back (written, not verified); carrying on.`,
+      error,
+    );
+    return;
+  }
   const same = written.every(({ col, value }) =>
     isEmptyCell(value) ? isEmptyCell(stored[col]) : stored[col] === value,
   );
@@ -559,21 +572,40 @@ async function undoPaymentUnchecked(
   return { removed: existing, logWritten, logRow };
 }
 
+/** At most this many tries to add one Payments Log row in a request. */
 const LOG_ATTEMPTS = 3;
+/** The longest wait between two tries, whatever delay the caller asks for. */
+const LOG_MAX_WAIT_MS = 1_000;
+/**
+ * No new try starts when the tries so far, plus the wait before it, would pass this. The request holds the
+ * write lock and must finish inside maxDuration (15 s), after its own reads and writes.
+ */
+const LOG_BUDGET_MS = 4_000;
 
+/**
+ * Adds a row to the Payments Log. Returns false when the row is not known to be there (the owner's "Try
+ * again" button takes over).
+ *
+ * It adds the row a second time ONLY after Google refused it for sending too many requests: that refusal
+ * means nothing was done. A timeout, a 5xx, a lost connection or any other error can come back after the
+ * row was already added, so trying again could put it in twice. Those stop at once.
+ */
 async function appendLogRow(
   gateway: SheetsGateway,
   row: LogRow,
   retryDelayMs: number,
 ): Promise<boolean> {
+  const started = Date.now();
   for (let attempt = 1; attempt <= LOG_ATTEMPTS; attempt++) {
     try {
       await gateway.appendRow(LOG_TAB, row);
       return true;
-    } catch {
-      if (attempt < LOG_ATTEMPTS && retryDelayMs > 0) {
-        await new Promise((resolve) => setTimeout(resolve, retryDelayMs * attempt));
-      }
+    } catch (error) {
+      const cannotHaveLanded = error instanceof AppError && error.code === "rate-limited";
+      if (!cannotHaveLanded || attempt === LOG_ATTEMPTS) return false;
+      const wait = Math.min(retryDelayMs * attempt, LOG_MAX_WAIT_MS);
+      if (Date.now() - started + wait > LOG_BUDGET_MS) return false;
+      if (wait > 0) await new Promise((resolve) => setTimeout(resolve, wait));
     }
   }
   return false;

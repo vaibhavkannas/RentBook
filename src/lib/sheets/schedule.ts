@@ -26,9 +26,36 @@ const norm = (value: unknown) => String(value ?? "").trim().toLowerCase();
 
 const MESSAGE_CELL_LENGTH = 40;
 
-/** A cell's text cut to 40 characters, so a long note cannot flood an error message. */
-export const shorten = (text: string) =>
-  text.length > MESSAGE_CELL_LENGTH ? `${text.slice(0, MESSAGE_CELL_LENGTH)}...` : text;
+/** Control characters, line and paragraph separators, and invisible text-direction marks. */
+const isUnprintable = (code: number) =>
+  code <= 0x1f ||
+  (code >= 0x7f && code <= 0x9f) ||
+  (code >= 0x200b && code <= 0x200f) ||
+  (code >= 0x2028 && code <= 0x202e) ||
+  (code >= 0x2060 && code <= 0x2064) ||
+  (code >= 0x2066 && code <= 0x2069) ||
+  code === 0xfeff;
+
+/**
+ * A cell's text as it is safe to show inside an error message: each run of unprintable characters (line breaks,
+ * tabs, other control or text-direction characters) becomes one space, then the text is cut to 40 characters so
+ * a long note cannot flood the message. The cell is typed by hand and the message reaches the owner's screen
+ * and the server log, so neither can be broken up by what is in it.
+ */
+export function shorten(text: string): string {
+  let plain = "";
+  let gap = false;
+  for (const char of text) {
+    if (isUnprintable(char.charCodeAt(0))) {
+      gap = true;
+      continue;
+    }
+    plain += gap ? ` ${char}` : char;
+    gap = false;
+  }
+  plain = plain.trim();
+  return plain.length > MESSAGE_CELL_LENGTH ? `${plain.slice(0, MESSAGE_CELL_LENGTH)}...` : plain;
+}
 
 /** The Tenant, Count and Amount columns of a portion. Every portion given to parseSchedule has them, or the parse is refused. */
 export function columnsOf(layout: ScheduleLayout, portionId: string) {

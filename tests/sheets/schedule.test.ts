@@ -155,6 +155,35 @@ describe("parseSchedule", () => {
       expect(message).not.toContain(long.slice(0, 41));
     });
 
+    describe("echoes only printable text", () => {
+      const CONTROL = /[\u0000-\u001f\u007f-\u009f\u2028\u2029\u202e]/;
+      const messageFor = (cell: string) => {
+        const values = baseSchedule();
+        (values[3] as unknown[])[0] = cell;
+        return expectStructure(() => parseSchedule(values, PORTIONS, TOTAL_HEADER));
+      };
+
+      it("turns a line break inside the cell into a space, and still names the row", () => {
+        const message = messageFor("Agust\r\n-26");
+        expect(message).toMatch(/Row 4\b/);
+        expect(message).toContain('"Agust -26"');
+        expect(message).toMatch(/cannot read/i);
+        expect(message).not.toMatch(CONTROL);
+      });
+
+      it("drops other control characters, line and paragraph separators and text-direction overrides", () => {
+        const message = messageFor("A\u0000B\u0007C\u001b[31mD\u2028E\u2029F\u0085G\u202eH\tI");
+        expect(message).not.toMatch(CONTROL);
+        expect(message).toContain('"A B C [31mD E F G H I"');
+      });
+
+      it("does not let control characters use up the 40 characters", () => {
+        const message = messageFor("\n".repeat(30) + "x".repeat(50));
+        expect(message).toContain(`"${"x".repeat(40)}..."`);
+        expect(message).not.toContain("x".repeat(41));
+      });
+    });
+
     it("is ignored below the last month row, like a footer label", () => {
       const values = baseSchedule();
       values.push(["Total"], ["Grand total", undefined, undefined, 123], [5], ["garbled'cell"]);

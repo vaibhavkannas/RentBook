@@ -287,7 +287,9 @@ describe("logPayment: Payments Log failures", () => {
     const result = await pay(ctx, { portionId: "p1" });
     expect(result.logWritten).toBe(false);
     expect(cell(fake, "Schedule", "D", 6)).toBe(5450);
-    expect(fake.calls.filter((c) => c === "appendRow")).toHaveLength(3);
+    // An error it does not know may have come back after the row was added, so it is not tried again
+    // (log-resilience.test.ts covers the refusals that are).
+    expect(fake.calls.filter((c) => c === "appendRow")).toHaveLength(1);
 
     fake.failOn.clear();
     expect(await retryLogRow(ctx, result.logRow, 0)).toBe(true);
