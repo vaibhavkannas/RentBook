@@ -556,7 +556,11 @@ describe("POST /api/tenancies", () => {
   it("answers 400 for a body that is not JSON", async () => {
     signedInAs("member@example.com");
     const res = await postTenancy(
-      new Request("http://localhost/api/tenancies", { method: "POST", body: "not json" }),
+      new Request("http://localhost/api/tenancies", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: "not json",
+      }),
     );
     expect(res.status).toBe(400);
     expect(saveTenancy).not.toHaveBeenCalled();
@@ -821,5 +825,78 @@ describe("POST /api/payments/log-retry", () => {
     expect((await postRetry(retryTokenRequest(token))).status).toBe(200);
     expect(retryLogRow).toHaveBeenCalledTimes(2);
     expect(retryLogRow.mock.calls[1][1]).toEqual(retryLogRow.mock.calls[0][1]);
+  });
+});
+
+// Request integrity: every route refuses a request that did not come from the app's own page as JSON, and a body
+// over 32 KB, before it asks who is signed in.
+describe("request integrity on every route", () => {
+  const ROUTES: [string, (request: Request) => Promise<Response>, string, string][] = [
+    ["POST /api/payments", postPayment, "POST", "http://localhost/api/payments"],
+    ["POST /api/payments/undo", postUndo, "POST", "http://localhost/api/payments/undo"],
+    ["POST /api/payments/log-retry", postRetry, "POST", "http://localhost/api/payments/log-retry"],
+    ["POST /api/tenancies", postTenancy, "POST", "http://localhost/api/tenancies"],
+    ["POST /api/tenancies/move-out", postMoveOut, "POST", "http://localhost/api/tenancies/move-out"],
+    ["PUT /api/settings", putSettings, "PUT", "http://localhost/api/settings"],
+  ];
+  const SERVICES = [saveSettings, logPayment, undoPayment, retryLogRow, saveTenancy, moveOutTenancy];
+
+  const make = (method: string, url: string, headers: Record<string, string>, body: string) =>
+    new Request(url, { method, headers, body });
+  const JSON_TYPE = { "Content-Type": "application/json" };
+
+  describe.each(ROUTES)("%s", (_name, handler, method, url) => {
+    it("refuses a cross-site request with 403 before it asks who is signed in", async () => {
+      signedInAs("owner@example.com");
+      const res = await handler(make(method, url, { ...JSON_TYPE, "Sec-Fetch-Site": "cross-site" }, "{}"));
+      expect(res.status).toBe(403);
+      expect((await res.json()).error.code).toBe("forbidden");
+      expect(auth).not.toHaveBeenCalled();
+      for (const service of SERVICES) expect(service).not.toHaveBeenCalled();
+    });
+
+    it("refuses an Origin that is not this host with 403", async () => {
+      signedInAs("owner@example.com");
+      const res = await handler(make(method, url, { ...JSON_TYPE, Origin: "https://evil.example" }, "{}"));
+      expect(res.status).toBe(403);
+      expect(auth).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ["plain text", { "Content-Type": "text/plain" }],
+      ["a form", { "Content-Type": "application/x-www-form-urlencoded" }],
+      ["no content type", {}],
+    ])("refuses %s with 415 before it asks who is signed in", async (_case, headers) => {
+      signedInAs("owner@example.com");
+      const res = await handler(make(method, url, headers, "{}"));
+      expect(res.status).toBe(415);
+      expect((await res.json()).error.code).toBe("validation");
+      expect(auth).not.toHaveBeenCalled();
+    });
+
+    it("refuses a body over 32 KB with 413, even from someone who is not signed in", async () => {
+      signedInAs(null);
+      const big = JSON.stringify({ filler: "x".repeat(32 * 1024) });
+      const res = await handler(make(method, url, JSON_TYPE, big));
+      expect(res.status).toBe(413);
+      expect((await res.json()).error.code).toBe("validation");
+      expect(auth).not.toHaveBeenCalled();
+    });
+
+    it("refuses on the announced length alone", async () => {
+      signedInAs(null);
+      const res = await handler(make(method, url, { ...JSON_TYPE, "Content-Length": String(40 * 1024) }, "{}"));
+      expect(res.status).toBe(413);
+      expect(auth).not.toHaveBeenCalled();
+    });
+
+    it("lets the app's own request through to the sign-in check", async () => {
+      signedInAs(null);
+      const res = await handler(
+        make(method, url, { ...JSON_TYPE, "Sec-Fetch-Site": "same-origin", Origin: "http://localhost" }, "{}"),
+      );
+      expect(res.status).toBe(401);
+      expect(auth).toHaveBeenCalled();
+    });
   });
 });

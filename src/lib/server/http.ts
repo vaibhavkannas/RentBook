@@ -1,5 +1,12 @@
 import type { z } from "zod";
-import { AppError, messageFor, validation } from "@/lib/errors";
+import {
+  AppError,
+  crossOriginRequest,
+  messageFor,
+  payloadTooLarge,
+  unsupportedMediaType,
+  validation,
+} from "@/lib/errors";
 import { getViewer } from "./auth-guard";
 
 const STATUS: Record<AppError["code"], number> = {
@@ -45,7 +52,7 @@ export async function handle(run: () => Promise<Record<string, unknown>>): Promi
       return Response.json(
         { ok: false, error: { code: error.code, message, details: error.details } },
         {
-          status: STATUS[error.code],
+          status: error.status ?? STATUS[error.code],
           headers: error.code === "rate-limited" ? { "Retry-After": RETRY_AFTER_SECONDS } : undefined,
         },
       );
@@ -58,16 +65,85 @@ export async function handle(run: () => Promise<Record<string, unknown>>): Promi
   }
 }
 
-export async function parseJson<T extends z.ZodType>(
-  request: Request,
-  schema: T,
-): Promise<z.infer<T>> {
-  let body: unknown;
+/** The largest request body the app accepts. Its own requests are far smaller. */
+export const MAX_BODY_BYTES = 32 * 1024;
+
+/**
+ * The host the browser asked for. Behind a proxy that is X-Forwarded-Host (its first value), otherwise Host,
+ * otherwise the host of the request's own address.
+ */
+function requestHost(request: Request): string {
+  const forwarded = request.headers.get("x-forwarded-host")?.split(",")[0].trim();
+  return (forwarded || request.headers.get("host") || new URL(request.url).host).toLowerCase();
+}
+
+/** The host of an Origin header, or null when it is not an address ("null", or nonsense). */
+function originHost(origin: string): string | null {
   try {
-    body = await request.json();
+    return new URL(origin).host.toLowerCase();
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Refuses a request that did not come from the app's own page, or is not JSON.
+ * - Sec-Fetch-Site, when the browser sends it, must be "same-origin". Anything else (cross-site, same-site, none,
+ *   empty) is a 403.
+ * - Origin, when present, must be this host. A different host, a different port or something that is not an address
+ *   is a 403.
+ * - Content-Type must be application/json (a charset is fine). Anything else is a 415. A cross-site form can only
+ *   send text, so this alone stops one; the other two checks are the second lock.
+ * The cross-site checks come first: a request from another site that is also not JSON is told the more telling 403.
+ * A tool that sends neither Sec-Fetch-Site nor Origin is judged by its content type alone, and still needs a session.
+ */
+export function assertJsonSameOrigin(request: Request): void {
+  const site = request.headers.get("sec-fetch-site");
+  if (site !== null && site !== "same-origin") throw crossOriginRequest();
+  const origin = request.headers.get("origin");
+  if (origin !== null && originHost(origin) !== requestHost(request)) throw crossOriginRequest();
+  const type = request.headers.get("content-type")?.split(";")[0].trim().toLowerCase();
+  if (type !== "application/json") throw unsupportedMediaType();
+}
+
+/** The body as text, read at most up to MAX_BODY_BYTES: a longer stream is cancelled, not read to its end. */
+async function readLimitedText(request: Request): Promise<string> {
+  const reader = request.body?.getReader();
+  if (!reader) return "";
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > MAX_BODY_BYTES) {
+      await reader.cancel().catch(() => undefined);
+      throw payloadTooLarge();
+    }
+    chunks.push(value);
+  }
+  return new TextDecoder().decode(Buffer.concat(chunks));
+}
+
+/**
+ * The JSON body of a request, after the checks every route makes first: the request is from the app's own page
+ * and says it is JSON (assertJsonSameOrigin), and the body is no more than 32 KB, by its announced length and by
+ * what actually arrives. Routes call this BEFORE they ask who is signed in, so a refused request costs nothing.
+ */
+export async function readJsonBody(request: Request): Promise<unknown> {
+  assertJsonSameOrigin(request);
+  const announced = Number(request.headers.get("content-length"));
+  if (announced > MAX_BODY_BYTES) throw payloadTooLarge();
+  const text = await readLimitedText(request);
+  try {
+    return JSON.parse(text);
   } catch {
     throw validation("Request body must be JSON.");
   }
+}
+
+/** The body checked against `schema`: typed data, or a validation error naming the first field that is wrong. */
+export function parseBody<T extends z.ZodType>(body: unknown, schema: T): z.infer<T> {
   const parsed = schema.safeParse(body);
   if (!parsed.success) {
     const issue = parsed.error.issues[0];

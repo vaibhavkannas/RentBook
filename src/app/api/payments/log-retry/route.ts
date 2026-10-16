@@ -1,6 +1,6 @@
 import { requireUser } from "@/lib/server/auth-guard";
 import { getSheetsContext } from "@/lib/server/context";
-import { handle, parseJson } from "@/lib/server/http";
+import { handle, parseBody, readJsonBody } from "@/lib/server/http";
 import { readRetryToken } from "@/lib/server/retry-token";
 import { logRetryBody } from "@/lib/server/schemas";
 import { runWrite } from "@/lib/server/writes";
@@ -11,8 +11,10 @@ export const maxDuration = 15;
 
 export async function POST(request: Request) {
   return handle(async () => {
+    // Before the sign-in check: from the app's own page, as JSON, and no more than 32 KB.
+    const raw = await readJsonBody(request);
     const viewer = await requireUser();
-    const { token } = await parseJson(request, logRetryBody);
+    const { token } = parseBody(raw, logRetryBody);
     // The row comes from the token the server signed for this person, never from the request.
     const row = readRetryToken(token, viewer.email);
     // "Logged by" is always the signed-in person, whatever the row says, so nobody can forge it.

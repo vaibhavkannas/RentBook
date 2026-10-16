@@ -11,6 +11,8 @@ export class AppError extends Error {
       | "unavailable",
     message: string,
     readonly details?: Record<string, unknown>,
+    /** The HTTP status to answer with, when it is not the usual one of the code (415 and 413 are "validation"). */
+    readonly status?: number,
   ) {
     super(message);
     this.name = "AppError";
@@ -23,6 +25,17 @@ export const unauthorized = () =>
 export const forbidden = () => new AppError("forbidden", "Only the owner can do that.");
 
 export const validation = (message: string) => new AppError("validation", message);
+
+/** The request was not sent as JSON. */
+export const unsupportedMediaType = () =>
+  new AppError("validation", "That request wasn't sent as JSON.", undefined, 415);
+
+/** The request body is bigger than any request the app makes. */
+export const payloadTooLarge = () => new AppError("validation", "That request is too large.", undefined, 413);
+
+/** The request did not come from the app's own page (another site, or a tool that says so). */
+export const crossOriginRequest = () =>
+  new AppError("forbidden", "That request didn't come from RentBook's own page. Reload the page and try again.");
 
 export const conflict = (message: string, details?: Record<string, unknown>) =>
   new AppError("conflict", message, details);
