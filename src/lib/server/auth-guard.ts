@@ -1,3 +1,4 @@
+import "server-only";
 import { connection } from "next/server";
 import { auth } from "@/auth";
 import { forbidden, unauthorized } from "@/lib/errors";

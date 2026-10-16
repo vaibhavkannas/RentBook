@@ -1,3 +1,4 @@
+import "server-only";
 import { AppError, messageFor } from "@/lib/errors";
 import type { Viewer } from "./auth-guard";
 

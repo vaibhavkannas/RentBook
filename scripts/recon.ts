@@ -2,7 +2,10 @@
  * Read-only check of your real Google Sheet. Prints what RentBook sees and
  * lists anything it cannot handle. Never writes to the Sheet.
  *
- *   npx tsx --env-file=.env.local scripts/recon.ts
+ *   npm run recon
+ *
+ * The script runs with tsx --conditions=react-server (see package.json): the code it imports starts with
+ * import "server-only", which throws outside a Next server build unless that condition is set.
  */
 import { AppError } from "@/lib/errors";
 import { readEnv } from "@/lib/server/env";

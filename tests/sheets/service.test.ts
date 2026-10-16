@@ -311,6 +311,29 @@ describe("logPayment: input validation", () => {
     await expectCode(pay(ctx, { portionId: "p9" }), "validation");
   });
 
+  it.each(["1999-12-31", "2101-01-01", "1900-01-01", "2026-10-5"])(
+    "rejects the date received %s",
+    async (dateReceived) => {
+      const { fake, ctx } = setup();
+      await expectCode(pay(ctx, { portionId: "p1", dateReceived }), "validation");
+      expect(fake.calls).toEqual([]);
+    },
+  );
+
+  it.each(["2000-01-01", "2100-12-31"])("accepts the date received %s", async (dateReceived) => {
+    const { ctx } = setup();
+    expect((await pay(ctx, { portionId: "p1", dateReceived })).logRow[6]).toBe(dateReceived);
+  });
+
+  it.each(["Hari\nKumar", "Hari\tKumar", "Hari\u0000", "x".repeat(61)])(
+    "rejects the new tenant name %j",
+    async (newTenantName) => {
+      const { fake, ctx } = setup();
+      await expectCode(pay(ctx, { portionId: "p4", newTenantName }), "validation");
+      expect(fake.calls).toEqual([]);
+    },
+  );
+
   it("does not touch the sheet when validation fails", async () => {
     const { fake, ctx } = setup();
     await expectCode(pay(ctx, { portionId: "p1", amount: 0 }), "validation");
@@ -537,6 +560,13 @@ describe("settings through the service", () => {
       saveSettings(ctx, [{ id: "p1", name: "", cycleLength: 11, hikePercent: 5 }]),
       "validation",
     );
+  });
+
+  it("saveSettings rejects a portion name with a line break or another control character", async () => {
+    const { ctx } = setup();
+    for (const name of ["Rear\nroom", "Rear\troom", "Rear\u0000room"]) {
+      await expectCode(saveSettings(ctx, [{ id: "p1", name, cycleLength: 11, hikePercent: 5 }]), "validation");
+    }
   });
 });
 

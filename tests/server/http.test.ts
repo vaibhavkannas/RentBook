@@ -359,9 +359,11 @@ describe("parseBody", () => {
   it("limits the length of every text the log schemas take from the client", () => {
     const long = "x".repeat(201);
     const payment = { month: "2026-10", portionId: "p1", amount: 5450, dateReceived: "2026-10-05" };
-    expect(parseBody({ ...payment, newTenantName: "x".repeat(200) }, paymentBody).amount).toBe(5450);
+    // a tenant's name is 1 to 60 characters, the same limit the service holds it to
+    expect(parseBody({ ...payment, newTenantName: "x".repeat(60) }, paymentBody).amount).toBe(5450);
     for (const bad of [
       { ...payment, dateReceived: long },
+      { ...payment, newTenantName: "x".repeat(61) },
       { ...payment, newTenantName: long },
       { ...payment, expected: { tenant: long, count: 1, amount: 1 } },
       { ...payment, tenancy: { moveIn: long } },

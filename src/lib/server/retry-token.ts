@@ -1,3 +1,4 @@
+import "server-only";
 import { z } from "zod";
 import { validation } from "@/lib/errors";
 import type { LogRow } from "@/lib/sheets/service";

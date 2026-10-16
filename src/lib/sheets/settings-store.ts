@@ -1,3 +1,4 @@
+import { cleanText, MAX_NAME_LENGTH } from "@/lib/domain/input-rules";
 import type { PortionConfig } from "@/lib/domain/types";
 import { sheetStructure, tabMissing, validation } from "@/lib/errors";
 import { isBlankCell } from "./cells";
@@ -294,10 +295,7 @@ export async function updateSettings(
   const writes = updates.map((update) => {
     const found = current.find((entry) => entry.portion.id === update.id);
     if (!found) throw validation(`Unknown portion "${update.id}".`);
-    const name = update.name.trim();
-    if (name.length === 0 || name.length > 60) {
-      throw validation("Portion name must be 1 to 60 characters.");
-    }
+    const name = cleanText(update.name, "Portion name", { max: MAX_NAME_LENGTH, required: true });
     if (
       update.cycleLength !== null &&
       !(Number.isInteger(update.cycleLength) && update.cycleLength >= 1 && update.cycleLength <= 120)

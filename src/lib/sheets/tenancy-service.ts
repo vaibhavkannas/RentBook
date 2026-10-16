@@ -1,3 +1,4 @@
+import { cleanText, requireDay } from "@/lib/domain/input-rules";
 import { findLatestEntry } from "@/lib/domain/month-view";
 import {
   currentTenancy,
@@ -232,7 +233,7 @@ async function moveOutUnchecked(
   stamp: WriteStamp,
 ): Promise<{ tenancy: Tenancy }> {
   const moveOut = (input.moveOut ?? "").trim();
-  if (!isValidIsoDay(moveOut)) throw validation("Move-out date must be a real date (YYYY-MM-DD).");
+  requireDay(moveOut, "Move-out date");
   const refund = checkRupees(input.refund, "Refund");
   const deductions = checkRupees(input.deductions, "Deductions");
   if (
@@ -242,10 +243,10 @@ async function moveOutUnchecked(
   ) {
     throw validation("Advance outcome must be Held, Refunded or Adjusted.");
   }
-  const notes = input.notes === undefined ? undefined : input.notes.trim();
-  if (notes !== undefined && notes.length > MAX_NOTES_LENGTH) {
-    throw validation(`Notes can have at most ${MAX_NOTES_LENGTH} characters.`);
-  }
+  const notes =
+    input.notes === undefined
+      ? undefined
+      : cleanText(input.notes, "Notes", { max: MAX_NOTES_LENGTH, allowNewlines: true });
   if (input.expectedUpdatedAt === undefined) {
     throw validation("Moving out needs the updated-at value the person saw.");
   }

@@ -1,30 +1,36 @@
+import "server-only";
 import { z } from "zod";
-import { ADVANCE_STATUSES } from "@/lib/domain/tenancy";
+import { MAX_NAME_LENGTH } from "@/lib/domain/input-rules";
+import { ADVANCE_STATUSES, MAX_NOTES_LENGTH, MAX_PHONE_LENGTH } from "@/lib/domain/tenancy";
+import { isoDay, safeText } from "./validators";
 
 const monthString = z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, "month must look like 2026-10");
 
 /** The longest text the log requests take from the browser. */
 const MAX_TEXT = 200;
 
+/** A tenant's name: the text the person typed, which the sheets will hold. */
+const tenantName = safeText(MAX_NAME_LENGTH, { label: "Tenant name", required: true });
+
 /** The tenant, count and amount the person saw on screen. */
 const seenEntry = z.object({ tenant: z.string().max(MAX_TEXT), count: z.number(), amount: z.number() });
 
-/** What a person can enter for a tenancy. The service checks the values and gives a clear message. */
+/** What a person can enter for a tenancy. The service checks the values again and gives a clear message. */
 export const tenancyFieldsSchema = z.object({
-  phone: z.string().max(MAX_TEXT).optional(),
-  moveIn: z.string().max(MAX_TEXT),
-  agreementEnd: z.string().max(MAX_TEXT).optional(),
+  phone: safeText(MAX_PHONE_LENGTH, { label: "Phone" }).optional(),
+  moveIn: isoDay("Move-in date"),
+  agreementEnd: isoDay("Agreement end", { allowBlank: true }).optional(),
   advance: z.number().nullable().optional(),
-  advanceDate: z.string().max(MAX_TEXT).optional(),
-  notes: z.string().optional(),
+  advanceDate: isoDay("Advance date", { allowBlank: true }).optional(),
+  notes: safeText(MAX_NOTES_LENGTH, { label: "Notes", allowNewlines: true }).optional(),
 });
 
 export const paymentBody = z.object({
   month: monthString,
   portionId: z.string().min(1).max(20),
   amount: z.number(),
-  dateReceived: z.string().max(MAX_TEXT),
-  newTenantName: z.string().max(MAX_TEXT).optional(),
+  dateReceived: isoDay("Date received"),
+  newTenantName: tenantName.optional(),
   overwrite: z.boolean().optional(),
   expected: seenEntry.optional(),
   /** Details of the new tenant. Only used together with `newTenantName`. */
@@ -58,7 +64,7 @@ export const settingsBody = z.object({
     .array(
       z.object({
         id: z.string().min(1).max(20),
-        name: z.string(),
+        name: safeText(MAX_NAME_LENGTH, { label: "Portion name", required: true }),
         cycleLength: z.number().nullable(),
         hikePercent: z.number(),
       }),
@@ -71,7 +77,7 @@ export const settingsBody = z.object({
 export const tenancyBody = z
   .object({
     portionId: z.string().min(1).max(20),
-    tenant: z.string(),
+    tenant: tenantName,
     id: z.string().min(1).optional(),
     expectedUpdatedAt: z.string().optional(),
     fields: tenancyFieldsSchema,
@@ -84,9 +90,9 @@ export const tenancyBody = z
 export const moveOutBody = z.object({
   id: z.string().min(1),
   expectedUpdatedAt: z.string(),
-  moveOut: z.string(),
+  moveOut: isoDay("Move-out date"),
   advanceStatus: z.enum(ADVANCE_STATUSES).nullable().optional(),
   refund: z.number().nullable().optional(),
   deductions: z.number().nullable().optional(),
-  notes: z.string().optional(),
+  notes: safeText(MAX_NOTES_LENGTH, { label: "Notes", allowNewlines: true }).optional(),
 });

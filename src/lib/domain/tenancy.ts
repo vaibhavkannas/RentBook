@@ -1,5 +1,5 @@
 import { validation } from "@/lib/errors";
-import { isValidIsoDay } from "./year-month";
+import { cleanText, MAX_NAME_LENGTH, requireDay } from "./input-rules";
 
 /** What became of a tenant's advance. */
 export const ADVANCE_STATUSES = ["Held", "Refunded", "Adjusted"] as const;
@@ -47,11 +47,8 @@ export type TenancyFields = {
 /** The most one amount of rent, advance, refund or deduction may be, in whole rupees. */
 export const MAX_RUPEES = 10_000_000;
 
-const MAX_PHONE_LENGTH = 30;
+export const MAX_PHONE_LENGTH = 30;
 export const MAX_NOTES_LENGTH = 500;
-const MAX_NAME_LENGTH = 60;
-/** Line breaks, tabs and other control characters: a phone is one line of free text. */
-const CONTROL_CHARACTERS = /[\u0000-\u001f\u007f]/;
 
 /** Whether two tenant names are the same person's name: surrounding spaces and case are ignored. */
 export function sameTenantName(a: string, b: string): boolean {
@@ -98,32 +95,22 @@ export function newTenancyId(): string {
 export function validateTenancyFields(
   fields: TenancyFields,
 ): Required<Omit<TenancyFields, "advance">> & { advance: number | null } {
-  const phone = (fields.phone ?? "").trim();
-  if (phone.length > MAX_PHONE_LENGTH) {
-    throw validation(`Phone can have at most ${MAX_PHONE_LENGTH} characters.`);
-  }
-  if (CONTROL_CHARACTERS.test(phone)) {
-    throw validation("Phone cannot have line breaks or other control characters.");
-  }
+  // A phone is one line of free text.
+  const phone = cleanText(fields.phone, "Phone", { max: MAX_PHONE_LENGTH });
 
   const moveIn = (fields.moveIn ?? "").trim();
-  if (moveIn === "") throw validation("Move-in date is required.");
-  if (!isValidIsoDay(moveIn)) throw validation("Move-in date must be a real date (YYYY-MM-DD).");
+  requireDay(moveIn, "Move-in date");
 
   const agreementEnd = (fields.agreementEnd ?? "").trim();
   if (agreementEnd !== "") {
-    if (!isValidIsoDay(agreementEnd)) {
-      throw validation("Agreement end must be a real date (YYYY-MM-DD).");
-    }
+    requireDay(agreementEnd, "Agreement end");
     if (agreementEnd < moveIn) {
       throw validation("Agreement end cannot be before the move-in date.");
     }
   }
 
   const advanceDate = (fields.advanceDate ?? "").trim();
-  if (advanceDate !== "" && !isValidIsoDay(advanceDate)) {
-    throw validation("Advance date must be a real date (YYYY-MM-DD).");
-  }
+  if (advanceDate !== "") requireDay(advanceDate, "Advance date");
 
   const advance = fields.advance ?? null;
   if (
@@ -133,19 +120,12 @@ export function validateTenancyFields(
     throw validation("Advance must be a whole number of rupees from 0 to 10,000,000.");
   }
 
-  const notes = (fields.notes ?? "").trim();
-  if (notes.length > MAX_NOTES_LENGTH) {
-    throw validation(`Notes can have at most ${MAX_NOTES_LENGTH} characters.`);
-  }
+  const notes = cleanText(fields.notes, "Notes", { max: MAX_NOTES_LENGTH, allowNewlines: true });
 
   return { phone, moveIn, agreementEnd, advance, advanceDate, notes };
 }
 
-/** The tenant name as it will be stored: trimmed, 1 to 60 characters. */
+/** The tenant name as it will be stored: trimmed, 1 to 60 characters, on one line. */
 export function validateTenantName(name: string): string {
-  const trimmed = name.trim();
-  if (trimmed.length === 0 || trimmed.length > MAX_NAME_LENGTH) {
-    throw validation(`Tenant name must be 1 to ${MAX_NAME_LENGTH} characters.`);
-  }
-  return trimmed;
+  return cleanText(name, "Tenant name", { max: MAX_NAME_LENGTH, required: true });
 }

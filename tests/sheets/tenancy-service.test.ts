@@ -396,6 +396,12 @@ describe("saveTenancy: create", () => {
     ["an agreement end before move-in", { fields: { moveIn: "2026-01-15", agreementEnd: "2026-01-14" } }],
     ["a fractional advance", { fields: { moveIn: "2026-01-15", advance: 1.5 } }],
     ["notes over 500 characters", { fields: { moveIn: "2026-01-15", notes: "n".repeat(501) } }],
+    ["notes with a control character", { fields: { moveIn: "2026-01-15", notes: "paid\u0000cash" } }],
+    ["a name with a line break", { tenant: "Asha\nK" }],
+    ["a move-in date before 2000", { fields: { moveIn: "1999-12-31" } }],
+    ["a move-in date after 2100", { fields: { moveIn: "2101-01-01" } }],
+    ["an agreement end after 2100", { fields: { moveIn: "2026-01-15", agreementEnd: "2101-01-01" } }],
+    ["an advance date before 2000", { fields: { moveIn: "2026-01-15", advanceDate: "1999-12-31" } }],
   ] as Array<[string, Partial<SaveTenancyInput>]>)("refuses %s before touching the sheet", async (_name, overrides) => {
     const { fake, ctx } = setup();
     await expectCode(create(ctx, overrides), "validation");
@@ -1064,6 +1070,9 @@ describe("moveOutTenancy", () => {
     ["a deduction over the limit", { deductions: 10_000_001 }],
     ["an unknown outcome", { advanceStatus: "Lost" as never }],
     ["notes over 500 characters", { notes: "n".repeat(501) }],
+    ["notes with a control character", { notes: "keys\u0007back" }],
+    ["a move-out date before 2000", { moveOut: "1999-12-31" }],
+    ["a move-out date after 2100", { moveOut: "2101-01-01" }],
   ])("refuses %s and writes nothing", async (_name, overrides) => {
     const { fake, ctx, tenancy } = await created();
     const before = snapshotOf(fake);
@@ -1482,6 +1491,7 @@ describe("logPayment: tenancy details for a new tenant", () => {
     );
     await expectCode(payNew(ctx, { tenancy: { moveIn: "", advance: 5 } }), "validation");
     await expectCode(payNew(ctx, { tenancy: { moveIn: "2026-10-01", phone: "98765\n43210" } }), "validation");
+    await expectCode(payNew(ctx, { tenancy: { moveIn: "1999-12-31" } }), "validation");
     expect(fake.calls).toEqual([]);
     expect(fake.tabs.has(LOG_TAB)).toBe(false);
     expect(fake.tabs.get("Schedule")).toHaveLength(5);

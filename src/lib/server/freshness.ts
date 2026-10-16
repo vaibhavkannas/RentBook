@@ -1,3 +1,4 @@
+import "server-only";
 import { cookies } from "next/headers";
 import type { MonthView, YearMonth } from "@/lib/domain/types";
 import { getMonthView, type SheetsContext } from "@/lib/sheets/service";

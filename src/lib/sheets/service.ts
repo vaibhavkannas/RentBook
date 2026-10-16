@@ -1,3 +1,4 @@
+import { cleanText, MAX_NAME_LENGTH, requireDay } from "@/lib/domain/input-rules";
 import { writeMonth } from "@/lib/domain/month-codec";
 import {
   deriveMonthView,
@@ -15,7 +16,7 @@ import type {
   ScheduleRow,
   YearMonth,
 } from "@/lib/domain/types";
-import { addMonths, compareYm, isValidIsoDay, ymKey } from "@/lib/domain/year-month";
+import { addMonths, compareYm, ymKey } from "@/lib/domain/year-month";
 import { AppError, conflict, sheetStructure, validation } from "@/lib/errors";
 import { formatMonthTitle } from "@/lib/format";
 import { colLetter } from "./a1";
@@ -307,15 +308,9 @@ function validateInput(input: LogPaymentInput): string | undefined {
   if (!Number.isInteger(input.amount) || input.amount < 1 || input.amount > MAX_RUPEES) {
     throw validation("Amount must be a whole number of rupees from 1 to 10,000,000.");
   }
-  if (!isValidIsoDay(input.dateReceived)) {
-    throw validation("Date received must be a real date.");
-  }
+  requireDay(input.dateReceived, "Date received");
   if (input.newTenantName === undefined) return undefined;
-  const name = input.newTenantName.trim();
-  if (name.length === 0 || name.length > 60) {
-    throw validation("Tenant name must be 1 to 60 characters.");
-  }
-  return name;
+  return cleanText(input.newTenantName, "Tenant name", { max: MAX_NAME_LENGTH, required: true });
 }
 
 /** Writes are taken one at a time, in the order they arrive (see withWriteLock). */

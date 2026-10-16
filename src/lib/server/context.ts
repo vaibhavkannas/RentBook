@@ -1,3 +1,4 @@
+import "server-only";
 import { GoogleSheetsGateway } from "@/lib/sheets/google-gateway";
 import { withSnapshotCache, type SheetsContext } from "@/lib/sheets/service";
 import { readEnv } from "./env";

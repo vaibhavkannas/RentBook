@@ -1,5 +1,7 @@
+import "server-only";
+
 // The Content-Security-Policy, built as plain text from a nonce. src/proxy.ts sets it on every page request.
-// It imports nothing, so it runs wherever the proxy does.
+// It imports only the server-only marker, so it runs wherever the proxy does.
 
 /**
  * A new nonce: base64 of a random UUID. A script or style tag carrying it is allowed to run, so it must be

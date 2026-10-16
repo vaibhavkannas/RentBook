@@ -1,0 +1,158 @@
+import { describe, expect, it } from "vitest";
+import type { ZodType } from "zod";
+import { moveOutBody, paymentBody, settingsBody, tenancyBody } from "@/lib/server/schemas";
+
+/** The first problem a schema finds with `value`, as "path: message", or null when it is fine. */
+function problem(schema: ZodType, value: unknown): string | null {
+  const result = schema.safeParse(value);
+  if (result.success) return null;
+  const issue = result.error.issues[0];
+  return `${issue.path.join(".")}: ${issue.message}`;
+}
+
+const payment = { month: "2026-10", portionId: "p1", amount: 5450, dateReceived: "2026-10-05" };
+const tenancy = { portionId: "p1", tenant: "Asha", fields: { moveIn: "2026-10-01" } };
+const moveOut = { id: "t-1", expectedUpdatedAt: "2026-10-01T00:00:00.000Z", moveOut: "2026-12-31" };
+const settings = { portions: [{ id: "p1", name: "Ground floor", cycleLength: 11, hikePercent: 5 }] };
+
+describe("paymentBody", () => {
+  it("takes a date received from 2000 to 2100", () => {
+    expect(problem(paymentBody, payment)).toBeNull();
+    expect(problem(paymentBody, { ...payment, dateReceived: "2000-01-01" })).toBeNull();
+    expect(problem(paymentBody, { ...payment, dateReceived: "2100-12-31" })).toBeNull();
+  });
+
+  it("refuses a date received outside 2000 to 2100, or not a real day", () => {
+    expect(problem(paymentBody, { ...payment, dateReceived: "1999-12-31" })).toBe(
+      "dateReceived: Date received must be a date from 2000 to 2100.",
+    );
+    expect(problem(paymentBody, { ...payment, dateReceived: "2101-01-01" })).toBe(
+      "dateReceived: Date received must be a date from 2000 to 2100.",
+    );
+    expect(problem(paymentBody, { ...payment, dateReceived: "2026-02-30" })).toBe(
+      "dateReceived: Date received must be a real date (YYYY-MM-DD).",
+    );
+  });
+
+  it("trims a new tenant's name and takes 1 to 60 characters", () => {
+    expect(paymentBody.parse({ ...payment, newTenantName: "  Hari  " }).newTenantName).toBe("Hari");
+    expect(paymentBody.parse({ ...payment, newTenantName: "x".repeat(60) }).newTenantName).toHaveLength(60);
+    expect(problem(paymentBody, { ...payment, newTenantName: "x".repeat(61) })).toBe(
+      "newTenantName: Tenant name must be 1 to 60 characters.",
+    );
+    expect(problem(paymentBody, { ...payment, newTenantName: "  " })).toBe(
+      "newTenantName: Tenant name must be 1 to 60 characters.",
+    );
+  });
+
+  it("refuses control characters in a new tenant's name", () => {
+    for (const newTenantName of ["Ha\nri", "Ha\tri", "Ha\u0000ri", "Ha\u001bri", "Ha\u2028ri"]) {
+      expect(problem(paymentBody, { ...payment, newTenantName }), JSON.stringify(newTenantName)).toBe(
+        "newTenantName: Tenant name cannot have line breaks or other control characters.",
+      );
+    }
+  });
+
+  it("checks the new tenant's details too", () => {
+    const details = (tenancyFields: object) => ({ ...payment, newTenantName: "Hari", tenancy: tenancyFields });
+    expect(problem(paymentBody, details({ moveIn: "2026-10-01", phone: "98765 43210", notes: "a\nb" }))).toBeNull();
+    expect(problem(paymentBody, details({ moveIn: "1999-01-01" }))).toBe(
+      "tenancy.moveIn: Move-in date must be a date from 2000 to 2100.",
+    );
+    expect(problem(paymentBody, details({ moveIn: "2026-10-01", phone: "98765\n43210" }))).toBe(
+      "tenancy.phone: Phone cannot have line breaks or other control characters.",
+    );
+  });
+});
+
+describe("tenancyBody", () => {
+  it("takes the tenant's name trimmed, 1 to 60 characters, with no control characters", () => {
+    expect(tenancyBody.parse({ ...tenancy, tenant: " Asha " }).tenant).toBe("Asha");
+    expect(problem(tenancyBody, { ...tenancy, tenant: "" })).toBe("tenant: Tenant name must be 1 to 60 characters.");
+    expect(problem(tenancyBody, { ...tenancy, tenant: "a".repeat(61) })).toBe(
+      "tenant: Tenant name must be 1 to 60 characters.",
+    );
+    expect(problem(tenancyBody, { ...tenancy, tenant: "As\nha" })).toBe(
+      "tenant: Tenant name cannot have line breaks or other control characters.",
+    );
+  });
+
+  it("takes a phone of up to 30 characters on one line", () => {
+    const fields = (phone: string) => ({ ...tenancy, fields: { moveIn: "2026-10-01", phone } });
+    expect(tenancyBody.parse(fields(" 98765 43210 ")).fields.phone).toBe("98765 43210");
+    expect(problem(tenancyBody, fields("9".repeat(31)))).toBe("fields.phone: Phone can have at most 30 characters.");
+    expect(problem(tenancyBody, fields("98765\t43210"))).toBe(
+      "fields.phone: Phone cannot have line breaks or other control characters.",
+    );
+  });
+
+  it("takes notes of up to 500 characters, with line breaks but no other control characters", () => {
+    const fields = (notes: string) => ({ ...tenancy, fields: { moveIn: "2026-10-01", notes } });
+    expect(tenancyBody.parse(fields("  Paid by cheque.\nCall in May.  ")).fields.notes).toBe(
+      "Paid by cheque.\nCall in May.",
+    );
+    expect(problem(tenancyBody, fields("n".repeat(501)))).toBe("fields.notes: Notes can have at most 500 characters.");
+    expect(problem(tenancyBody, fields("a\u0000b"))).toBe(
+      "fields.notes: Notes cannot have control characters other than line breaks.",
+    );
+  });
+
+  it("takes tenancy dates from 2000 to 2100: move-in, agreement end and advance date", () => {
+    const fields = (more: object) => ({ ...tenancy, fields: { moveIn: "2026-10-01", ...more } });
+    expect(problem(tenancyBody, fields({ agreementEnd: "2100-12-31", advanceDate: "2000-01-01" }))).toBeNull();
+    expect(problem(tenancyBody, { ...tenancy, fields: { moveIn: "1999-12-31" } })).toBe(
+      "fields.moveIn: Move-in date must be a date from 2000 to 2100.",
+    );
+    expect(problem(tenancyBody, fields({ agreementEnd: "2101-01-01" }))).toBe(
+      "fields.agreementEnd: Agreement end must be a date from 2000 to 2100.",
+    );
+    expect(problem(tenancyBody, fields({ advanceDate: "1980-05-05" }))).toBe(
+      "fields.advanceDate: Advance date must be a date from 2000 to 2100.",
+    );
+  });
+
+  it("still takes a blank agreement end and advance date, and leaves a blank move-in to the service to explain", () => {
+    expect(problem(tenancyBody, { ...tenancy, fields: { moveIn: "2026-10-01", agreementEnd: "", advanceDate: " " } })).toBeNull();
+    expect(problem(tenancyBody, { ...tenancy, fields: { moveIn: "" } })).toBe("fields.moveIn: Move-in date is required.");
+  });
+
+  it("still needs expectedUpdatedAt when an id is given", () => {
+    expect(problem(tenancyBody, { ...tenancy, id: "t-1" })).toBe(
+      "expectedUpdatedAt: expectedUpdatedAt is required when id is given",
+    );
+  });
+});
+
+describe("moveOutBody", () => {
+  it("takes a move-out date from 2000 to 2100", () => {
+    expect(problem(moveOutBody, moveOut)).toBeNull();
+    expect(problem(moveOutBody, { ...moveOut, moveOut: "2101-01-01" })).toBe(
+      "moveOut: Move-out date must be a date from 2000 to 2100.",
+    );
+    expect(problem(moveOutBody, { ...moveOut, moveOut: "" })).toBe("moveOut: Move-out date is required.");
+  });
+
+  it("takes notes of up to 500 characters, with line breaks but no other control characters", () => {
+    expect(moveOutBody.parse({ ...moveOut, notes: " Left the keys.\nAdvance returned. " }).notes).toBe(
+      "Left the keys.\nAdvance returned.",
+    );
+    expect(problem(moveOutBody, { ...moveOut, notes: "n".repeat(501) })).toBe(
+      "notes: Notes can have at most 500 characters.",
+    );
+    expect(problem(moveOutBody, { ...moveOut, notes: "a\u0007b" })).toBe(
+      "notes: Notes cannot have control characters other than line breaks.",
+    );
+  });
+});
+
+describe("settingsBody", () => {
+  it("takes portion names trimmed, 1 to 60 characters, with no control characters", () => {
+    const named = (name: string) => ({ portions: [{ ...settings.portions[0], name }] });
+    expect(settingsBody.parse(named("  Ground floor ")).portions[0].name).toBe("Ground floor");
+    expect(problem(settingsBody, named(""))).toBe("portions.0.name: Portion name must be 1 to 60 characters.");
+    expect(problem(settingsBody, named("a".repeat(61)))).toBe("portions.0.name: Portion name must be 1 to 60 characters.");
+    expect(problem(settingsBody, named("Ground\nfloor"))).toBe(
+      "portions.0.name: Portion name cannot have line breaks or other control characters.",
+    );
+  });
+});

@@ -250,6 +250,39 @@ describe("validateTenancyFields", () => {
       validationMessage(() => validateTenancyFields({ moveIn: "2026-10-01", notes: "n".repeat(501) })),
     ).toMatch(/Notes can have at most 500 characters/);
   });
+
+  it("keeps line breaks and tabs in notes, and refuses the other control characters", () => {
+    expect(validateTenancyFields({ moveIn: "2026-10-01", notes: "Paid by cheque.\r\nCall in May\tplease.\n" }).notes).toBe(
+      "Paid by cheque.\r\nCall in May\tplease.",
+    );
+    for (const notes of ["a\u0000b", "a\u0007b", "a\u001bb", "a\u007fb", "a\u0085b", "a\u2028b"]) {
+      expect(
+        validationMessage(() => validateTenancyFields({ moveIn: "2026-10-01", notes })),
+        JSON.stringify(notes),
+      ).toBe("Notes cannot have control characters other than line breaks.");
+    }
+  });
+
+  it("takes tenancy dates from 2000-01-01 to 2100-12-31", () => {
+    expect(
+      validateTenancyFields({ moveIn: "2000-01-01", agreementEnd: "2100-12-31", advanceDate: "2000-01-01" }),
+    ).toMatchObject({ moveIn: "2000-01-01", agreementEnd: "2100-12-31", advanceDate: "2000-01-01" });
+  });
+
+  it("refuses a move-in date, agreement end or advance date outside 2000 to 2100", () => {
+    expect(validationMessage(() => validateTenancyFields({ moveIn: "1999-12-31" }))).toBe(
+      "Move-in date must be a date from 2000 to 2100.",
+    );
+    expect(validationMessage(() => validateTenancyFields({ moveIn: "2101-01-01" }))).toBe(
+      "Move-in date must be a date from 2000 to 2100.",
+    );
+    expect(
+      validationMessage(() => validateTenancyFields({ moveIn: "2026-10-01", agreementEnd: "2101-01-01" })),
+    ).toBe("Agreement end must be a date from 2000 to 2100.");
+    expect(
+      validationMessage(() => validateTenancyFields({ moveIn: "2026-10-01", advanceDate: "1999-12-31" })),
+    ).toBe("Advance date must be a date from 2000 to 2100.");
+  });
 });
 
 describe("validateTenantName", () => {
@@ -268,5 +301,21 @@ describe("validateTenantName", () => {
     expect(validationMessage(() => validateTenantName("a".repeat(61)))).toMatch(
       /Tenant name must be 1 to 60 characters/,
     );
+  });
+
+  it("refuses a name with a line break or another control character", () => {
+    for (const name of ["Asha\nK", "Asha\tK", "Asha\u0000K", "Asha\u001bK", "Asha\u007f", "Asha\u0085K", "Asha\u2029K"]) {
+      expect(validationMessage(() => validateTenantName(name)), JSON.stringify(name)).toBe(
+        "Tenant name cannot have line breaks or other control characters.",
+      );
+    }
+  });
+
+  it("does not count a line break around the name against it", () => {
+    expect(validateTenantName("\nAsha K\n")).toBe("Asha K");
+  });
+
+  it("keeps names in other scripts", () => {
+    expect(validateTenantName("राजेश कुमार")).toBe("राजेश कुमार");
   });
 });

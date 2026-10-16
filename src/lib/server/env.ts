@@ -1,3 +1,4 @@
+import "server-only";
 import { configError } from "@/lib/errors";
 
 export type AppEnv = {

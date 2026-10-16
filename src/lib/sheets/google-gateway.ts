@@ -1,3 +1,4 @@
+import "server-only";
 import { auth as googleAuth, sheets as createSheets, type sheets_v4 } from "@googleapis/sheets";
 import { configError, tabMissing } from "@/lib/errors";
 import type { CellWrite, RangeRequest, RowOverride, SheetsGateway, ValueRender } from "./gateway";

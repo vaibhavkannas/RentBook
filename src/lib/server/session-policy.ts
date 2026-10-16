@@ -1,3 +1,5 @@
+import "server-only";
+
 /** How long a sign-in lasts without being used again. Auth.js renews it each time the session is read. */
 export const SESSION_MAX_AGE_SECONDS = 7 * 24 * 60 * 60;
 
