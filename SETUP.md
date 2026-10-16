@@ -47,8 +47,10 @@ Copy `.env.example` to `.env.local` and fill it in. Put each value directly afte
 
 | Name | Value |
 | --- | --- |
-| `AUTH_SECRET` | A random string. Use the first command below |
+| `AUTH_SECRET` | A random string of at least 32 characters (the app refuses shorter ones). Use the first command below, which makes 44 |
 | `AUTH_GOOGLE_ID` / `AUTH_GOOGLE_SECRET` | From step 5 |
+| `AUTH_URL` | Optional while you run the app on your own computer. For the production deployment, the public address of the app, such as `https://rentbook.example.com`, with no path. Auth.js then builds the Google sign-in return address from it instead of trusting the request's Host header. Leave it out (do not leave it empty) on Vercel Preview deployments, which each have their own address |
+| `SESSION_NOT_BEFORE` | Optional, and normally left out. The "sign everyone out" switch: see "Signing everyone out" below |
 | `ALLOWED_EMAILS` | The Google accounts allowed to sign in, separated by commas. The first one is the owner and is the only person who can change Portion settings. |
 | `GOOGLE_SERVICE_ACCOUNT_JSON` | The key file as one line. Use the second command below and paste |
 | `SHEET_ID` | From step 1 (the test copy) |
@@ -195,15 +197,21 @@ Undoing a New tenant payment does not reverse tenancy changes. The previous tena
 ## 7. Deploy to Vercel
 
 1. Sign in at https://vercel.com with GitHub, choose Add New, then Project, and import `vaibhavkannas/RentBook`.
-2. Under Environment Variables add every name from step 6: `AUTH_SECRET`, `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET`, `ALLOWED_EMAILS` (the owner first), `GOOGLE_SERVICE_ACCOUNT_JSON` (paste it as one line, with no quotes), `SHEET_ID`, `SCHEDULE_TAB` and `TOTAL_HEADER`. Use the test copy's `SHEET_ID` for the first deploy. Add them for Production and Preview. A deployment that still has the older single `ALLOWED_EMAIL` keeps working until `ALLOWED_EMAILS` is set.
+2. Under Environment Variables add every name from step 6: `AUTH_SECRET`, `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET`, `AUTH_URL` (for Production only, set to the production address), `ALLOWED_EMAILS` (the owner first), `GOOGLE_SERVICE_ACCOUNT_JSON` (paste it as one line, with no quotes), `SHEET_ID`, `SCHEDULE_TAB` and `TOTAL_HEADER`. Use the test copy's `SHEET_ID` for the first deploy. Add them for Production and Preview. A deployment that still has the older single `ALLOWED_EMAIL` keeps working until `ALLOWED_EMAILS` is set.
 3. Deploy. A first import deploys the production branch (`main`). Work on a branch gets its own preview URL until its pull request is merged.
 4. Google does not accept wildcard redirect URIs. In Google Cloud, edit the OAuth client and add `https://<host>/api/auth/callback/google` for every host you sign in on: the preview URL now and the production URL later.
 5. Open the URL on your phone, sign in, and use the browser menu's Add to Home Screen.
 6. Switching to your live Sheet is a separate, later step: change `SHEET_ID` (and `SCHEDULE_TAB` if the tab name differs) in Vercel, then redeploy. Running deployments keep the old values. The end-to-end checklist in the implementation plan (Task 18) walks through it.
 
-If sign-in fails with an `UntrustedHost` error (more likely with `npm start` than on Vercel), add the environment variable `AUTH_TRUST_HOST=true` and restart or redeploy.
+If sign-in fails with an `UntrustedHost` error (more likely with `npm start` than on Vercel), set `AUTH_URL` to the address you are using, or add the environment variable `AUTH_TRUST_HOST=true`, and restart or redeploy. An empty `AUTH_URL` counts as set and turns trust off, so remove the line instead of leaving it empty.
 
 ## Rotating or revoking access
 
 - To stop the app writing: remove the service account from the Sheet's sharing list.
 - If the key file leaks: delete the key in Cloud Console (Service Accounts, Keys), create a new one, and update `GOOGLE_SERVICE_ACCOUNT_JSON` in Vercel and `.env.local`. Redeploy after changing Vercel variables.
+
+## Signing everyone out
+
+A sign-in lasts seven days, and is renewed while the app is in use. Removing an address from `ALLOWED_EMAILS` locks that person out on their next request. To sign out everyone at once (for example after a lost phone, or if you think `AUTH_SECRET` leaked), set `SESSION_NOT_BEFORE` to the current date and time in UTC, in the form `2026-10-16T10:00:00Z`, in Vercel (and `.env.local`), then redeploy. Every session signed in before that moment is refused, and people sign in again. Sessions that were already open when this version was first deployed carry no sign-in time, so they are signed out too the first time you set it. You can leave the value in place afterwards: it only affects sessions older than it. If the value is not a valid date and time, everyone is signed out and the server log says so, so check the spelling.
+
+If `AUTH_SECRET` itself leaked, also generate a new one (step 6) and replace it. That signs everyone out as well, and makes any retry token or "just wrote" cookie made with the old one useless.

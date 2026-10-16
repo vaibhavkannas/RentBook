@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  assertAuthConfig,
+  authSecret,
   canonicalEmail,
   isAllowedEmail,
   isOwnerEmail,
@@ -64,20 +66,83 @@ describe("readEnv", () => {
   it("treats blank values as missing", () => {
     expect(() => readEnv({ ...base, SHEET_ID: "   " })).toThrow(/SHEET_ID/);
   });
+
+  it("does not ask for the sign-in settings: scripts that only read the Sheet (recon, verify:testcopy) have none", () => {
+    expect(() => readEnv(base)).not.toThrow();
+    expect(readEnv(base)).not.toHaveProperty("authSecret");
+  });
+});
+
+describe("assertAuthConfig", () => {
+  const good = {
+    AUTH_SECRET: "a-test-secret-that-is-at-least-32-characters-long",
+    AUTH_GOOGLE_ID: "client-id",
+    AUTH_GOOGLE_SECRET: "client-secret",
+  };
+
+  it("accepts a secret of 32 characters and both Google values", () => {
+    expect(() => assertAuthConfig(good)).not.toThrow();
+    expect(() => assertAuthConfig({ ...good, AUTH_SECRET: "x".repeat(32) })).not.toThrow();
+  });
+
+  it("refuses a secret of 31 characters, with the length it needs", () => {
+    expect(() => assertAuthConfig({ ...good, AUTH_SECRET: "x".repeat(31) })).toThrow(
+      "AUTH_SECRET must be at least 32 characters.",
+    );
+  });
+
+  it("names every problem at once, with a specific message for each", () => {
+    expect(() => assertAuthConfig({})).toThrow(
+      "AUTH_SECRET is missing. AUTH_GOOGLE_ID is missing. AUTH_GOOGLE_SECRET is missing.",
+    );
+    expect(() => assertAuthConfig({ ...good, AUTH_GOOGLE_ID: "  ", AUTH_SECRET: "" })).toThrow(
+      "AUTH_SECRET is missing. AUTH_GOOGLE_ID is missing.",
+    );
+    expect(() => assertAuthConfig({ ...good, AUTH_GOOGLE_SECRET: undefined })).toThrow("AUTH_GOOGLE_SECRET is missing.");
+  });
+
+  it("is a config error, and never repeats a value", () => {
+    const env = { AUTH_SECRET: "hunter2-hunter2", AUTH_GOOGLE_ID: "", AUTH_GOOGLE_SECRET: "" };
+    expect.assertions(3);
+    try {
+      assertAuthConfig(env);
+    } catch (error) {
+      expect(error).toMatchObject({ code: "config" });
+      expect((error as Error).message).not.toContain("hunter2");
+      expect((error as Error).message).toContain("at least 32 characters");
+    }
+  });
+});
+
+describe("authSecret", () => {
+  it("returns a usable secret as it is, without trimming it", () => {
+    const secret = ` ${"x".repeat(40)} `;
+    expect(authSecret({ AUTH_SECRET: secret })).toBe(secret);
+  });
+
+  it("refuses a missing or short one with a config error that has no value in it", () => {
+    expect(() => authSecret({})).toThrow("AUTH_SECRET is missing.");
+    expect(() => authSecret({ AUTH_SECRET: "short" })).toThrow("AUTH_SECRET must be at least 32 characters.");
+  });
 });
 
 describe("isAllowedEmail", () => {
   const allowed = ["owner@example.com", "member@example.com"];
 
   it("allows only listed, verified addresses (case-insensitive)", () => {
-    expect(isAllowedEmail("Owner@Example.com", allowed)).toBe(true);
-    expect(isAllowedEmail("member@example.com", allowed)).toBe(true);
-    expect(isAllowedEmail("other@example.com", allowed)).toBe(false);
+    expect(isAllowedEmail("Owner@Example.com", allowed, true)).toBe(true);
+    expect(isAllowedEmail("member@example.com", allowed, true)).toBe(true);
+    expect(isAllowedEmail("other@example.com", allowed, true)).toBe(false);
     expect(isAllowedEmail("owner@example.com", allowed, false)).toBe(false);
-    expect(isAllowedEmail("owner@example.com", allowed, null)).toBe(false);
-    expect(isAllowedEmail("owner@example.com", allowed, true)).toBe(true);
-    expect(isAllowedEmail(undefined, allowed)).toBe(false);
-    expect(isAllowedEmail("owner@example.com", [])).toBe(false);
+    expect(isAllowedEmail(undefined, allowed, true)).toBe(false);
+    expect(isAllowedEmail("owner@example.com", [], true)).toBe(false);
+  });
+
+  it("never treats an address as verified unless the caller says so: the answer is a required argument", () => {
+    // @ts-expect-error the verified flag has no default
+    expect(isAllowedEmail("owner@example.com", allowed)).toBe(false);
+    expect(isAllowedEmail("owner@example.com", allowed, null as unknown as boolean)).toBe(false);
+    expect(isAllowedEmail("owner@example.com", allowed, undefined as unknown as boolean)).toBe(false);
   });
 });
 
@@ -113,9 +178,9 @@ describe("canonicalEmail", () => {
 describe("Gmail variants in the allow-list", () => {
   it("treats dot and plus variants as the same account", () => {
     const allowed = ["firstlast.s@gmail.com", "owner@example.com"];
-    expect(isAllowedEmail("first.last.s@gmail.com", allowed)).toBe(true);
-    expect(isAllowedEmail("Firstlast.S+rent@gmail.com", allowed)).toBe(true);
-    expect(isAllowedEmail("owner.x@example.com", allowed)).toBe(false);
+    expect(isAllowedEmail("first.last.s@gmail.com", allowed, true)).toBe(true);
+    expect(isAllowedEmail("Firstlast.S+rent@gmail.com", allowed, true)).toBe(true);
+    expect(isAllowedEmail("owner.x@example.com", allowed, true)).toBe(false);
   });
 
   it("recognises the owner under a different spelling", () => {

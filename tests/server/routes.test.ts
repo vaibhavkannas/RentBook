@@ -59,6 +59,8 @@ beforeEach(() => {
   savedEnv = process.env.ALLOWED_EMAILS;
   process.env.ALLOWED_EMAILS = "owner@example.com, member@example.com";
   vi.stubEnv("AUTH_SECRET", SECRET);
+  vi.stubEnv("AUTH_GOOGLE_ID", "client-id");
+  vi.stubEnv("AUTH_GOOGLE_SECRET", "client-secret");
   saveSettings.mockClear();
   logPayment.mockClear();
   undoPayment.mockReset();
