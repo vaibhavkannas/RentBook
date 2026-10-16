@@ -1,7 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const auth = vi.hoisted(() => vi.fn());
+const connection = vi.hoisted(() => vi.fn(async () => {}));
 vi.mock("@/auth", () => ({ auth }));
+vi.mock("next/server", () => ({ connection }));
 
 import { getViewer, requireOwner, requireUser } from "@/lib/server/auth-guard";
 
@@ -18,6 +20,7 @@ beforeEach(() => {
   vi.stubEnv("AUTH_GOOGLE_SECRET", "client-secret");
   vi.stubEnv("SESSION_NOT_BEFORE", "");
   auth.mockReset();
+  connection.mockClear();
 });
 afterEach(() => vi.unstubAllEnvs());
 
@@ -90,6 +93,43 @@ describe("getViewer", () => {
       expect(error!.message).toMatch(message);
       expect(error!.message).not.toContain(value || "unreachable-value");
       expect(auth).not.toHaveBeenCalled();
+    });
+  });
+
+  // A page that asks who is viewing must render for each request: only then does it receive the request's
+  // nonce (see src/proxy.ts). It also keeps `next build` from running the sign-in settings check, which throws
+  // when the build machine has no AUTH_ variables, while it tries to build the page ahead of time.
+  describe("rendering for each request", () => {
+    it("waits for a request first, before it looks at the sign-in settings or the session", async () => {
+      signedInAs("member@example.com");
+      await getViewer();
+      expect(connection).toHaveBeenCalledOnce();
+      expect(connection.mock.invocationCallOrder[0]).toBeLessThan(auth.mock.invocationCallOrder[0]);
+    });
+
+    it("waits for a request even when the sign-in settings are missing, as on a build machine", async () => {
+      for (const name of ["AUTH_SECRET", "AUTH_GOOGLE_ID", "AUTH_GOOGLE_SECRET"]) vi.stubEnv(name, "");
+      await expect(getViewer()).rejects.toMatchObject({ code: "config" });
+      expect(connection).toHaveBeenCalledOnce();
+    });
+
+    it("does nothing more while it is still waiting: a page being built ahead of time stops here", async () => {
+      connection.mockReturnValueOnce(new Promise<void>(() => {}));
+      for (const name of ["AUTH_SECRET", "AUTH_GOOGLE_ID", "AUTH_GOOGLE_SECRET"]) vi.stubEnv(name, "");
+      const settled = vi.fn();
+      void getViewer().then(settled, settled);
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      expect(settled).not.toHaveBeenCalled();
+      expect(auth).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ["requireUser", requireUser],
+      ["requireOwner", requireOwner],
+    ])("is the same for %s, which asks getViewer", async (_name, require) => {
+      signedInAs("owner@example.com");
+      await require();
+      expect(connection).toHaveBeenCalledOnce();
     });
   });
 });

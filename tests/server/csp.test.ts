@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { buildCsp, cspHeaderName, generateNonce } from "@/lib/server/csp";
+import {
+  buildCsp,
+  CSP_HEADER,
+  CSP_REPORT_ONLY_HEADER,
+  cspHeaderName,
+  generateNonce,
+  unusedCspHeaderName,
+} from "@/lib/server/csp";
 
 const NONCE = "bm9uY2UtZm9yLXRoZS10ZXN0";
 
@@ -77,6 +84,27 @@ describe("buildCsp", () => {
     expect(a).not.toContain("BBBB");
     expect(b).toContain("'nonce-BBBB'");
     expect(a.replaceAll("AAAA", "BBBB")).toBe(b);
+  });
+});
+
+describe("the header names", () => {
+  it("are the two names the browser knows", () => {
+    expect(CSP_HEADER).toBe("Content-Security-Policy");
+    expect(CSP_REPORT_ONLY_HEADER).toBe("Content-Security-Policy-Report-Only");
+  });
+});
+
+describe("unusedCspHeaderName", () => {
+  it("is the other header: the report-only one while enforcing, the enforcing one while reporting only", () => {
+    expect(unusedCspHeaderName({})).toBe(CSP_REPORT_ONLY_HEADER);
+    expect(unusedCspHeaderName({ CSP_REPORT_ONLY: "1" })).toBe(CSP_HEADER);
+    expect(unusedCspHeaderName({ CSP_REPORT_ONLY: "true" })).toBe(CSP_REPORT_ONLY_HEADER);
+  });
+
+  it("is never the header in use", () => {
+    for (const env of [{}, { CSP_REPORT_ONLY: "1" }, { CSP_REPORT_ONLY: "0" }]) {
+      expect(unusedCspHeaderName(env)).not.toBe(cspHeaderName(env));
+    }
   });
 });
 

@@ -33,10 +33,22 @@ export function buildCsp({ nonce, dev }: { nonce: string; dev: boolean }): strin
   ].join("; ");
 }
 
+/** The header that makes the browser block what the policy forbids. */
+export const CSP_HEADER = "Content-Security-Policy";
+/** The header that only makes the browser report what the policy would have blocked. */
+export const CSP_REPORT_ONLY_HEADER = "Content-Security-Policy-Report-Only";
+
+const reportOnly = (env: Record<string, string | undefined>) => env.CSP_REPORT_ONLY?.trim() === "1";
+
 /**
  * The header the policy goes in. CSP_REPORT_ONLY=1 is the emergency switch: the browser then only reports what the
  * policy would have blocked, and blocks nothing. Any other value, or none, enforces.
  */
 export function cspHeaderName(env: Record<string, string | undefined>): string {
-  return env.CSP_REPORT_ONLY?.trim() === "1" ? "Content-Security-Policy-Report-Only" : "Content-Security-Policy";
+  return reportOnly(env) ? CSP_REPORT_ONLY_HEADER : CSP_HEADER;
+}
+
+/** The other one of the two headers, the one the policy does not go in. */
+export function unusedCspHeaderName(env: Record<string, string | undefined>): string {
+  return reportOnly(env) ? CSP_HEADER : CSP_REPORT_ONLY_HEADER;
 }

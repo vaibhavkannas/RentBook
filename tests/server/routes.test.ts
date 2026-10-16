@@ -16,6 +16,8 @@ const saveTenancy = vi.hoisted(() => vi.fn());
 const moveOutTenancy = vi.hoisted(() => vi.fn());
 
 vi.mock("@/auth", () => ({ auth }));
+// getViewer waits for a request with connection(), which Next refuses outside a request: the routes run here without one.
+vi.mock("next/server", () => ({ connection: async () => {} }));
 vi.mock("@/lib/server/context", () => ({ getSheetsContext: () => ({}) }));
 vi.mock("@/lib/server/freshness", () => ({ markWritten, readWrittenAt: vi.fn(async () => undefined) }));
 vi.mock("@/lib/sheets/service", async (importOriginal) => ({

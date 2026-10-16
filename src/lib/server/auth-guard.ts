@@ -1,3 +1,4 @@
+import { connection } from "next/server";
 import { auth } from "@/auth";
 import { forbidden, unauthorized } from "@/lib/errors";
 import { assertAuthConfig, isAllowedEmail, isOwnerEmail, parseAllowedEmails } from "./env";
@@ -10,6 +11,8 @@ export type Viewer = { email: string; isOwner: boolean };
  * otherwise null. Checked on every call. A config error when the sign-in settings are not usable (see assertAuthConfig).
  */
 export async function getViewer(): Promise<Viewer | null> {
+  // Pages must render per request: only then do they get the CSP nonce, and a build never reads the sign-in settings.
+  await connection();
   assertAuthConfig(process.env);
   const session = await auth();
   const email = session?.user?.email;
