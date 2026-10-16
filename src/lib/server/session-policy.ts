@@ -1,6 +1,9 @@
 import "server-only";
 
-/** How long a sign-in lasts without being used again. Auth.js renews it each time the session is read. */
+/**
+ * How long a sign-in lasts, counted from the moment of signing in. Using the app does not extend it: `auth()` without
+ * arguments (as getViewer calls it) reads the cookie and does not send a renewed one back.
+ */
 export const SESSION_MAX_AGE_SECONDS = 7 * 24 * 60 * 60;
 
 /**

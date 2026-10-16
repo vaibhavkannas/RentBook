@@ -8,7 +8,9 @@ Report it privately through a GitHub security advisory:
 
 https://github.com/vaibhavkannas/RentBook/security/advisories/new
 
-You need a GitHub account. Please do not open a public issue or pull request, or post the details anywhere, until a fix is available.
+You need a GitHub account. Please do not put the details in a public issue or pull request, or post them anywhere, until a fix is available.
+
+If you cannot use the advisory form, open a public issue that says only that you have a security report and asks for a private way to send it. Put no details of the problem in that issue.
 
 The same contact is published for security tools at `/.well-known/security.txt` (RFC 9116), served from `public/.well-known/security.txt`. If you run your own copy, that file points at this project's advisory page. Change it if you want reports about your own deployment to reach you.
 
@@ -28,7 +30,7 @@ One person maintains RentBook, so these are targets and not promises:
 - An acknowledgement within 7 days.
 - A first assessment (confirmed, need more detail, or not a vulnerability) within 14 days.
 - For a confirmed serious problem, a fix or a plan within 30 days. Smaller problems may take longer.
-- Credit in the release notes, if you want it.
+- Credit in the changelog once the project has one, if you want it.
 
 A fix reaches a deployment only when its owner updates and redeploys their copy.
 
