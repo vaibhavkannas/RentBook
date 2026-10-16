@@ -420,7 +420,11 @@ describe("logPayment: month rows are added in order", () => {
       pay(ctx, { portionId: "p1", month: { year: 2026, month: 7 }, newTenantName: "Zed" }),
       "validation",
     );
-    expect(error.message).toMatch(/2026-09 below it/);
+    // Months are named in words, and the message says what to do.
+    expect(error.message).toBe(
+      "Can't add July 2026: the Schedule already has September 2026 below it. Add the row for July 2026 in your Sheet, in date order, then try again.",
+    );
+    expect(error.message).not.toMatch(/d{4}-d{2}/);
     expect(fake.tabs.get("Schedule")).toHaveLength(5);
   });
 
@@ -430,7 +434,10 @@ describe("logPayment: month rows are added in order", () => {
       pay(ctx, { portionId: "p1", month: { year: 2026, month: 11 } }),
       "validation",
     );
-    expect(error.message).toMatch(/Log 2026-10 first/);
+    expect(error.message).toBe(
+      "Can't add November 2026 yet: the Schedule's last month is September 2026. Log October 2026 first, or add the row for November 2026 in your Sheet.",
+    );
+    expect(error.message).not.toMatch(/d{4}-d{2}/);
     expect(fake.tabs.get("Schedule")).toHaveLength(5);
     await pay(ctx, { portionId: "p1", month: OCT });
     expect(cell(fake, "Schedule", "A", 6)).toBe("Oct-26");

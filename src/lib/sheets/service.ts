@@ -163,15 +163,18 @@ async function ensureMonthRow(
   if (!last) {
     throw sheetStructure("The Schedule tab has no month rows to copy the format from.");
   }
+  // Month rows are only ever added in order, so a month with no row of its own is refused unless it is
+  // the very next one. The words say what to do: add the row by hand, or log the earlier month first.
+  const title = formatMonthTitle(month);
   if (compareYm(month, last.month) <= 0) {
     throw validation(
-      `Can't add ${ymKey(month)}: the Schedule already has ${ymKey(last.month)} below it. Month rows are added in order.`,
+      `Can't add ${title}: the Schedule already has ${formatMonthTitle(last.month)} below it. Add the row for ${title} in your Sheet, in date order, then try again.`,
     );
   }
   const following = addMonths(last.month, 1);
   if (compareYm(month, following) > 0) {
     throw validation(
-      `Can't add ${ymKey(month)} yet: the Schedule's last month is ${ymKey(last.month)}. Log ${ymKey(following)} first, or add its row in the sheet.`,
+      `Can't add ${title} yet: the Schedule's last month is ${formatMonthTitle(last.month)}. Log ${formatMonthTitle(following)} first, or add the row for ${title} in your Sheet.`,
     );
   }
 
