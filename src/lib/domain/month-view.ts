@@ -1,4 +1,4 @@
-import { nextCount, startsNewCycle, suggestAmount, sumAmounts } from "./rent-rules";
+import { isHikeRounding, nextCount, startsNewCycle, suggestAmount, sumAmounts } from "./rent-rules";
 import { currentTenancy, sameTenantName, summarize, type Tenancy } from "./tenancy";
 import type {
   MonthView,
@@ -87,10 +87,16 @@ export function nextPayment(
  * The rent a month is measured against: the suggested amount for the payment after the earlier
  * entry. None when there is no earlier entry, and none for a paid card whose tenant is not the
  * earlier entry's tenant: a new tenant's first payment has no previous rent to compare with.
+ *
+ * On a new cycle, an amount within the rounding allowance of the suggested hike is the owner's
+ * rounded rent: it becomes the reference itself, so it never shows as extra or short.
  */
 function rentReference(entry: PortionEntry | null, next: NextPayment | null): number | null {
   if (!next) return null;
   if (entry && !sameTenantName(entry.tenant, next.tenant)) return null;
+  if (entry && next.startsNewCycle && isHikeRounding(entry.amount, next.suggestedAmount)) {
+    return entry.amount;
+  }
   return next.suggestedAmount;
 }
 

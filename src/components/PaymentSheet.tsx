@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { HIKE_ROUNDING_ALLOWANCE, roundedChoices } from "@/lib/domain/rent-rules";
 import type { TenancyFields } from "@/lib/domain/tenancy";
 import type { PortionCard } from "@/lib/domain/types";
 import { formatRupees } from "@/lib/format";
@@ -327,7 +328,23 @@ export default function PaymentSheet({
                 <p>
                   New cycle starts at payment 1. Amount is prefilled with the hike (was{" "}
                   {formatRupees(card.next.previousAmount)}). Edit it if you agreed a different rent.
+                  A rent within {formatRupees(HIKE_ROUNDING_ALLOWANCE)} of the hike counts as
+                  rounded, not as extra or short.
                 </p>
+                {roundedChoices(card.next.suggestedAmount).length > 0 && (
+                  <div className="flex gap-2">
+                    {roundedChoices(card.next.suggestedAmount).map((value) => (
+                      <button
+                        key={value}
+                        type="button"
+                        onClick={() => setAmount(String(value))}
+                        className="min-h-11 flex-1 rounded-lg border border-current px-3 font-medium"
+                      >
+                        Round to {formatRupees(value)}
+                      </button>
+                    ))}
+                  </div>
+                )}
                 <button
                   type="button"
                   onClick={() => setAmount(String(card.next!.previousAmount))}

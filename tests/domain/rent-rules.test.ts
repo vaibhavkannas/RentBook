@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
+  isHikeRounding,
   nextCount,
+  roundedChoices,
   startsNewCycle,
   suggestAmount,
   sumAmounts,
@@ -49,6 +51,39 @@ describe("suggestAmount", () => {
   it("supports a per-portion hike percent, including zero", () => {
     expect(suggestAmount(10000, 10, true)).toBe(11000);
     expect(suggestAmount(10000, 0, true)).toBe(10000);
+  });
+});
+
+describe("isHikeRounding", () => {
+  it("accepts an amount up to the allowance either side of the suggested hike", () => {
+    expect(isHikeRounding(6316, 6316)).toBe(true);
+    expect(isHikeRounding(6315, 6316)).toBe(true);
+    expect(isHikeRounding(6320, 6316)).toBe(true);
+    expect(isHikeRounding(6326, 6316)).toBe(true);
+    expect(isHikeRounding(6306, 6316)).toBe(true);
+  });
+  it("rejects an amount beyond the allowance", () => {
+    expect(isHikeRounding(6327, 6316)).toBe(false);
+    expect(isHikeRounding(6305, 6316)).toBe(false);
+    expect(isHikeRounding(5000, 6316)).toBe(false);
+  });
+});
+
+describe("roundedChoices", () => {
+  it("offers the nearest 5 and nearest 10, lowest first", () => {
+    expect(roundedChoices(6316)).toEqual([6315, 6320]);
+    expect(roundedChoices(13334)).toEqual([13330, 13335]);
+  });
+  it("rounds halves up", () => {
+    expect(roundedChoices(13335)).toEqual([13340]);
+    expect(roundedChoices(6312)).toEqual([6310]);
+  });
+  it("offers nothing when the suggestion is already a multiple of 10", () => {
+    expect(roundedChoices(9450)).toEqual([]);
+  });
+  it("leaves out a choice equal to the suggestion and merges equal choices", () => {
+    expect(roundedChoices(9455)).toEqual([9460]);
+    expect(roundedChoices(9458)).toEqual([9460]);
   });
 });
 

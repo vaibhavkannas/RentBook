@@ -333,10 +333,45 @@ describe("rent due against received (October after the base schedule)", () => {
   });
 
   it("lets extra and short cancel in the total while each paid card still has its own difference", () => {
-    const view = october([["Asha", 4, 5451], ["Bala", 1, 13334], null, null, null]);
+    const view = october([["Asha", 4, 5451], ["Bala", 1, 13349], null, null, null]);
     expect(card(view, "p1")).toMatchObject({ rentReference: 5450, rentDifference: 1 });
-    expect(card(view, "p2")).toMatchObject({ rentReference: 13335, rentDifference: -1 });
-    expect(view.difference).toBe(0);
+    expect(card(view, "p2")).toMatchObject({ rentReference: 13335, rentDifference: 14 });
+    expect(view.difference).toBe(15);
+  });
+
+  describe("a rent rounded after the hike", () => {
+    it("is the rent itself: rounding the hike down to the nearest 5 shows no short amount", () => {
+      const view = october([null, ["Bala", 1, 13335 - 5], null, null, null]);
+      expect(card(view, "p2")).toMatchObject({ rentReference: 13330, rentDifference: 0 });
+      expect(view.received).toBe(13330);
+      expect(view.due).toBe(5450 + 13330 + 9000 + 5100);
+      expect(view.difference).toBe(0);
+    });
+
+    it("is the rent itself: rounding the hike up to the nearest 10 shows no extra amount", () => {
+      const view = october([null, ["Bala", 1, 13340], null, null, null]);
+      expect(card(view, "p2")).toMatchObject({ rentReference: 13340, rentDifference: 0 });
+      expect(view.due).toBe(5450 + 13340 + 9000 + 5100);
+      expect(view.difference).toBe(0);
+    });
+
+    it("still flags an amount further than the allowance from the hike", () => {
+      const view = october([null, ["Bala", 1, 13346], null, null, null]);
+      expect(card(view, "p2")).toMatchObject({ rentReference: 13335, rentDifference: 11 });
+      const short = october([null, ["Bala", 1, 13324], null, null, null]);
+      expect(card(short, "p2")).toMatchObject({ rentReference: 13335, rentDifference: -11 });
+    });
+
+    it("does not apply inside a cycle: a rent that is not a new hike is exact", () => {
+      const view = october([["Asha", 4, 5445], null, null, null, null]);
+      expect(card(view, "p1")).toMatchObject({ rentReference: 5450, rentDifference: -5 });
+    });
+
+    it("never changes the suggested amount of a card that has not paid", () => {
+      const view = october([null, null, null, null, null]);
+      expect(card(view, "p2")).toMatchObject({ rentReference: 13335, rentDifference: null });
+      expect(view.due).toBe(SUGGESTED_TOTAL);
+    });
   });
 
   it("makes received minus due equal the difference once every portion has paid", () => {

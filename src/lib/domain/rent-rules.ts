@@ -21,6 +21,26 @@ export function suggestAmount(
   return Math.round((previousAmount * (100 + hikePercent)) / 100);
 }
 
+/**
+ * On a new cycle the owner may round the hiked rent to a figure they like (nearest 5 or 10). An
+ * amount this close to the suggested hike (inclusive) counts as the new rent, not as extra or short.
+ */
+export const HIKE_ROUNDING_ALLOWANCE = 10;
+
+/** True when `amount` is within the rounding allowance of the suggested hiked rent. */
+export function isHikeRounding(amount: number, suggested: number): boolean {
+  return Math.abs(amount - suggested) <= HIKE_ROUNDING_ALLOWANCE;
+}
+
+/**
+ * Suggested hiked rent rounded to the nearest 5 and to the nearest 10 (halves round up), left out
+ * when equal to the suggestion itself or to each other. Lowest first.
+ */
+export function roundedChoices(suggested: number): number[] {
+  const choices = [5, 10].map((step) => Math.round(suggested / step) * step);
+  return [...new Set(choices)].filter((value) => value !== suggested).sort((a, b) => a - b);
+}
+
 export function sumAmounts(amounts: Array<number | null | undefined>): number {
   return amounts.reduce<number>((sum, amount) => sum + (amount ?? 0), 0);
 }
