@@ -19,7 +19,7 @@ import { addMonths, compareYm, isValidIsoDay, ymKey } from "@/lib/domain/year-mo
 import { AppError, conflict, sheetStructure, validation } from "@/lib/errors";
 import { formatMonthTitle } from "@/lib/format";
 import { colLetter } from "./a1";
-import type { CellWrite, SheetsGateway } from "./gateway";
+import type { SheetsGateway } from "./gateway";
 import { parseSchedule, type ScheduleLayout } from "./schedule";
 import {
   ensureTabs,
@@ -31,6 +31,7 @@ import {
 import { createSnapshotCache, type SnapshotCache } from "./snapshot-cache";
 import { checkNewTenancy, recordNewTenant } from "./tenancy-writes";
 import { readTenancies } from "./tenants-store";
+import { withWriteLock } from "./write-lock";
 
 export type Snapshot = {
   portions: PortionConfig[];
@@ -149,6 +150,10 @@ async function totalIsFormula(
  * month row, cloned from it (so formatting and the total formula carry over)
  * with every payment cell blanked. Months are only ever added in order: a
  * month that is not later than the last month row is refused.
+ *
+ * The clone OVERWRITES its target row without looking at it, and the Sheet cannot make "check, then
+ * clone" one step. So the target row is read again as late as possible, right before the clone, and a row
+ * that is no longer empty (someone added this month, or typed under the table, a moment ago) is refused.
  */
 async function ensureMonthRow(
   ctx: SheetsContext,
@@ -180,13 +185,6 @@ async function ensureMonthRow(
 
   const { layout, portions } = loaded;
   const newRow = layout.lastDataRow + 1;
-  const below = await ctx.gateway.getValues(ctx.scheduleTab, `A${newRow}:ZZ${newRow}`, "FORMULA");
-  const occupied = below.some((row) => row.some((cell) => cell !== undefined && cell !== ""));
-  if (occupied) {
-    throw conflict(
-      `Row ${newRow} of the Schedule tab is below the last month but not empty, so a new month row cannot be added there.`,
-    );
-  }
 
   // Blank every value the copy would carry over (portion cells, a typed total, notes,
   // columns of portions missing from Settings); keep only formulas and the Month cell.
@@ -204,6 +202,13 @@ async function ensureMonthRow(
   });
   if (!totalHasFormula) clearCols.add(layout.totalCol);
 
+  const below = await ctx.gateway.getValues(ctx.scheduleTab, `A${newRow}:ZZ${newRow}`, "FORMULA");
+  const occupied = below.some((row) => row.some((cell) => cell !== undefined && cell !== ""));
+  if (occupied) {
+    throw conflict(
+      `Row ${newRow} of the Schedule tab is below the last month but not empty, so a new month row cannot be added there. If someone else just added this month, refresh the page.`,
+    );
+  }
   await ctx.gateway.cloneRow(ctx.scheduleTab, layout.lastDataRow, newRow, [...clearCols], [
     { col: layout.monthCol, value: writeMonth(layout.codec, month) },
   ]);
@@ -287,16 +292,39 @@ function validateInput(input: LogPaymentInput): string | undefined {
   return name;
 }
 
+/** Writes are taken one at a time, in the order they arrive (see withWriteLock). */
 export async function logPayment(
   ctx: SheetsContext,
   input: LogPaymentInput,
   options: LogPaymentOptions,
 ): Promise<LogPaymentResult> {
-  try {
-    return await logPaymentUnchecked(ctx, input, options);
-  } finally {
-    ctx.cache?.invalidate();
-  }
+  return withWriteLock(async () => {
+    try {
+      return await logPaymentUnchecked(ctx, input, options);
+    } finally {
+      ctx.cache?.invalidate();
+    }
+  });
+}
+
+const NOT_SAVED_MESSAGE = "Your change may not have been saved. Refresh and check this month.";
+
+type WrittenCell = { col: number; value: unknown };
+
+const isEmptyCell = (cell: unknown) => cell === undefined || cell === null || cell === "";
+
+/**
+ * Reads the row just written (ONE read, unformatted) and refuses with a conflict when a cell this request
+ * wrote does not hold what was written: the write did not land, or someone changed the cell a moment
+ * later. Only the cells in `written` are compared; the rest of the row is nobody's business here.
+ */
+async function confirmWritten(ctx: SheetsContext, row: number, written: WrittenCell[]): Promise<void> {
+  const stored =
+    (await ctx.gateway.getValues(ctx.scheduleTab, `A${row}:ZZ${row}`, "UNFORMATTED_VALUE"))[0] ?? [];
+  const same = written.every(({ col, value }) =>
+    isEmptyCell(value) ? isEmptyCell(stored[col]) : stored[col] === value,
+  );
+  if (!same) throw conflict(NOT_SAVED_MESSAGE);
 }
 
 async function logPaymentUnchecked(
@@ -380,22 +408,21 @@ async function logPaymentUnchecked(
   const cols = loaded.layout.portionCols[portion.id];
   const at = (col: number) => `${colLetter(col)}${rowNumber}`;
 
-  const writes = [
-    { tab: ctx.scheduleTab, a1: at(cols.tenant), values: [[tenant]] },
-    { tab: ctx.scheduleTab, a1: at(cols.count), values: [[count]] },
-    { tab: ctx.scheduleTab, a1: at(cols.amount), values: [[input.amount]] },
+  const cells: WrittenCell[] = [
+    { col: cols.tenant, value: tenant },
+    { col: cols.count, value: count },
+    { col: cols.amount, value: input.amount },
   ];
   if (!totalHasFormula) {
     const others = loaded.portions
       .filter((p) => p.id !== portion.id)
       .map((p) => monthRow?.entries[p.id]?.amount);
-    writes.push({
-      tab: ctx.scheduleTab,
-      a1: at(loaded.layout.totalCol),
-      values: [[sumAmounts(others) + input.amount]],
-    });
+    cells.push({ col: loaded.layout.totalCol, value: sumAmounts(others) + input.amount });
   }
-  await ctx.gateway.updateValues(writes);
+  await ctx.gateway.updateValues(
+    cells.map(({ col, value }) => ({ tab: ctx.scheduleTab, a1: at(col), values: [[value]] })),
+  );
+  await confirmWritten(ctx, rowNumber, cells);
 
   const action: LogAction = existing ? "Edited" : "Logged";
   const logRow: LogRow = [
@@ -455,11 +482,13 @@ export async function undoPayment(
   input: UndoPaymentInput,
   options: LogPaymentOptions,
 ): Promise<UndoPaymentResult> {
-  try {
-    return await undoPaymentUnchecked(ctx, input, options);
-  } finally {
-    ctx.cache?.invalidate();
-  }
+  return withWriteLock(async () => {
+    try {
+      return await undoPaymentUnchecked(ctx, input, options);
+    } finally {
+      ctx.cache?.invalidate();
+    }
+  });
 }
 
 async function undoPaymentUnchecked(
@@ -493,22 +522,21 @@ async function undoPaymentUnchecked(
 
   const cols = loaded.layout.portionCols[portion.id];
   const at = (col: number) => `${colLetter(col)}${monthRow.rowNumber}`;
-  const writes: CellWrite[] = [
-    { tab: ctx.scheduleTab, a1: at(cols.tenant), values: [[""]] },
-    { tab: ctx.scheduleTab, a1: at(cols.count), values: [[""]] },
-    { tab: ctx.scheduleTab, a1: at(cols.amount), values: [[""]] },
+  const cells: WrittenCell[] = [
+    { col: cols.tenant, value: "" },
+    { col: cols.count, value: "" },
+    { col: cols.amount, value: "" },
   ];
   if (!(await totalIsFormula(ctx, loaded.layout, monthRow.rowNumber))) {
     const others = loaded.portions
       .filter((p) => p.id !== portion.id)
       .map((p) => monthRow.entries[p.id]?.amount);
-    writes.push({
-      tab: ctx.scheduleTab,
-      a1: at(loaded.layout.totalCol),
-      values: [[sumAmounts(others)]],
-    });
+    cells.push({ col: loaded.layout.totalCol, value: sumAmounts(others) });
   }
-  await ctx.gateway.updateValues(writes);
+  await ctx.gateway.updateValues(
+    cells.map(({ col, value }) => ({ tab: ctx.scheduleTab, a1: at(col), values: [[value]] })),
+  );
+  await confirmWritten(ctx, monthRow.rowNumber, cells);
 
   const logRow: LogRow = [
     options.now.toISOString(),

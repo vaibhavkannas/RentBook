@@ -17,17 +17,22 @@ type Grid = unknown[][];
  *   FORMULA fails its tests, as it would on a real sheet).
  * - getValues fills blank cells inside a row with "" and omits trailing blanks.
  * - addTab fails if the title exists; cloneRow fails if the source row is
- *   empty or the target row already has content, and then changes nothing.
+ *   empty (and then changes nothing). Like Google's copy and paste it
+ *   OVERWRITES the target row, whatever that row holds.
  * - cloneRow shifts relative row references (A5 -> A6) the way a plain copy
  *   and paste does; absolute rows ($5) are left alone.
  * Methods listed in `failOn` throw on every call while they stay listed.
+ * `delayMs` makes every call take that long before it reads or changes anything,
+ * like network latency, so two requests that overlap in time really interleave.
  */
 export class FakeGateway implements SheetsGateway {
   readonly tabs = new Map<string, Grid>();
   failOn = new Set<keyof SheetsGateway>();
   calls: string[] = [];
+  delayMs: number;
 
-  constructor(initial: Record<string, Grid> = {}) {
+  constructor(initial: Record<string, Grid> = {}, options: { delayMs?: number } = {}) {
+    this.delayMs = options.delayMs ?? 0;
     for (const [title, grid] of Object.entries(initial)) {
       this.tabs.set(title, grid.map((row) => [...row]));
     }
@@ -39,24 +44,25 @@ export class FakeGateway implements SheetsGateway {
     return grid;
   }
 
-  private enter(method: keyof SheetsGateway) {
+  private async enter(method: keyof SheetsGateway) {
     this.calls.push(method);
     if (this.failOn.has(method)) throw new Error(`${method} failed`);
+    if (this.delayMs > 0) await new Promise((resolve) => setTimeout(resolve, this.delayMs));
   }
 
   async listTabs() {
-    this.enter("listTabs");
+    await this.enter("listTabs");
     return [...this.tabs.keys()];
   }
 
   async addTab(title: string) {
-    this.enter("addTab");
+    await this.enter("addTab");
     if (this.tabs.has(title)) throw new Error(`A tab named ${title} already exists`);
     this.tabs.set(title, []);
   }
 
   async getValues(tab: string, a1: string, render: ValueRender) {
-    this.enter("getValues");
+    await this.enter("getValues");
     const range = parseA1(a1);
     const grid = this.grid(tab);
     const lastRow = range.endRow ?? grid.length;
@@ -76,7 +82,7 @@ export class FakeGateway implements SheetsGateway {
   }
 
   async updateValues(writes: CellWrite[]) {
-    this.enter("updateValues");
+    await this.enter("updateValues");
     for (const write of writes) {
       const range = parseA1(write.a1);
       const grid = this.grid(write.tab);
@@ -91,7 +97,7 @@ export class FakeGateway implements SheetsGateway {
   }
 
   async appendRow(tab: string, row: unknown[]) {
-    this.enter("appendRow");
+    await this.enter("appendRow");
     this.grid(tab).push([...row]);
   }
 
@@ -102,15 +108,11 @@ export class FakeGateway implements SheetsGateway {
     clearCols: number[],
     overrides: RowOverride[],
   ) {
-    this.enter("cloneRow");
+    await this.enter("cloneRow");
     const grid = this.grid(tab);
     const source = grid[fromRow - 1];
     if (!source || source.every(isEmpty)) {
       throw new Error(`cloneRow: row ${fromRow} is empty or missing`);
-    }
-    const target = grid[toRow - 1];
-    if (target && !target.every(isEmpty)) {
-      throw new Error(`cloneRow: row ${toRow} is not empty`);
     }
     const delta = toRow - fromRow;
     const copy = source.map((cell) =>

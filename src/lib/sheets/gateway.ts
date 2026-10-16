@@ -20,8 +20,18 @@ export interface SheetsGateway {
   /**
    * Creates `toRow` as a copy of `fromRow` (values, formulas with relative
    * references adjusted, and formatting), then blanks `clearCols` and sets
-   * `overrides`. Must be atomic: either the finished row exists or nothing
-   * changed. Rows are 1-based, columns are 0-based.
+   * `overrides`. Rows are 1-based, columns are 0-based.
+   *
+   * Atomic: the copy, the blanking and the overrides go to Google as ONE
+   * request, so either the finished row exists or nothing changed.
+   * NOT atomic with anything before it: the copy OVERWRITES `toRow` whatever
+   * it holds, without checking. A caller that read `toRow` to see that it was
+   * empty has no guarantee it still is. Two people adding the same month at
+   * the same moment can therefore both clone, and the second clone wipes
+   * what was written onto the first. The caller narrows this by reading
+   * `toRow` again right before the call, and by taking its own writes one at a
+   * time (write-lock.ts); it cannot close it against another server process
+   * or a person typing in the Sheet.
    */
   cloneRow(
     tab: string,

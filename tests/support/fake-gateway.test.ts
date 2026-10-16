@@ -78,10 +78,71 @@ describe("FakeGateway.cloneRow", () => {
     expect(fake.tabs.get("T")).toHaveLength(2);
   });
 
-  it("rejects an occupied target row and changes nothing", async () => {
-    const fake = new FakeGateway({ T: [source, ["note"]] });
-    await expect(fake.cloneRow("T", 1, 2, [], [])).rejects.toThrow(/row 2 is not empty/);
-    expect(fake.tabs.get("T")![1]).toEqual(["note"]);
+  it("overwrites an occupied target row, as Google's copy and paste does", async () => {
+    const fake = new FakeGateway({ T: [source, ["note", "x", "y", "z", "w", "extra"]] });
+    await fake.cloneRow("T", 1, 2, [1], [{ col: 0, value: "Feb" }]);
+    const row = fake.tabs.get("T")![1];
+    expect(row).toHaveLength(5);
+    expect(row[0]).toBe("Feb");
+    expect(row[1]).toBeUndefined();
+    expect(row[2]).toBe(1);
+    expect(row[3]).toBe(5000);
+    expect(row[4]).toBe("=D2+D2+$D$1+D$1+$D2");
+  });
+
+  it("overwrites a target row whose cells hold someone else's data", async () => {
+    const fake = new FakeGateway({ T: [source, ["Feb", "Bala", 7, 9999]] });
+    await fake.cloneRow("T", 1, 2, [1, 2, 3], []);
+    expect(fake.tabs.get("T")![1].slice(0, 4)).toEqual(["Jan", undefined, undefined, undefined]);
+  });
+});
+
+describe("FakeGateway latency", () => {
+  const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+  it("has none unless asked for", async () => {
+    const fake = new FakeGateway({ T: [["a"]] });
+    expect(fake.delayMs).toBe(0);
+    const started = performance.now();
+    await fake.getValues("T", "A1", "FORMATTED_VALUE");
+    expect(performance.now() - started).toBeLessThan(20);
+  });
+
+  it("makes every call take delayMs, from the constructor option or by setting the field", async () => {
+    const fake = new FakeGateway({ T: [["a"]] }, { delayMs: 25 });
+    let started = performance.now();
+    await fake.getValues("T", "A1", "FORMATTED_VALUE");
+    expect(performance.now() - started).toBeGreaterThanOrEqual(20);
+
+    fake.delayMs = 0;
+    started = performance.now();
+    await fake.listTabs();
+    expect(performance.now() - started).toBeLessThan(20);
+
+    fake.delayMs = 25;
+    started = performance.now();
+    await fake.appendRow("T", ["b"]);
+    await fake.cloneRow("T", 1, 3, [], []);
+    expect(performance.now() - started).toBeGreaterThanOrEqual(40);
+  });
+
+  it("applies a write after its delay, and a read sees the sheet as it is when the delay is over", async () => {
+    const fake = new FakeGateway({ T: [["old"]] }, { delayMs: 30 });
+    const write = fake.updateValues([{ tab: "T", a1: "A1", values: [["new"]] }]);
+    await sleep(10);
+    // The write has been sent but has not landed yet: the sheet still says "old".
+    expect(fake.tabs.get("T")![0][0]).toBe("old");
+    await write;
+    expect(fake.tabs.get("T")![0][0]).toBe("new");
+  });
+
+  it("still records a call and refuses a listed method straight away", async () => {
+    const fake = new FakeGateway({ T: [["a"]] }, { delayMs: 50 });
+    fake.failOn.add("listTabs");
+    const started = performance.now();
+    await expect(fake.listTabs()).rejects.toThrow(/listTabs failed/);
+    expect(performance.now() - started).toBeLessThan(40);
+    expect(fake.calls).toEqual(["listTabs"]);
   });
 });
 

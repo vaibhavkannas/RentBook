@@ -13,6 +13,7 @@ import type { PortionConfig } from "@/lib/domain/types";
 import { isValidIsoDay } from "@/lib/domain/year-month";
 import { conflict, sheetStructure, validation } from "@/lib/errors";
 import { loadSnapshot, type SheetsContext, type Snapshot } from "./service";
+import { withWriteLock } from "./write-lock";
 import { checkNewTenancy, recordNewTenant, type WriteStamp } from "./tenancy-writes";
 import { writeTenancyEdit, writeTenancyMoveOut } from "./tenants-store";
 
@@ -106,13 +107,15 @@ export async function saveTenancy(
   input: SaveTenancyInput,
   options: WriteStamp,
 ): Promise<{ tenancy: Tenancy }> {
-  try {
-    return input.id === undefined
-      ? await createTenancy(ctx, input, options)
-      : await updateTenancy(ctx, input, input.id, options);
-  } finally {
-    ctx.cache?.invalidate();
-  }
+  return withWriteLock(async () => {
+    try {
+      return input.id === undefined
+        ? await createTenancy(ctx, input, options)
+        : await updateTenancy(ctx, input, input.id, options);
+    } finally {
+      ctx.cache?.invalidate();
+    }
+  });
 }
 
 async function createTenancy(
@@ -215,11 +218,13 @@ export async function moveOutTenancy(
   input: MoveOutInput,
   options: WriteStamp,
 ): Promise<{ tenancy: Tenancy }> {
-  try {
-    return await moveOutUnchecked(ctx, input, options);
-  } finally {
-    ctx.cache?.invalidate();
-  }
+  return withWriteLock(async () => {
+    try {
+      return await moveOutUnchecked(ctx, input, options);
+    } finally {
+      ctx.cache?.invalidate();
+    }
+  });
 }
 
 async function moveOutUnchecked(
