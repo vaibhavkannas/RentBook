@@ -1,6 +1,6 @@
 import type { PortionConfig } from "@/lib/domain/types";
 import { sheetStructure, tabMissing, validation } from "@/lib/errors";
-import { findHeaderRowIndex } from "./schedule";
+import { findHeaderRowIndex, isBlankCell, shorten } from "./schedule";
 import type { SheetsGateway } from "./gateway";
 import { addTabIfMissing } from "./tabs";
 import { ensureTenantsTab, TENANTS_TAB } from "./tenants-store";
@@ -199,13 +199,33 @@ export async function ensureTabs(gateway: SheetsGateway, scheduleTab: string): P
 
 type SettingsRow = { portion: PortionConfig; sheetRow: number };
 
-/** Portions with the 1-based Settings-tab row each one was read from (blank rows are skipped). */
+/** A portion id is typed by hand and becomes a key and a URL part, so it is kept to letters, digits, - and _. */
+const PORTION_ID = /^[A-Za-z0-9_-]{1,20}$/;
+
+/**
+ * Portions with the 1-based Settings-tab row each one was read from. Rows that are not portions are skipped:
+ * blank rows, and a note typed under the table (its Tenant, Count and Amount header cells, columns C to E, are
+ * all blank). A row with only some of those three filled in is a half-typed portion: refused, by row number.
+ */
 async function readSettingsRows(gateway: SheetsGateway): Promise<SettingsRow[]> {
   const values = await gateway.getValues(SETTINGS_TAB, "A1:G50", "UNFORMATTED_VALUE");
   const portions: SettingsRow[] = [];
   values.slice(1).forEach((row, offset) => {
-    if (row.length === 0 || row[0] === undefined || row[0] === "") return;
     const sheetRow = offset + 2;
+    const headerCells = [row[2], row[3], row[4]];
+    if (headerCells.every(isBlankCell)) return;
+    if (headerCells.some(isBlankCell)) {
+      throw sheetStructure(
+        `Settings row ${sheetRow}: Tenant header, Count header and Amount header must all be filled in, or all left blank for a note.`,
+      );
+    }
+    if (isBlankCell(row[0])) return;
+    const id = String(row[0]);
+    if (!PORTION_ID.test(id)) {
+      throw sheetStructure(
+        `Settings row ${sheetRow}: the portion id "${shorten(id)}" can only use letters, numbers, - and _, up to 20 characters.`,
+      );
+    }
     const cycle = row[5];
     const hike = row[6];
     if (cycle !== undefined && cycle !== "" && !(Number.isInteger(cycle) && (cycle as number) >= 1)) {
@@ -219,7 +239,7 @@ async function readSettingsRows(gateway: SheetsGateway): Promise<SettingsRow[]> 
     portions.push({
       sheetRow,
       portion: {
-        id: String(row[0]),
+        id,
         name: String(row[1] ?? row[0]),
         tenantHeader: String(row[2] ?? ""),
         countHeader: String(row[3] ?? ""),

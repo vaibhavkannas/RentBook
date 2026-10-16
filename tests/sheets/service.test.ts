@@ -13,7 +13,7 @@ import {
   type SheetsContext,
 } from "@/lib/sheets/service";
 import { cell, FakeGateway } from "../support/fake-gateway";
-import { baseSchedule, TOTAL_HEADER } from "../support/fixtures";
+import { baseSchedule, settingsGrid, TOTAL_HEADER } from "../support/fixtures";
 
 const NOW = new Date("2026-10-05T04:30:00Z");
 const OCT = { year: 2026, month: 10 };
@@ -481,5 +481,45 @@ describe("settings through the service", () => {
       saveSettings(ctx, [{ id: "p1", name: "", cycleLength: 11, hikePercent: 5 }]),
       "validation",
     );
+  });
+});
+
+describe("a portion whose id is also a property name", () => {
+  // Settings ids are typed by hand; `__proto__` and `constructor` are allowed and must behave as plain ids.
+  function oddSetup() {
+    const settings = settingsGrid();
+    settings[1][0] = "__proto__";
+    settings[2][0] = "constructor";
+    const fake = new FakeGateway({ Schedule: baseSchedule(), Settings: settings });
+    const ctx: SheetsContext = { gateway: fake, scheduleTab: "Schedule", totalHeader: TOTAL_HEADER };
+    return { fake, ctx };
+  }
+
+  it("shows, logs and undoes a payment for each of them", async () => {
+    const { fake, ctx } = oddSetup();
+    const before = await getMonthView(ctx, OCT);
+    expect(before.cards.map((card) => card.portionId).slice(0, 2)).toEqual(["__proto__", "constructor"]);
+    expect(before.cards[0]).toMatchObject({ status: "pending", next: { tenant: "Asha", count: 4 } });
+
+    await pay(ctx, { portionId: "__proto__" });
+    await pay(ctx, { portionId: "constructor", amount: 13300 });
+    expect(cell(fake, "Schedule", "B", 6)).toBe("Asha");
+    expect(cell(fake, "Schedule", "D", 6)).toBe(5450);
+    expect(cell(fake, "Schedule", "E", 6)).toBe("Bala");
+    expect(cell(fake, "Schedule", "G", 6)).toBe(13300);
+
+    const after = await getMonthView(ctx, OCT);
+    expect(after.cards[0]).toMatchObject({ status: "paid", entry: { amount: 5450 } });
+    expect(after.cards[1]).toMatchObject({ status: "paid", entry: { amount: 13300 } });
+    expect(after.cards[2].status).toBe("pending");
+    expect(after.paidCount).toBe(2);
+
+    await undoPayment(
+      ctx,
+      { month: OCT, portionId: "__proto__", expected: { tenant: "Asha", count: 4, amount: 5450 } },
+      OPTIONS,
+    );
+    expect(cell(fake, "Schedule", "D", 6)).toBe("");
+    expect((await getMonthView(ctx, OCT)).cards[0].status).toBe("pending");
   });
 });

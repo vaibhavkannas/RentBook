@@ -102,7 +102,7 @@ describe("readMonthRowsReadOnly", () => {
       [SETTINGS_TAB]: [["Portion"], ["p1", "Ground", "Tenant", "Count", "Amount", 11, 5]],
     });
     const rows = await readMonthRowsReadOnly(fake, "Schedule", TOTAL_HEADER);
-    expect(Object.keys(rows[1].entries)).toEqual(["p1"]);
+    expect([...rows[1].entries.keys()]).toEqual(["p1"]);
   });
 });
 

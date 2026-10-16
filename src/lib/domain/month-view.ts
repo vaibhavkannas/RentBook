@@ -18,9 +18,9 @@ export function findEntryForMonth(
   month: YearMonth,
 ): PortionEntry | null {
   const matches = rows.filter(
-    (row) => compareYm(row.month, month) === 0 && row.entries[portionId],
+    (row) => compareYm(row.month, month) === 0 && row.entries.get(portionId),
   );
-  return matches.length > 0 ? matches[matches.length - 1].entries[portionId] : null;
+  return matches.length > 0 ? (matches[matches.length - 1].entries.get(portionId) ?? null) : null;
 }
 
 /** The portion's latest entry, optionally only from months strictly before `before`. A month's lower row wins. */
@@ -31,7 +31,7 @@ function latestEntry(
 ): PortionEntry | null {
   let best: ScheduleRow | null = null;
   for (const row of rows) {
-    if ((before && compareYm(row.month, before) >= 0) || !row.entries[portionId]) continue;
+    if ((before && compareYm(row.month, before) >= 0) || !row.entries.get(portionId)) continue;
     if (
       !best ||
       compareYm(row.month, best.month) > 0 ||
@@ -40,7 +40,7 @@ function latestEntry(
       best = row;
     }
   }
-  return best ? best.entries[portionId] : null;
+  return best ? (best.entries.get(portionId) ?? null) : null;
 }
 
 /** The most recent entry from a month strictly before `month`. */
@@ -66,7 +66,7 @@ export function hasLaterEntry(
   portionId: string,
   month: YearMonth,
 ): boolean {
-  return rows.some((row) => compareYm(row.month, month) > 0 && row.entries[portionId]);
+  return rows.some((row) => compareYm(row.month, month) > 0 && row.entries.get(portionId));
 }
 
 export function nextPayment(

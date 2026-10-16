@@ -11,7 +11,8 @@ export type ScheduleLayout = {
   headerRow: number;
   monthCol: number;
   totalCol: number;
-  portionCols: Record<string, { tenant: number; count: number; amount: number }>;
+  /** By portion id. A Map, because ids are typed by hand and `__proto__` or `constructor` must be plain ids. */
+  portionCols: Map<string, { tenant: number; count: number; amount: number }>;
   /** The style of the bottom-most month cell: used only to write a new month row, never to read. */
   codec: MonthCodec;
   /** 1-based row number of the last row holding a month. */
@@ -22,13 +23,20 @@ const HEADER_SEARCH_ROWS = 25;
 
 const norm = (value: unknown) => String(value ?? "").trim().toLowerCase();
 
-const isBlankCell = (cell: unknown) => cell === undefined || cell === null || String(cell).trim() === "";
+export const isBlankCell = (cell: unknown) => cell === undefined || cell === null || String(cell).trim() === "";
 
 const MESSAGE_CELL_LENGTH = 40;
 
 /** A cell's text cut to 40 characters, so a long note cannot flood an error message. */
-const shorten = (text: string) =>
+export const shorten = (text: string) =>
   text.length > MESSAGE_CELL_LENGTH ? `${text.slice(0, MESSAGE_CELL_LENGTH)}...` : text;
+
+/** The Tenant, Count and Amount columns of a portion. Every portion given to parseSchedule has them, or the parse is refused. */
+export function columnsOf(layout: ScheduleLayout, portionId: string) {
+  const cols = layout.portionCols.get(portionId);
+  if (!cols) throw sheetStructure(`The Schedule tab has no columns for the portion "${portionId}".`);
+  return cols;
+}
 
 function findColumn(headers: unknown[], name: string): number {
   const wanted = norm(name);
@@ -67,26 +75,25 @@ export function parseSchedule(
   const monthCol = findColumn(headers, "Month");
   const totalCol = findColumn(headers, totalHeader);
 
-  const portionCols: ScheduleLayout["portionCols"] = {};
+  const portionCols: ScheduleLayout["portionCols"] = new Map();
   for (const portion of portions) {
-    portionCols[portion.id] = {
+    portionCols.set(portion.id, {
       tenant: findColumn(headers, portion.tenantHeader),
       count: findColumn(headers, portion.countHeader),
       amount: findColumn(headers, portion.amountHeader),
-    };
+    });
   }
   // Two Settings rows naming the same header would make two portions share cells.
   const owner = new Map<number, string>([[monthCol, "Month"], [totalCol, totalHeader]]);
-  for (const portion of portions) {
-    const cols = portionCols[portion.id];
+  for (const [id, cols] of portionCols) {
     for (const col of [cols.tenant, cols.count, cols.amount]) {
       const other = owner.get(col);
       if (other !== undefined) {
         throw sheetStructure(
-          `Portion "${portion.id}" and "${other}" both use the column headed "${String(headers[col])}". Fix the header names in the Settings tab.`,
+          `Portion "${id}" and "${other}" both use the column headed "${String(headers[col])}". Fix the header names in the Settings tab.`,
         );
       }
-      owner.set(col, portion.id);
+      owner.set(col, id);
     }
   }
 
@@ -114,15 +121,16 @@ export function parseSchedule(
   dataRows.forEach((raw, offset) => {
     const month = months[offset];
     if (!month) return;
-    const entries: Record<string, PortionEntry | null> = {};
-    for (const portion of portions) {
-      const cols = portionCols[portion.id];
+    const entries = new Map<string, PortionEntry | null>();
+    for (const [id, cols] of portionCols) {
       const count = raw[cols.count];
       const amount = raw[cols.amount];
-      entries[portion.id] =
+      entries.set(
+        id,
         typeof count === "number" && typeof amount === "number"
           ? { tenant: String(raw[cols.tenant] ?? "").trim(), count, amount }
-          : null;
+          : null,
+      );
     }
     rows.push({ rowNumber: headerIndex + 2 + offset, month, entries });
   });

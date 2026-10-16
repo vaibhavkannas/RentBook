@@ -104,7 +104,7 @@ describe("undoBlockedReason", () => {
   const rowFor = (month: number, e: typeof entry | null, rowNumber: number) => ({
     rowNumber,
     month: { year: 2026, month },
-    entries: { p1: e },
+    entries: new Map([["p1", e]]),
   });
 
   it("is null when the paid month is the portion's latest entry", () => {

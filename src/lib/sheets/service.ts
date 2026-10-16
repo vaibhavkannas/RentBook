@@ -20,7 +20,7 @@ import { AppError, conflict, sheetStructure, validation } from "@/lib/errors";
 import { formatMonthTitle } from "@/lib/format";
 import { colLetter } from "./a1";
 import type { SheetsGateway } from "./gateway";
-import { parseSchedule, type ScheduleLayout } from "./schedule";
+import { columnsOf, parseSchedule, type ScheduleLayout } from "./schedule";
 import {
   ensureTabs,
   LOG_TAB,
@@ -192,7 +192,7 @@ async function ensureMonthRow(
     (await ctx.gateway.getValues(ctx.scheduleTab, `A${layout.lastDataRow}:ZZ${layout.lastDataRow}`, "FORMULA"))[0] ?? [];
   const clearCols = new Set(
     portions.flatMap((p) => {
-      const cols = layout.portionCols[p.id];
+      const cols = columnsOf(layout, p.id);
       return [cols.tenant, cols.count, cols.amount];
     }),
   );
@@ -364,7 +364,7 @@ async function logPaymentUnchecked(
   }
   if (!existing && monthRow && !input.overwrite) {
     // A cell with an amount but no valid count is not a complete entry, yet it is not empty either.
-    const cols = loaded.layout.portionCols[portion.id];
+    const cols = columnsOf(loaded.layout, portion.id);
     const rowCells =
       (
         await ctx.gateway.getValues(
@@ -405,7 +405,7 @@ async function logPaymentUnchecked(
   const totalRow = monthRow ? monthRow.rowNumber : loaded.layout.lastDataRow;
   const totalHasFormula = await totalIsFormula(ctx, loaded.layout, totalRow);
   const rowNumber = await ensureMonthRow(ctx, loaded, input.month, totalHasFormula);
-  const cols = loaded.layout.portionCols[portion.id];
+  const cols = columnsOf(loaded.layout, portion.id);
   const at = (col: number) => `${colLetter(col)}${rowNumber}`;
 
   const cells: WrittenCell[] = [
@@ -416,7 +416,7 @@ async function logPaymentUnchecked(
   if (!totalHasFormula) {
     const others = loaded.portions
       .filter((p) => p.id !== portion.id)
-      .map((p) => monthRow?.entries[p.id]?.amount);
+      .map((p) => monthRow?.entries.get(p.id)?.amount);
     cells.push({ col: loaded.layout.totalCol, value: sumAmounts(others) + input.amount });
   }
   await ctx.gateway.updateValues(
@@ -502,10 +502,10 @@ async function undoPaymentUnchecked(
   if (!portion) throw validation(`Unknown portion "${input.portionId}".`);
 
   const matching = loaded.rows.filter(
-    (row) => compareYm(row.month, input.month) === 0 && row.entries[portion.id],
+    (row) => compareYm(row.month, input.month) === 0 && row.entries.get(portion.id),
   );
   const monthRow = matching[matching.length - 1];
-  const existing = monthRow?.entries[portion.id];
+  const existing = monthRow?.entries.get(portion.id);
   if (!monthRow || !existing) {
     throw conflict(
       `Nothing to undo. ${portion.name} has no payment recorded for ${formatMonthTitle(input.month)} any more. Refresh the page.`,
@@ -520,7 +520,7 @@ async function undoPaymentUnchecked(
     throw conflict(LATER_ENTRY_REASON);
   }
 
-  const cols = loaded.layout.portionCols[portion.id];
+  const cols = columnsOf(loaded.layout, portion.id);
   const at = (col: number) => `${colLetter(col)}${monthRow.rowNumber}`;
   const cells: WrittenCell[] = [
     { col: cols.tenant, value: "" },
@@ -530,7 +530,7 @@ async function undoPaymentUnchecked(
   if (!(await totalIsFormula(ctx, loaded.layout, monthRow.rowNumber))) {
     const others = loaded.portions
       .filter((p) => p.id !== portion.id)
-      .map((p) => monthRow.entries[p.id]?.amount);
+      .map((p) => monthRow.entries.get(p.id)?.amount);
     cells.push({ col: loaded.layout.totalCol, value: sumAmounts(others) });
   }
   await ctx.gateway.updateValues(

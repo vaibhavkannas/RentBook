@@ -19,7 +19,8 @@ export type ScheduleRow = {
   /** 1-based row number in the Schedule tab. */
   rowNumber: number;
   month: YearMonth;
-  entries: Record<string, PortionEntry | null>;
+  /** By portion id. A Map, because ids are typed by hand and `__proto__` or `constructor` must be plain ids. */
+  entries: Map<string, PortionEntry | null>;
 };
 
 export type NextPayment = {

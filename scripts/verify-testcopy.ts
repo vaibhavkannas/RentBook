@@ -32,7 +32,7 @@ import { readEnv } from "@/lib/server/env";
 import { colLetter } from "@/lib/sheets/a1";
 import { GoogleSheetsGateway } from "@/lib/sheets/google-gateway";
 import { readMonthRowsReadOnly, testCopyProblem } from "@/lib/sheets/recon";
-import { parseSchedule } from "@/lib/sheets/schedule";
+import { columnsOf, parseSchedule } from "@/lib/sheets/schedule";
 import {
   getMonthView,
   logPayment,
@@ -119,7 +119,7 @@ async function main() {
     const { layout, rows } = parseSchedule(values, portions, env.totalHeader);
     const row = rows.find((r) => r.month.year === MONTH.year && r.month.month === MONTH.month);
     if (!row) throw new Error("The test copy has no row for 2040-04.");
-    const a1 = `${colLetter(layout.portionCols[PORTION][col])}${row.rowNumber}`;
+    const a1 = `${colLetter(columnsOf(layout, PORTION)[col])}${row.rowNumber}`;
     const cells = await gateway.getValues(env.scheduleTab, a1, "UNFORMATTED_VALUE");
     return cells[0]?.[0];
   }

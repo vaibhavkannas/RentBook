@@ -16,8 +16,8 @@ describe("parseSchedule", () => {
     expect(layout.headerRow).toBe(3);
     expect(layout.monthCol).toBe(0);
     expect(layout.totalCol).toBe(16);
-    expect(layout.portionCols.p1).toEqual({ tenant: 1, count: 2, amount: 3 });
-    expect(layout.portionCols.p5).toEqual({ tenant: 13, count: 14, amount: 15 });
+    expect(layout.portionCols.get("p1")).toEqual({ tenant: 1, count: 2, amount: 3 });
+    expect(layout.portionCols.get("p5")).toEqual({ tenant: 13, count: 14, amount: 15 });
     expect(layout.lastDataRow).toBe(5);
     expect(layout.codec).toEqual({
       kind: "text",
@@ -30,8 +30,8 @@ describe("parseSchedule", () => {
     expect(rows).toHaveLength(2);
     expect(rows[1].rowNumber).toBe(5);
     expect(rows[1].month).toEqual({ year: 2026, month: 9 });
-    expect(rows[1].entries.p1).toEqual({ tenant: "Asha", count: 3, amount: 5450 });
-    expect(rows[1].entries.p4).toBeNull();
+    expect(rows[1].entries.get("p1")).toEqual({ tenant: "Asha", count: 3, amount: 5450 });
+    expect(rows[1].entries.get("p4")).toBeNull();
   });
 
   it("works when the Month column holds real dates", () => {
@@ -88,7 +88,7 @@ describe("parseSchedule", () => {
       { year: 2026, month: 11 },
     ]);
     expect(rows.map((row) => row.rowNumber)).toEqual([4, 5, 6, 7]);
-    expect(rows[1].entries.p1).toEqual({ tenant: "Asha", count: 3, amount: 5450 });
+    expect(rows[1].entries.get("p1")).toEqual({ tenant: "Asha", count: 3, amount: 5450 });
     expect(layout.lastDataRow).toBe(7);
     // The format used to write a new row comes from the bottom-most month cell only.
     expect(layout.codec).toEqual({ kind: "iso" });
@@ -223,6 +223,34 @@ describe("parseSchedule", () => {
     values.push(scheduleRow(monthCell("text", 2026, 10), [null, null, null, null, null], 6));
     const { rows } = parseSchedule(values, PORTIONS, TOTAL_HEADER);
     expect(rows[2].month).toEqual({ year: 2026, month: 10 });
-    expect(Object.values(rows[2].entries).every((e) => e === null)).toBe(true);
+    expect([...rows[2].entries.values()].every((e) => e === null)).toBe(true);
+  });
+});
+
+describe("parseSchedule: portion ids that are also property names", () => {
+  // `__proto__` and `constructor` are valid ids. Keyed by a plain object they would reach into the
+  // prototype; keyed by a Map they are just ids.
+  const odd = [
+    { ...PORTIONS[0], id: "__proto__" },
+    { ...PORTIONS[1], id: "constructor" },
+    ...PORTIONS.slice(2),
+  ];
+
+  it("keeps each portion's columns and entry under its own id", () => {
+    const { layout, rows } = parseSchedule(baseSchedule(), odd, TOTAL_HEADER);
+    expect(layout.portionCols.get("__proto__")).toEqual({ tenant: 1, count: 2, amount: 3 });
+    expect(layout.portionCols.get("constructor")).toEqual({ tenant: 4, count: 5, amount: 6 });
+    expect([...layout.portionCols.keys()]).toEqual(odd.map((p) => p.id));
+    expect(rows[1].entries.get("__proto__")).toEqual({ tenant: "Asha", count: 3, amount: 5450 });
+    expect(rows[1].entries.get("constructor")).toEqual({ tenant: "Bala", count: 11, amount: 12700 });
+    expect([...rows[1].entries.keys()]).toEqual(odd.map((p) => p.id));
+  });
+
+  it("does not invent an entry for an id that is not a portion", () => {
+    const { layout, rows } = parseSchedule(baseSchedule(), PORTIONS, TOTAL_HEADER);
+    for (const name of ["__proto__", "constructor", "toString", "hasOwnProperty"]) {
+      expect(layout.portionCols.get(name)).toBeUndefined();
+      expect(rows[1].entries.get(name)).toBeUndefined();
+    }
   });
 });

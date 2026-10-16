@@ -149,7 +149,7 @@ export function testCopyProblem(
   if (!row) {
     return `The test copy's Schedule has no row for ${ymKey(month)}. Add a row for that month to the Schedule tab of the test copy by hand, leave ${portionId} empty in it, and run this again. New month rows can only be added in order, so the check cannot add it. Nothing was written.`;
   }
-  if (row.entries[portionId]) {
+  if (row.entries.get(portionId)) {
     return `The test copy's ${ymKey(month)} row already has a payment for ${portionId}. Clear that portion's Tenant, Count and Amount cells in the test copy and run this again. Nothing was written.`;
   }
   return null;

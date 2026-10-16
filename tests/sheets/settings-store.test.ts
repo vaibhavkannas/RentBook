@@ -181,6 +181,72 @@ describe("readSettings", () => {
   });
 });
 
+describe("readSettings: rows typed by hand", () => {
+  const PORTION_ROW = ["p1", "Ground", "Tenant", "Count", "Amount", 11, 5];
+  const withRows = (...rows: unknown[][]) =>
+    new FakeGateway({ [SETTINGS_TAB]: [["Portion"], PORTION_ROW, ...rows] });
+  const problemOf = async (fake: FakeGateway) => {
+    const error = await readSettings(fake).then(
+      () => null,
+      (e: unknown) => e,
+    );
+    expect(error).toBeInstanceOf(AppError);
+    expect((error as AppError).code).toBe("sheet-structure");
+    return (error as AppError).message;
+  };
+
+  it("ignores a note typed under the table", async () => {
+    const fake = withRows([], ["Remember to review the hike in November"], ["Note", "see the lease"]);
+    expect((await readSettings(fake)).map((p) => p.id)).toEqual(["p1"]);
+  });
+
+  it("ignores a row whose Tenant, Count and Amount cells hold only spaces", async () => {
+    const fake = withRows(["Note", "text", " ", "  ", ""]);
+    expect((await readSettings(fake)).map((p) => p.id)).toEqual(["p1"]);
+  });
+
+  it("still ignores a row with no portion id, as before", async () => {
+    const fake = withRows(["", "Ghost", "Tenant2", "Count2", "Amount2", 11, 5]);
+    expect((await readSettings(fake)).map((p) => p.id)).toEqual(["p1"]);
+  });
+
+  it("names the row when only some of Tenant, Count and Amount are filled", async () => {
+    expect(await problemOf(withRows(["p2", "Two", "Tenant2", "", ""]))).toMatch(/Settings row 3\b.*Tenant.*Count.*Amount/);
+    expect(await problemOf(withRows(["p2", "Two", "Tenant2", "Count2", " "]))).toMatch(/Settings row 3\b/);
+    expect(await problemOf(withRows([], ["p2", "Two", "", "Count2", "Amount2"]))).toMatch(/Settings row 4\b/);
+  });
+
+  it("refuses a half-filled row even when the id cell is blank", async () => {
+    expect(await problemOf(withRows(["", "Two", "Tenant2"]))).toMatch(/Settings row 3\b/);
+  });
+
+  it("accepts ids of letters, digits, - and _ up to 20 characters", async () => {
+    const ids = ["p1", "A-b_9", "__proto__", "constructor", "x".repeat(20), 7];
+    const rows = ids.map((id, i) => [id, `Portion ${i}`, `T${i}`, `C${i}`, `A${i}`, 11, 5]);
+    const fake = new FakeGateway({ [SETTINGS_TAB]: [["Portion"], ...rows] });
+    expect((await readSettings(fake)).map((p) => p.id)).toEqual(ids.map(String));
+  });
+
+  it("refuses an id with other characters or more than 20, naming the row", async () => {
+    for (const id of ["p 1", "p.1", "p/1", "p1\n", " p1", "x".repeat(21), "naïve"]) {
+      const fake = new FakeGateway({
+        [SETTINGS_TAB]: [["Portion"], PORTION_ROW, [id, "Two", "Tenant2", "Count2", "Amount2", 11, 5]],
+      });
+      expect(await problemOf(fake)).toMatch(/Settings row 3\b[\s\S]*letters, numbers/);
+    }
+  });
+
+  it("cuts a very long id to 40 characters in the message", async () => {
+    const id = "y".repeat(200);
+    const fake = new FakeGateway({
+      [SETTINGS_TAB]: [["Portion"], [id, "Two", "Tenant2", "Count2", "Amount2", 11, 5]],
+    });
+    const message = await problemOf(fake);
+    expect(message).toContain("y".repeat(40));
+    expect(message).not.toContain("y".repeat(41));
+  });
+});
+
 describe("updateSettings", () => {
   async function seeded() {
     const fake = new FakeGateway({ Schedule: baseSchedule() });
