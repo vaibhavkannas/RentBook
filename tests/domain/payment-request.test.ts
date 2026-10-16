@@ -4,6 +4,7 @@ import {
   existingEntryFrom,
   LOG_RETRY_FAILED_MESSAGE,
   LOG_RETRY_UNCONFIRMED_MESSAGE,
+  LOG_RETRY_UNUSABLE_MESSAGE,
   logRetryFailureMessage,
   paymentOutcome,
   TENANCY_NOT_SAVED_MESSAGE,
@@ -188,26 +189,26 @@ describe("buildPaymentRequest", () => {
 describe("paymentOutcome", () => {
   it("closes the sheet when the payment, the log and the tenancy all saved", () => {
     expect(paymentOutcome({ ok: true, logWritten: true, tenancyWritten: true })).toEqual({
-      pendingLogRow: null,
+      retryToken: null,
       tenancyNotSaved: false,
       done: true,
     });
   });
 
   it("closes the sheet for a payment that had no tenancy part (tenancyWritten is absent)", () => {
-    expect(paymentOutcome({ ok: true })).toEqual({ pendingLogRow: null, tenancyNotSaved: false, done: true });
+    expect(paymentOutcome({ ok: true })).toEqual({ retryToken: null, tenancyNotSaved: false, done: true });
     expect(paymentOutcome({ ok: true, logWritten: true })).toMatchObject({ done: true });
   });
 
-  it("keeps the log row for a retry when the log entry did not save", () => {
-    const row = ["a", "b"];
-    expect(paymentOutcome({ ok: true, logWritten: false, logRow: row })).toEqual({
-      pendingLogRow: row,
+  it("keeps the retry token for a retry when the log entry did not save", () => {
+    expect(paymentOutcome({ ok: true, logWritten: false, retryToken: "tok.en" })).toEqual({
+      retryToken: "tok.en",
       tenancyNotSaved: false,
       done: false,
     });
+    // No token came back: the sheet still warns, and the retry will be refused with a plain message.
     expect(paymentOutcome({ ok: true, logWritten: false })).toEqual({
-      pendingLogRow: [],
+      retryToken: "",
       tenancyNotSaved: false,
       done: false,
     });
@@ -215,15 +216,15 @@ describe("paymentOutcome", () => {
 
   it("warns, and does not close, when the tenancy details did not save", () => {
     expect(paymentOutcome({ ok: true, logWritten: true, tenancyWritten: false })).toEqual({
-      pendingLogRow: null,
+      retryToken: null,
       tenancyNotSaved: true,
       done: false,
     });
   });
 
   it("reports both problems together", () => {
-    expect(paymentOutcome({ ok: true, logWritten: false, logRow: ["x"], tenancyWritten: false })).toEqual({
-      pendingLogRow: ["x"],
+    expect(paymentOutcome({ ok: true, logWritten: false, retryToken: "x.y", tenancyWritten: false })).toEqual({
+      retryToken: "x.y",
       tenancyNotSaved: true,
       done: false,
     });
@@ -241,6 +242,14 @@ describe("logRetryFailureMessage", () => {
     expect(logRetryFailureMessage(null)).toBe(LOG_RETRY_UNCONFIRMED_MESSAGE);
     expect(LOG_RETRY_UNCONFIRMED_MESSAGE).toBe(
       "Couldn't confirm that the log entry saved. Check the Activity screen before trying again.",
+    );
+  });
+
+  it("says the retry can no longer be used when the server refused the token", () => {
+    const refused = { ok: false, error: { code: "validation", message: "This retry has expired." } };
+    expect(logRetryFailureMessage(refused)).toBe(LOG_RETRY_UNUSABLE_MESSAGE);
+    expect(LOG_RETRY_UNUSABLE_MESSAGE).toBe(
+      "This retry can no longer be used. The change itself is safe in your Schedule. Check the Activity screen, and add the Payments Log entry by hand if it is missing.",
     );
   });
 

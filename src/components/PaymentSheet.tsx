@@ -33,12 +33,12 @@ type ApiBody = {
   ok: boolean;
   error?: ApiError;
   logWritten?: boolean;
-  logRow?: unknown[];
+  retryToken?: string;
   tenancyWritten?: boolean;
 };
 
 /** What the sheet still has to tell the person after the payment was saved. */
-type Notice = { logRow: unknown[] | null; tenancyNotSaved: boolean };
+type Notice = { retryToken: string | null; tenancyNotSaved: boolean };
 
 const NO_CONFIRMATION =
   "Couldn't confirm that the save went through. Check your connection and refresh the page before trying again.";
@@ -132,7 +132,7 @@ export default function PaymentSheet({
       router.refresh();
       const outcome = paymentOutcome(body);
       if (outcome.done) return onClose();
-      return setNotice({ logRow: outcome.pendingLogRow, tenancyNotSaved: outcome.tenancyNotSaved });
+      return setNotice({ retryToken: outcome.retryToken, tenancyNotSaved: outcome.tenancyNotSaved });
     }
     const failure = body.error ?? { code: "unknown", message: "Something went wrong. Try again." };
     const duplicate = failure.code === "conflict" ? existingEntryFrom(failure.details) : null;
@@ -145,14 +145,14 @@ export default function PaymentSheet({
   }
 
   async function retryLog() {
-    if (!notice?.logRow) return;
+    if (notice?.retryToken == null) return;
     setBusy(true);
     setError(null);
-    const body = await postJson<ApiBody>("/api/payments/log-retry", { row: notice.logRow });
+    const body = await postJson<ApiBody>("/api/payments/log-retry", { token: notice.retryToken });
     setBusy(false);
     if (body?.ok && body.logWritten) {
       // The log entry is saved now; the tenancy warning, if any, still has to be seen.
-      if (notice.tenancyNotSaved) return setNotice({ logRow: null, tenancyNotSaved: true });
+      if (notice.tenancyNotSaved) return setNotice({ retryToken: null, tenancyNotSaved: true });
       return onClose();
     }
     setError(logRetryFailureMessage(body));
@@ -201,7 +201,7 @@ export default function PaymentSheet({
 
         {notice ? (
           <div className="mt-4 space-y-3">
-            {notice.logRow && (
+            {notice.retryToken !== null && (
               <p className="rounded-lg bg-warn-bg px-3 py-2 text-sm text-warn-ink">
                 Saved to your Schedule, but the Payments Log entry didn&apos;t save.
               </p>
@@ -211,7 +211,7 @@ export default function PaymentSheet({
                 {error}
               </p>
             )}
-            {notice.logRow ? (
+            {notice.retryToken !== null ? (
               <>
                 <button
                   type="button"

@@ -583,8 +583,19 @@ const LOG_MAX_WAIT_MS = 1_000;
 const LOG_BUDGET_MS = 4_000;
 
 /**
+ * Why a call failed, in a few words, for the server log: the kind of error and its message, never the error
+ * object (a library's error can carry the request it made, headers and all).
+ */
+function describeFailure(error: unknown): string {
+  if (error instanceof AppError) return `${error.code}: ${error.message}`;
+  if (error instanceof Error) return `${error.name}: ${error.message}`;
+  return "unknown error";
+}
+
+/**
  * Adds a row to the Payments Log. Returns false when the row is not known to be there (the owner's "Try
- * again" button takes over).
+ * again" button takes over). The reason of every failed try goes to the server log, without the row: it holds
+ * a tenant's name and amounts.
  *
  * It adds the row a second time ONLY after Google refused it for sending too many requests: that refusal
  * means nothing was done. A timeout, a 5xx, a lost connection or any other error can come back after the
@@ -601,6 +612,7 @@ async function appendLogRow(
       await gateway.appendRow(LOG_TAB, row);
       return true;
     } catch (error) {
+      console.error(`Payments Log: try ${attempt} of ${LOG_ATTEMPTS} did not add the row (${describeFailure(error)}).`);
       const cannotHaveLanded = error instanceof AppError && error.code === "rate-limited";
       if (!cannotHaveLanded || attempt === LOG_ATTEMPTS) return false;
       const wait = Math.min(retryDelayMs * attempt, LOG_MAX_WAIT_MS);
@@ -652,12 +664,35 @@ export async function readActivity(ctx: SheetsContext, limit = 50): Promise<Acti
   return items.reverse().slice(0, limit);
 }
 
-/** Second chance for a Payments Log row that failed after the Schedule was saved. */
+/** How many of the newest Payments Log rows a retry looks through for the row it is about to add. */
+const RETRY_LOOKBACK_ROWS = 30;
+
+/** The same entry of the log: saved at, month, portion and action match. Whoever logged it, and the amounts, do not matter. */
+const sameLogEntry = (stored: unknown[], row: LogRow) =>
+  text(stored[0]) === row[0] && text(stored[1]) === row[1] && text(stored[2]) === row[2] && text(stored[8]) === row[8];
+
+/**
+ * Second chance for a Payments Log row that failed after the Schedule was saved. Safe to repeat: when the newest
+ * 30 rows of the log already hold this entry (an earlier try landed although it said it failed, or the same
+ * retry arrived twice) it returns true and adds nothing. When the log cannot be read it cannot tell, so it adds
+ * nothing and returns false: the person can try again.
+ */
 export async function retryLogRow(
   ctx: SheetsContext,
   row: LogRow,
   retryDelayMs = 400,
 ): Promise<boolean> {
-  await ensureTabs(ctx.gateway, ctx.scheduleTab);
-  return appendLogRow(ctx.gateway, row, retryDelayMs);
+  // One at a time, so two retries that arrive together cannot both find the log without the row.
+  return withWriteLock(async () => {
+    await ensureTabs(ctx.gateway, ctx.scheduleTab);
+    let recent: unknown[][];
+    try {
+      recent = (await ctx.gateway.getValues(LOG_TAB, "A1:I", "UNFORMATTED_VALUE")).slice(-RETRY_LOOKBACK_ROWS);
+    } catch (error) {
+      console.error(`Payments Log: could not check whether the row is already there (${describeFailure(error)}). Nothing was added.`);
+      return false;
+    }
+    if (recent.some((stored) => sameLogEntry(stored, row))) return true;
+    return appendLogRow(ctx.gateway, row, retryDelayMs);
+  });
 }

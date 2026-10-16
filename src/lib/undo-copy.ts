@@ -1,6 +1,6 @@
 import type { PortionEntry } from "@/lib/domain/types";
 import { formatRupees } from "@/lib/format";
-import { logRetryFailureMessage } from "@/lib/payment-request";
+import { logRetryFailureMessage, type LogRetryResponse } from "@/lib/payment-request";
 
 /** What the undo sheet tells the person before they confirm. */
 export function undoConfirmationText(
@@ -24,8 +24,8 @@ export function undoToastText(portionName: string): string {
  * What to tell the person when retrying the Payments Log entry of an undo did not succeed. `body` is the answer of
  * the retry, or null when none arrived: the entry may then have been saved, so the person is sent to the Activity screen.
  */
-export function undoLogRetryFailureMessage(body: { ok: boolean; logWritten?: boolean } | null): string {
-  return body === null
+export function undoLogRetryFailureMessage(body: LogRetryResponse | null): string {
+  return body === null || body.error?.code === "validation"
     ? logRetryFailureMessage(body)
     : "The log entry still didn't save. The undo itself is safe in your Schedule.";
 }

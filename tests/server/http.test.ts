@@ -14,7 +14,7 @@ import {
   validation,
 } from "@/lib/errors";
 import { handle, parseJson } from "@/lib/server/http";
-import { logRetryBody, paymentBody, settingsBody } from "@/lib/server/schemas";
+import { logRetryBody, paymentBody, settingsBody, undoBody } from "@/lib/server/schemas";
 
 beforeEach(() => getViewer.mockResolvedValue({ email: "owner@example.com", isOwner: true }));
 afterEach(() => {
@@ -152,16 +152,36 @@ describe("parseJson", () => {
     await expect(parseJson(req("{oops"), paymentBody)).rejects.toThrow(/must be JSON/);
   });
 
-  it("validates the log retry row shape and settings payload", async () => {
-    const row = ["t", "2026-10", "P", "A", 1, 1, "2026-10-05", "owner@example.com", "Logged"];
-    expect((await parseJson(req(JSON.stringify({ row })), logRetryBody)).row).toHaveLength(9);
+  it("validates the log retry token and settings payload", async () => {
+    expect((await parseJson(req(JSON.stringify({ token: "a.b" })), logRetryBody)).token).toBe("a.b");
+    await expect(parseJson(req(JSON.stringify({ token: "" })), logRetryBody)).rejects.toThrow();
+    await expect(parseJson(req(JSON.stringify({ token: "a".repeat(2001) })), logRetryBody)).rejects.toThrow();
+    await expect(parseJson(req(JSON.stringify({ token: 5 })), logRetryBody)).rejects.toThrow();
+    // a row is no longer accepted in place of a token
     await expect(parseJson(req(JSON.stringify({ row: ["x"] })), logRetryBody)).rejects.toThrow();
-    await expect(
-      parseJson(req(JSON.stringify({ row: row.slice(0, 7) })), logRetryBody),
-    ).rejects.toThrow();
-    await expect(
-      parseJson(req(JSON.stringify({ row: [...row.slice(0, 8), "Deleted"] })), logRetryBody),
-    ).rejects.toThrow();
     await expect(parseJson(req(JSON.stringify({ portions: [] })), settingsBody)).rejects.toThrow();
+  });
+
+  it("limits the length of every text the log schemas take from the client", async () => {
+    const long = "x".repeat(201);
+    const payment = { month: "2026-10", portionId: "p1", amount: 5450, dateReceived: "2026-10-05" };
+    expect((await parseJson(req(JSON.stringify({ ...payment, newTenantName: "x".repeat(200) })), paymentBody)).amount).toBe(5450);
+    for (const bad of [
+      { ...payment, dateReceived: long },
+      { ...payment, newTenantName: long },
+      { ...payment, expected: { tenant: long, count: 1, amount: 1 } },
+      { ...payment, tenancy: { moveIn: long } },
+      { ...payment, tenancy: { moveIn: "2026-10-01", phone: long } },
+      { ...payment, tenancy: { moveIn: "2026-10-01", agreementEnd: long } },
+      { ...payment, tenancy: { moveIn: "2026-10-01", advanceDate: long } },
+    ]) {
+      await expect(parseJson(req(JSON.stringify(bad)), paymentBody)).rejects.toThrow();
+    }
+    await expect(
+      parseJson(
+        req(JSON.stringify({ month: "2026-10", portionId: "p1", expected: { tenant: long, count: 1, amount: 1 } })),
+        undoBody,
+      ),
+    ).rejects.toThrow();
   });
 });

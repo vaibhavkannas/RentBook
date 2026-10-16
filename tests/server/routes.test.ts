@@ -32,6 +32,7 @@ vi.mock("@/lib/sheets/tenancy-service", async (importOriginal) => ({
 }));
 
 import { conflict, configError, rateLimited, unavailable, validation } from "@/lib/errors";
+import { createRetryToken, RETRY_TOKEN_MAX_AGE_MS } from "@/lib/server/retry-token";
 import { POST as postRetry } from "@/app/api/payments/log-retry/route";
 import { POST as postPayment } from "@/app/api/payments/route";
 import { POST as postUndo } from "@/app/api/payments/undo/route";
@@ -51,10 +52,13 @@ const settingsRequest = () =>
 const signedInAs = (email: string | null) =>
   auth.mockResolvedValue(email ? { user: { email } } : null);
 
+const SECRET = "a-test-secret-that-is-at-least-32-characters-long";
+
 let savedEnv: string | undefined;
 beforeEach(() => {
   savedEnv = process.env.ALLOWED_EMAILS;
   process.env.ALLOWED_EMAILS = "owner@example.com, member@example.com";
+  vi.stubEnv("AUTH_SECRET", SECRET);
   saveSettings.mockClear();
   logPayment.mockClear();
   undoPayment.mockReset();
@@ -64,6 +68,7 @@ beforeEach(() => {
   moveOutTenancy.mockReset();
 });
 afterEach(() => {
+  vi.unstubAllEnvs();
   if (savedEnv === undefined) delete process.env.ALLOWED_EMAILS;
   else process.env.ALLOWED_EMAILS = savedEnv;
 });
@@ -196,6 +201,51 @@ describe("POST /api/payments", () => {
     expect(res.status).toBe(409);
     expect((await res.json()).error.code).toBe("conflict");
     expect(markWritten).toHaveBeenCalledOnce();
+  });
+
+  describe("when the Payments Log entry did not save", () => {
+    const LOG_ROW = [
+      "2026-10-05T04:30:00.000Z",
+      "2026-10",
+      "First floor, single bedroom",
+      "Asha",
+      5450,
+      4,
+      "2026-10-05",
+      "member@example.com",
+      "Logged",
+    ];
+
+    it("returns a retry token instead of the row", async () => {
+      signedInAs("Member@Example.com");
+      logPayment.mockResolvedValueOnce({
+        logWritten: false,
+        logRow: LOG_ROW,
+        entry: { tenant: "Asha", count: 4, amount: 5450 },
+      } as never);
+      const body = await (await postPayment(paymentRequest())).json();
+      expect(body).toMatchObject({ ok: true, logWritten: false, entry: { tenant: "Asha", count: 4, amount: 5450 } });
+      expect(typeof body.retryToken).toBe("string");
+      expect(body.retryToken.length).toBeLessThan(2000);
+      expect(body).not.toHaveProperty("logRow");
+      expect(JSON.stringify(body)).not.toContain("First floor");
+    });
+
+    it("returns neither a token nor the row when the entry saved", async () => {
+      signedInAs("member@example.com");
+      logPayment.mockResolvedValueOnce({ logWritten: true, logRow: LOG_ROW } as never);
+      const body = await (await postPayment(paymentRequest())).json();
+      expect(body).toEqual({ ok: true, logWritten: true });
+    });
+
+    it("makes a token that only this person's retry accepts", async () => {
+      logPayment.mockResolvedValue({ logWritten: false, logRow: LOG_ROW } as never);
+      signedInAs("member@example.com");
+      const { retryToken } = await (await postPayment(paymentRequest())).json();
+      expect((await postRetry(retryTokenRequest(retryToken))).status).toBe(200);
+      signedInAs("owner@example.com");
+      expect((await postRetry(retryTokenRequest(retryToken))).status).toBe(400);
+    });
   });
 
   describe("when Google cannot be used", () => {
@@ -350,12 +400,7 @@ describe("POST /api/payments/undo", () => {
     undoPayment.mockResolvedValue({ removed: good.expected, logWritten: true, logRow: [] });
     const res = await postUndo(undoRequest(good));
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({
-      ok: true,
-      removed: good.expected,
-      logWritten: true,
-      logRow: [],
-    });
+    expect(await res.json()).toEqual({ ok: true, removed: good.expected, logWritten: true });
     expect(undoPayment).toHaveBeenCalledOnce();
     expect(undoPayment.mock.calls[0][1]).toEqual({
       month: { year: 2026, month: 10 },
@@ -382,6 +427,20 @@ describe("POST /api/payments/undo", () => {
     undoPayment.mockRejectedValue(validation("Unknown portion."));
     expect((await postUndo(undoRequest(good))).status).toBe(400);
     expect(markWritten).not.toHaveBeenCalled();
+  });
+
+  it("returns a retry token instead of the row when the log entry did not save", async () => {
+    signedInAs("member@example.com");
+    undoPayment.mockResolvedValue({
+      removed: good.expected,
+      logWritten: false,
+      logRow: ["2026-10-05T04:30:00.000Z", "2026-10", "First floor, single bedroom", "Asha", 5450, 4, "", "member@example.com", "Undone"],
+    });
+    const body = await (await postUndo(undoRequest(good))).json();
+    expect(body).toMatchObject({ ok: true, removed: good.expected, logWritten: false });
+    expect(typeof body.retryToken).toBe("string");
+    expect(body).not.toHaveProperty("logRow");
+    expect(JSON.stringify(body)).not.toContain("First floor");
   });
 
   it("marks the write time after a successful undo", async () => {
@@ -633,6 +692,14 @@ describe("POST /api/tenancies/move-out", () => {
   });
 });
 
+function retryTokenRequest(token: unknown) {
+  return new Request("http://localhost/api/payments/log-retry", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ token }),
+  });
+}
+
 describe("POST /api/payments/log-retry", () => {
   const row = [
     "2026-10-05T04:30:00.000Z",
@@ -644,36 +711,109 @@ describe("POST /api/payments/log-retry", () => {
     "",
     "forged@example.com",
     "Undone",
-  ];
-  const retryRequest = () =>
-    new Request("http://localhost/api/payments/log-retry", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ row }),
-    });
+  ] as const;
+  const tokenFor = (viewer: string, now = Date.now()) => createRetryToken([...row], viewer, now);
 
   it("rejects a visitor who is not signed in", async () => {
     signedInAs(null);
-    const res = await postRetry(retryRequest());
+    const res = await postRetry(retryTokenRequest(tokenFor("member@example.com")));
     expect(res.status).toBe(401);
     expect(retryLogRow).not.toHaveBeenCalled();
   });
 
   it("rejects a signed-in address that is not on the list", async () => {
     signedInAs("stranger@example.com");
-    const res = await postRetry(retryRequest());
+    const res = await postRetry(retryTokenRequest(tokenFor("stranger@example.com")));
     expect(res.status).toBe(401);
     expect(retryLogRow).not.toHaveBeenCalled();
   });
 
-  it("writes the signed-in email as who logged it, whatever the request says", async () => {
+  it("writes the row of the token, with the signed-in email as who logged it", async () => {
     signedInAs("Member@Example.com");
-    const res = await postRetry(retryRequest());
+    const res = await postRetry(retryTokenRequest(tokenFor("member@example.com")));
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ ok: true, logWritten: true });
     expect(retryLogRow).toHaveBeenCalledOnce();
     const sent = retryLogRow.mock.calls[0][1] as unknown[];
-    expect(sent[7]).toBe("member@example.com");
     expect(sent).toEqual([...row.slice(0, 7), "member@example.com", "Undone"]);
+  });
+
+  it("rejects a request that carries a row and no token, so a row can never be forged", async () => {
+    signedInAs("member@example.com");
+    const forged = new Request("http://localhost/api/payments/log-retry", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ row }),
+    });
+    const res = await postRetry(forged);
+    expect(res.status).toBe(400);
+    expect(retryLogRow).not.toHaveBeenCalled();
+  });
+
+  it("uses only the token when a row is sent along with it", async () => {
+    signedInAs("member@example.com");
+    const both = new Request("http://localhost/api/payments/log-retry", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ token: tokenFor("member@example.com"), row: ["x", "x", "x", "x", 1, 1, "x", "x", "Logged"] }),
+    });
+    expect((await postRetry(both)).status).toBe(200);
+    expect((retryLogRow.mock.calls[0][1] as unknown[])[3]).toBe("Asha");
+  });
+
+  it.each([
+    ["an empty token", ""],
+    ["a token that is not text", 5],
+    ["a token over 2000 characters", "a".repeat(2001)],
+  ])("rejects %s", async (_name, token) => {
+    signedInAs("member@example.com");
+    expect((await postRetry(retryTokenRequest(token))).status).toBe(400);
+    expect(retryLogRow).not.toHaveBeenCalled();
+  });
+
+  it("rejects a token whose payload was changed", async () => {
+    signedInAs("member@example.com");
+    const [payload, mac] = tokenFor("member@example.com").split(".");
+    const edited = JSON.parse(Buffer.from(payload, "base64url").toString("utf8"));
+    edited.row[4] = 1;
+    const tampered = `${Buffer.from(JSON.stringify(edited)).toString("base64url")}.${mac}`;
+    const res = await postRetry(retryTokenRequest(tampered));
+    expect(res.status).toBe(400);
+    expect((await res.json()).error.code).toBe("validation");
+    expect(retryLogRow).not.toHaveBeenCalled();
+  });
+
+  it("rejects a token that is not signed with this deployment's secret", async () => {
+    signedInAs("member@example.com");
+    vi.stubEnv("AUTH_SECRET", "another-secret-that-is-also-32-characters-long");
+    const foreign = tokenFor("member@example.com");
+    vi.stubEnv("AUTH_SECRET", SECRET);
+    expect((await postRetry(retryTokenRequest(foreign))).status).toBe(400);
+    expect(retryLogRow).not.toHaveBeenCalled();
+  });
+
+  it("rejects an expired token", async () => {
+    signedInAs("member@example.com");
+    const old = tokenFor("member@example.com", Date.now() - RETRY_TOKEN_MAX_AGE_MS - 1_000);
+    const res = await postRetry(retryTokenRequest(old));
+    expect(res.status).toBe(400);
+    expect((await res.json()).error.message).toMatch(/expired/);
+    expect(retryLogRow).not.toHaveBeenCalled();
+  });
+
+  it("rejects a token that was made for someone else", async () => {
+    signedInAs("owner@example.com");
+    const res = await postRetry(retryTokenRequest(tokenFor("member@example.com")));
+    expect(res.status).toBe(400);
+    expect(retryLogRow).not.toHaveBeenCalled();
+  });
+
+  it("lets the same token be sent again: the service adds the row only once", async () => {
+    signedInAs("member@example.com");
+    const token = tokenFor("member@example.com");
+    expect((await postRetry(retryTokenRequest(token))).status).toBe(200);
+    expect((await postRetry(retryTokenRequest(token))).status).toBe(200);
+    expect(retryLogRow).toHaveBeenCalledTimes(2);
+    expect(retryLogRow.mock.calls[1][1]).toEqual(retryLogRow.mock.calls[0][1]);
   });
 });

@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import type { PortionCard } from "@/lib/domain/types";
+import type { LogRetryResponse } from "@/lib/payment-request";
 import {
   undoConfirmationText,
   undoLogRetryFailureMessage,
@@ -19,11 +20,10 @@ type Props = {
   onDone: (message: string) => void;
 };
 
-type ApiBody = {
-  ok: boolean;
+type ApiBody = LogRetryResponse & {
   error?: { code: string; message: string };
-  logWritten?: boolean;
-  logRow?: unknown[];
+  /** Present when the log entry did not save: the signed token to send back to retry it. */
+  retryToken?: string;
 };
 
 async function post(url: string, payload: unknown): Promise<ApiBody | null> {
@@ -49,8 +49,9 @@ export default function UndoSheet({ monthKey, monthLabel, card, onClose, onDone 
   const [error, setError] = useState<string | null>(null);
   /** The Sheet no longer matches what this sheet was opened on, so it must not offer the undo again. */
   const [conflicted, setConflicted] = useState(false);
-  const [pendingLog, setPendingLog] = useState<unknown[] | null>(null);
-  const logPending = pendingLog !== null;
+  // The token that retries the Payments Log entry, once the undo saved but its log entry did not. "" if none came.
+  const [pendingToken, setPendingToken] = useState<string | null>(null);
+  const logPending = pendingToken !== null;
   const safeButton = useRef<HTMLButtonElement>(null);
   const toastText = undoToastText(card.name);
 
@@ -88,7 +89,7 @@ export default function UndoSheet({ monthKey, monthLabel, card, onClose, onDone 
     if (!body) return setError(NO_CONFIRMATION);
     if (body.ok) {
       router.refresh();
-      if (body.logWritten === false) return setPendingLog(body.logRow ?? []);
+      if (body.logWritten === false) return setPendingToken(body.retryToken ?? "");
       onDone(toastText);
       return onClose();
     }
@@ -102,7 +103,7 @@ export default function UndoSheet({ monthKey, monthLabel, card, onClose, onDone 
   async function retryLog() {
     setBusy(true);
     setError(null);
-    const body = await post("/api/payments/log-retry", { row: pendingLog });
+    const body = await post("/api/payments/log-retry", { token: pendingToken });
     setBusy(false);
     if (body?.ok && body.logWritten) {
       onDone(toastText);
@@ -127,7 +128,7 @@ export default function UndoSheet({ monthKey, monthLabel, card, onClose, onDone 
           {monthLabel} · {card.name}
         </p>
 
-        {pendingLog ? (
+        {logPending ? (
           <div className="mt-4 space-y-3">
             <p id="undo-description" className="rounded-lg bg-warn-bg px-3 py-2 text-sm text-warn-ink">
               The payment was undone in your Schedule, but the Payments Log entry didn&apos;t save.

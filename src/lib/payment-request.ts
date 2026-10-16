@@ -93,27 +93,37 @@ export const LOG_RETRY_FAILED_MESSAGE =
 export const LOG_RETRY_UNCONFIRMED_MESSAGE =
   "Couldn't confirm that the log entry saved. Check the Activity screen before trying again.";
 
+/** Shown when the server refused the retry itself: its token expired, or was not valid for this person. */
+export const LOG_RETRY_UNUSABLE_MESSAGE =
+  "This retry can no longer be used. The change itself is safe in your Schedule. Check the Activity screen, and add the Payments Log entry by hand if it is missing.";
+
+/** The parts of the answer of POST /api/payments/log-retry that decide what to tell the person. */
+export type LogRetryResponse = { ok: boolean; logWritten?: boolean; error?: { code: string; message?: string } };
+
 /**
  * What to tell the person when retrying the Payments Log entry did not succeed. `body` is the answer of
  * POST /api/payments/log-retry, or null when none arrived (a timeout or a dropped connection): the retry may
  * then have gone through, so the person is sent to the Activity screen instead of being told it failed.
+ * A "validation" answer means the token was refused (too old, or not theirs), and trying again cannot help.
  */
-export function logRetryFailureMessage(body: { ok: boolean; logWritten?: boolean } | null): string {
-  return body === null ? LOG_RETRY_UNCONFIRMED_MESSAGE : LOG_RETRY_FAILED_MESSAGE;
+export function logRetryFailureMessage(body: LogRetryResponse | null): string {
+  if (body === null) return LOG_RETRY_UNCONFIRMED_MESSAGE;
+  return body.error?.code === "validation" ? LOG_RETRY_UNUSABLE_MESSAGE : LOG_RETRY_FAILED_MESSAGE;
 }
 
 /** The parts of POST /api/payments' answer that decide what the sheet does after a save. */
 export type PaymentResponse = {
   ok: boolean;
   logWritten?: boolean;
-  logRow?: unknown[];
+  /** Present when the log entry did not save: the signed token to send back to retry it. */
+  retryToken?: string;
   /** Absent unless the payment started a new tenant. */
   tenancyWritten?: boolean;
 };
 
 export type PaymentOutcome = {
-  /** The Payments Log row to retry, when the log entry did not save. */
-  pendingLogRow: unknown[] | null;
+  /** The token to retry the Payments Log entry with, when it did not save. Null when it saved. */
+  retryToken: string | null;
   tenancyNotSaved: boolean;
   /** Nothing to tell the person: the sheet can close. */
   done: boolean;
@@ -121,7 +131,8 @@ export type PaymentOutcome = {
 
 /** What the sheet does after the server accepted the payment. */
 export function paymentOutcome(body: PaymentResponse): PaymentOutcome {
-  const pendingLogRow = body.logWritten === false ? (body.logRow ?? []) : null;
+  // No token with a failed log entry is not expected; the retry would then be refused with a plain message.
+  const retryToken = body.logWritten === false ? (body.retryToken ?? "") : null;
   const tenancyNotSaved = body.tenancyWritten === false;
-  return { pendingLogRow, tenancyNotSaved, done: pendingLogRow === null && !tenancyNotSaved };
+  return { retryToken, tenancyNotSaved, done: retryToken === null && !tenancyNotSaved };
 }

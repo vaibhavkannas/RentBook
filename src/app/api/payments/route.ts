@@ -2,6 +2,7 @@ import { parseYmKey } from "@/lib/domain/year-month";
 import { requireUser } from "@/lib/server/auth-guard";
 import { getSheetsContext } from "@/lib/server/context";
 import { handle, parseJson } from "@/lib/server/http";
+import { withRetryToken } from "@/lib/server/retry-token";
 import { paymentBody } from "@/lib/server/schemas";
 import { runWrite } from "@/lib/server/writes";
 import { logPayment } from "@/lib/sheets/service";
@@ -29,6 +30,7 @@ export async function POST(request: Request) {
         { now: new Date(), loggedBy: viewer.email },
       ),
     );
-    return { ...result };
+    // The raw Payments Log row stays here: the browser gets a signed retry token when the entry did not save.
+    return withRetryToken(result, viewer.email);
   });
 }

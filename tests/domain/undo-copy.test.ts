@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { LOG_RETRY_UNCONFIRMED_MESSAGE } from "@/lib/payment-request";
+import { LOG_RETRY_UNCONFIRMED_MESSAGE, LOG_RETRY_UNUSABLE_MESSAGE } from "@/lib/payment-request";
 import {
   undoConfirmationText,
   undoLogRetryFailureMessage,
@@ -50,6 +50,12 @@ describe("undoLogRetryFailureMessage", () => {
     expect(undoLogRetryFailureMessage({ ok: true, logWritten: false })).toBe(
       "The log entry still didn't save. The undo itself is safe in your Schedule.",
     );
+  });
+
+  it("says the retry can no longer be used when the server refused the token, for the undo too", () => {
+    expect(
+      undoLogRetryFailureMessage({ ok: false, error: { code: "validation", message: "This retry has expired." } }),
+    ).toBe(LOG_RETRY_UNUSABLE_MESSAGE);
   });
 
   it("sends the person to the Activity screen when the retry got no answer at all", () => {

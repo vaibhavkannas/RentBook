@@ -206,11 +206,55 @@ describe("a Payments Log row is added again only after a refusal that cannot hav
     expect(await retryLogRow(ctx, [...row], 0)).toBe(false);
     expect(appends(fake)).toBe(1);
 
+    // The first try did land, so the next retry finds the row and adds nothing (see log-retry.test.ts).
     fake.appendLands = false;
-    fake.appendFailures = [rateLimited()];
     fake.calls = [];
     expect(await retryLogRow(ctx, [...row], 0)).toBe(true);
+    expect(appends(fake)).toBe(0);
+    expect(logRows(fake)).toHaveLength(1);
+  });
+
+  it("still tries again after a refusal for the retry button, when the row is not there", async () => {
+    const { fake, ctx } = await ready();
+    const row = ["2026-10-05T04:30:00.000Z", "2026-10", "First floor, single bedroom", "Asha", 5450, 4, "2026-10-05", "owner@example.com", "Logged"] as const;
+    fake.appendFailures = [rateLimited()];
+    expect(await retryLogRow(ctx, [...row], 0)).toBe(true);
     expect(appends(fake)).toBe(2);
+    expect(logRows(fake)).toEqual([[...row]]);
+  });
+
+  describe("and each failed try is explained in the server log", () => {
+    it("logs the reason of every failed try, once per try, and not the row", async () => {
+      const { fake, ctx } = await ready();
+      fake.appendFailures = [rateLimited(), rateLimited(), rateLimited()];
+      const result = await pay(ctx, { portionId: "p1" });
+      expect(result.logWritten).toBe(false);
+      expect(log).toHaveBeenCalledTimes(3);
+      const text = log.mock.calls.map((call) => call.map(String).join(" "));
+      expect(text[0]).toMatch(/Payments Log/);
+      expect(text[0]).toMatch(/try 1 of 3/);
+      expect(text[2]).toMatch(/try 3 of 3/);
+      expect(text.join(" ")).toMatch(/rate-limited/);
+      // the row holds a tenant name, an amount and a person's address: none of that goes to the log
+      expect(text.join(" ")).not.toMatch(/Asha|5450|owner@example\.com/);
+    });
+
+    it("says what kind of error it was for an error it does not know, without the error object", async () => {
+      const { fake, ctx } = await ready();
+      fake.appendFailures = [Object.assign(new Error("socket hang up"), { config: { headers: { Authorization: "Bearer abc" } } })];
+      await pay(ctx, { portionId: "p1" });
+      expect(log).toHaveBeenCalledTimes(1);
+      const [message, ...rest] = log.mock.calls[0];
+      expect(String(message)).toMatch(/Error: socket hang up/);
+      expect(rest).toEqual([]);
+      expect(String(message)).not.toMatch(/Bearer|Authorization/);
+    });
+
+    it("logs nothing when the first try works", async () => {
+      const { ctx } = await ready();
+      await pay(ctx, { portionId: "p1" });
+      expect(log).not.toHaveBeenCalled();
+    });
   });
 
   describe("and the tries fit inside the request's time", () => {

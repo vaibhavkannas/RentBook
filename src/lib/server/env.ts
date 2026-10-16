@@ -11,6 +11,26 @@ export type AppEnv = {
 
 const REQUIRED = ["GOOGLE_SERVICE_ACCOUNT_JSON", "SHEET_ID", "TOTAL_HEADER"] as const;
 
+/** The shortest AUTH_SECRET the app accepts: it signs the sign-in session, the retry token and the freshness cookie. */
+export const MIN_AUTH_SECRET_LENGTH = 32;
+
+/** What is wrong with AUTH_SECRET, in words, or null when it is usable. Never contains the value. */
+export function authSecretProblem(env: Record<string, string | undefined>): string | null {
+  const secret = env.AUTH_SECRET;
+  if (!secret?.trim()) return "AUTH_SECRET is missing.";
+  if (secret.length < MIN_AUTH_SECRET_LENGTH) {
+    return `AUTH_SECRET must be at least ${MIN_AUTH_SECRET_LENGTH} characters.`;
+  }
+  return null;
+}
+
+/** AUTH_SECRET, for signing. A config error (without the value) when it is missing or too short. */
+export function authSecret(env: Record<string, string | undefined>): string {
+  const problem = authSecretProblem(env);
+  if (problem) throw configError(problem);
+  return env.AUTH_SECRET!;
+}
+
 /**
  * Addresses allowed to sign in, from ALLOWED_EMAILS (commas, spaces or semicolons).
  * The old single ALLOWED_EMAIL is used only when ALLOWED_EMAILS is empty or missing.
