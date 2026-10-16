@@ -83,7 +83,7 @@ export default async function TenantsPage({
   let problem: string | null = null;
   let unknownPortion = false;
   try {
-    data = await getPortionTenants(getSheetsContext(), portionId, { minFetchedAt: await readWrittenAt() });
+    data = await getPortionTenants(getSheetsContext(), portionId, { minFetchedAt: await readWrittenAt(viewer.email) });
   } catch (error) {
     if (error instanceof AppError) {
       // getPortionTenants answers an id that is not one of the portions with a validation error; nothing else on this page does.

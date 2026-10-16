@@ -14,7 +14,7 @@ export async function POST(request: Request) {
   return handle(async () => {
     const viewer = await requireUser();
     const body = await parseJson(request, paymentBody);
-    const result = await runWrite(() =>
+    const result = await runWrite(viewer.email, () =>
       logPayment(
         getSheetsContext(),
         {

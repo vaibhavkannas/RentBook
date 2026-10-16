@@ -110,7 +110,7 @@ describe("PUT /api/settings", () => {
 
     signedInAs("owner@example.com");
     await putSettings(settingsRequest());
-    expect(markWritten).toHaveBeenCalledOnce();
+    expect(markWritten.mock.calls).toEqual([["owner@example.com"]]);
   });
 });
 
@@ -191,7 +191,7 @@ describe("POST /api/payments", () => {
     expect(markWritten).not.toHaveBeenCalled();
 
     await postPayment(paymentRequest());
-    expect(markWritten).toHaveBeenCalledOnce();
+    expect(markWritten.mock.calls).toEqual([["member@example.com"]]);
   });
 
   it("marks the write time when the log hits a conflict, so the refresh skips the cache", async () => {
@@ -200,7 +200,7 @@ describe("POST /api/payments", () => {
     const res = await postPayment(paymentRequest());
     expect(res.status).toBe(409);
     expect((await res.json()).error.code).toBe("conflict");
-    expect(markWritten).toHaveBeenCalledOnce();
+    expect(markWritten.mock.calls).toEqual([["member@example.com"]]);
   });
 
   describe("when the Payments Log entry did not save", () => {
@@ -419,7 +419,7 @@ describe("POST /api/payments/undo", () => {
       code: "conflict",
       message: "Changed by someone else.",
     });
-    expect(markWritten).toHaveBeenCalledOnce();
+    expect(markWritten.mock.calls).toEqual([["member@example.com"]]);
   });
 
   it("does not mark the write time when the undo fails for another reason", async () => {
@@ -447,7 +447,7 @@ describe("POST /api/payments/undo", () => {
     signedInAs("member@example.com");
     undoPayment.mockResolvedValue({ removed: good.expected, logWritten: true, logRow: [] });
     await postUndo(undoRequest(good));
-    expect(markWritten).toHaveBeenCalledOnce();
+    expect(markWritten.mock.calls).toEqual([["member@example.com"]]);
   });
 
   it("rejects a malformed body", async () => {
@@ -574,7 +574,7 @@ describe("POST /api/tenancies", () => {
     const res = await postTenancy(request(update));
     expect(res.status).toBe(409);
     expect((await res.json()).error).toMatchObject({ code: "conflict" });
-    expect(markWritten).toHaveBeenCalledOnce();
+    expect(markWritten.mock.calls).toEqual([["member@example.com"]]);
   });
 
   it("does not mark the write time when the save fails validation", async () => {
@@ -588,7 +588,7 @@ describe("POST /api/tenancies", () => {
     signedInAs("member@example.com");
     saveTenancy.mockResolvedValue(saved);
     await postTenancy(request(create));
-    expect(markWritten).toHaveBeenCalledOnce();
+    expect(markWritten.mock.calls).toEqual([["member@example.com"]]);
   });
 });
 
@@ -674,7 +674,7 @@ describe("POST /api/tenancies/move-out", () => {
     const res = await postMoveOut(request(good));
     expect(res.status).toBe(409);
     expect((await res.json()).error).toMatchObject({ code: "conflict" });
-    expect(markWritten).toHaveBeenCalledOnce();
+    expect(markWritten.mock.calls).toEqual([["member@example.com"]]);
   });
 
   it("does not mark the write time when the move-out fails validation", async () => {
@@ -688,7 +688,7 @@ describe("POST /api/tenancies/move-out", () => {
     signedInAs("member@example.com");
     moveOutTenancy.mockResolvedValue(closed);
     await postMoveOut(request(good));
-    expect(markWritten).toHaveBeenCalledOnce();
+    expect(markWritten.mock.calls).toEqual([["member@example.com"]]);
   });
 });
 
@@ -806,6 +806,12 @@ describe("POST /api/payments/log-retry", () => {
     const res = await postRetry(retryTokenRequest(tokenFor("member@example.com")));
     expect(res.status).toBe(400);
     expect(retryLogRow).not.toHaveBeenCalled();
+  });
+
+  it("marks the write time for the person, so their next Activity view is not answered from the cache", async () => {
+    signedInAs("Member@Example.com");
+    await postRetry(retryTokenRequest(tokenFor("member@example.com")));
+    expect(markWritten.mock.calls).toEqual([["member@example.com"]]);
   });
 
   it("lets the same token be sent again: the service adds the row only once", async () => {

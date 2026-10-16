@@ -10,10 +10,10 @@ export const maxDuration = 15;
 
 export async function PUT(request: Request) {
   return handle(async () => {
-    await requireOwner();
+    const viewer = await requireOwner();
     const { portions } = await parseJson(request, settingsBody);
     const saved = await saveSettings(getSheetsContext(), portions);
-    await markWritten();
+    await markWritten(viewer.email);
     return { portions: saved };
   });
 }

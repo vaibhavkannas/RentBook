@@ -32,7 +32,7 @@ export default async function Home({
   let view: MonthView | null = null;
   let problem: string | null = null;
   try {
-    view = await loadMonthView(getSheetsContext(), month);
+    view = await loadMonthView(getSheetsContext(), month, viewer.email);
   } catch (error) {
     problem = problemMessage(error, viewer);
   }

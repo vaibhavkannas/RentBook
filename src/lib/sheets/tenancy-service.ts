@@ -14,7 +14,7 @@ import {
 import type { PortionConfig } from "@/lib/domain/types";
 import { isValidIsoDay } from "@/lib/domain/year-month";
 import { conflict, sheetStructure, validation } from "@/lib/errors";
-import { loadSnapshot, type SheetsContext, type Snapshot } from "./service";
+import { invalidateCaches, loadSnapshot, type SheetsContext, type Snapshot } from "./service";
 import { withWriteLock } from "./write-lock";
 import { checkNewTenancy, recordNewTenant, type WriteStamp } from "./tenancy-writes";
 import { writeTenancyEdit, writeTenancyMoveOut } from "./tenants-store";
@@ -112,7 +112,7 @@ export async function saveTenancy(
         ? await createTenancy(ctx, input, options)
         : await updateTenancy(ctx, input, input.id, options);
     } finally {
-      ctx.cache?.invalidate();
+      invalidateCaches(ctx);
     }
   });
 }
@@ -221,7 +221,7 @@ export async function moveOutTenancy(
     try {
       return await moveOutUnchecked(ctx, input, options);
     } finally {
-      ctx.cache?.invalidate();
+      invalidateCaches(ctx);
     }
   });
 }

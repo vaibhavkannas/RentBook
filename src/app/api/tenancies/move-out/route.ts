@@ -13,7 +13,7 @@ export async function POST(request: Request) {
   return handle(async () => {
     const viewer = await requireUser();
     const body = await parseJson(request, moveOutBody);
-    const result = await runWrite(() =>
+    const result = await runWrite(viewer.email, () =>
       moveOutTenancy(getSheetsContext(), body, { now: new Date(), updatedBy: viewer.email }),
     );
     return { ...result };

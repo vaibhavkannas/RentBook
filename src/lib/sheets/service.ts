@@ -57,6 +57,10 @@ export type SheetsContext = {
   totalHeader: string;
   /** Short-lived copy of the Settings, Schedule and Tenants reads. Page views use it; writes never do. */
   cache?: SnapshotCache<Snapshot>;
+  /** Short-lived copy of the Payments Log, for the Activity page. */
+  activityCache?: SnapshotCache<ActivityItem[]>;
+  /** Short-lived copy of the Settings tab, for the Settings page. */
+  settingsCache?: SnapshotCache<PortionConfig[]>;
 };
 
 /**
@@ -95,10 +99,19 @@ export async function loadSnapshot(ctx: SheetsContext): Promise<Snapshot> {
 
 export const SNAPSHOT_TTL_MS = 15_000;
 
-/** Adds the page-view cache to a context. */
+/** Adds the page-view caches to a context: the month views and tenants, the Activity page and the Settings page. */
 export function withSnapshotCache(ctx: SheetsContext, ttlMs = SNAPSHOT_TTL_MS): SheetsContext {
   ctx.cache = createSnapshotCache(() => loadSnapshot(ctx), ttlMs);
+  ctx.activityCache = createSnapshotCache(() => loadActivity(ctx), ttlMs);
+  ctx.settingsCache = createSnapshotCache(() => loadSettings(ctx), ttlMs);
   return ctx;
+}
+
+/** Throws away every page-view copy. Every write calls this, whether it worked or not, so no page shows what it replaced. */
+export function invalidateCaches(ctx: SheetsContext): void {
+  ctx.cache?.invalidate();
+  ctx.activityCache?.invalidate();
+  ctx.settingsCache?.invalidate();
 }
 
 export async function getMonthView(
@@ -112,9 +125,17 @@ export async function getMonthView(
   return deriveMonthView(rows, portions, month, tenancies);
 }
 
-export async function getSettings(ctx: SheetsContext): Promise<PortionConfig[]> {
+async function loadSettings(ctx: SheetsContext): Promise<PortionConfig[]> {
   await ensureTabs(ctx.gateway, ctx.scheduleTab);
   return readSettings(ctx.gateway);
+}
+
+/** The portions in the Settings tab. `minFetchedAt` (ms since epoch) rejects a cached copy read before that time. */
+export async function getSettings(
+  ctx: SheetsContext,
+  options: { minFetchedAt?: number } = {},
+): Promise<PortionConfig[]> {
+  return ctx.settingsCache ? ctx.settingsCache.get(options.minFetchedAt) : loadSettings(ctx);
 }
 
 export async function saveSettings(
@@ -126,7 +147,7 @@ export async function saveSettings(
     await updateSettings(ctx.gateway, updates);
     return await readSettings(ctx.gateway);
   } finally {
-    ctx.cache?.invalidate();
+    invalidateCaches(ctx);
   }
 }
 
@@ -307,7 +328,7 @@ export async function logPayment(
     try {
       return await logPaymentUnchecked(ctx, input, options);
     } finally {
-      ctx.cache?.invalidate();
+      invalidateCaches(ctx);
     }
   });
 }
@@ -505,7 +526,7 @@ export async function undoPayment(
     try {
       return await undoPaymentUnchecked(ctx, input, options);
     } finally {
-      ctx.cache?.invalidate();
+      invalidateCaches(ctx);
     }
   });
 }
@@ -640,8 +661,8 @@ const ACTIONS: readonly LogAction[] = ["Logged", "Edited", "Undone"];
 
 const num = (value: unknown) => (typeof value === "number" ? value : null);
 
-/** The latest Payments Log rows, newest first. Rows from before "Logged by" and "Action" existed have no logged-by and no action. */
-export async function readActivity(ctx: SheetsContext, limit = 50): Promise<ActivityItem[]> {
+/** Every Payments Log row, newest first. */
+async function loadActivity(ctx: SheetsContext): Promise<ActivityItem[]> {
   await ensureTabs(ctx.gateway, ctx.scheduleTab);
   const values = await ctx.gateway.getValues(LOG_TAB, "A1:I", "UNFORMATTED_VALUE");
   const items = values
@@ -661,7 +682,20 @@ export async function readActivity(ctx: SheetsContext, limit = 50): Promise<Acti
         action,
       };
     });
-  return items.reverse().slice(0, limit);
+  return items.reverse();
+}
+
+/**
+ * The latest Payments Log rows, newest first. Rows from before "Logged by" and "Action" existed have no logged-by
+ * and no action. `minFetchedAt` (ms since epoch) rejects a cached copy read before that time.
+ */
+export async function readActivity(
+  ctx: SheetsContext,
+  limit = 50,
+  options: { minFetchedAt?: number } = {},
+): Promise<ActivityItem[]> {
+  const items = ctx.activityCache ? await ctx.activityCache.get(options.minFetchedAt) : await loadActivity(ctx);
+  return items.slice(0, limit);
 }
 
 /** How many of the newest Payments Log rows a retry looks through for the row it is about to add. */
@@ -684,15 +718,19 @@ export async function retryLogRow(
 ): Promise<boolean> {
   // One at a time, so two retries that arrive together cannot both find the log without the row.
   return withWriteLock(async () => {
-    await ensureTabs(ctx.gateway, ctx.scheduleTab);
-    let recent: unknown[][];
     try {
-      recent = (await ctx.gateway.getValues(LOG_TAB, "A1:I", "UNFORMATTED_VALUE")).slice(-RETRY_LOOKBACK_ROWS);
-    } catch (error) {
-      console.error(`Payments Log: could not check whether the row is already there (${describeFailure(error)}). Nothing was added.`);
-      return false;
+      await ensureTabs(ctx.gateway, ctx.scheduleTab);
+      let recent: unknown[][];
+      try {
+        recent = (await ctx.gateway.getValues(LOG_TAB, "A1:I", "UNFORMATTED_VALUE")).slice(-RETRY_LOOKBACK_ROWS);
+      } catch (error) {
+        console.error(`Payments Log: could not check whether the row is already there (${describeFailure(error)}). Nothing was added.`);
+        return false;
+      }
+      if (recent.some((stored) => sameLogEntry(stored, row))) return true;
+      return await appendLogRow(ctx.gateway, row, retryDelayMs);
+    } finally {
+      invalidateCaches(ctx);
     }
-    if (recent.some((stored) => sameLogEntry(stored, row))) return true;
-    return appendLogRow(ctx.gateway, row, retryDelayMs);
   });
 }

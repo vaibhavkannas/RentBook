@@ -4,6 +4,7 @@ import LoadProblem from "@/components/LoadProblem";
 import { formatMonthKey, formatRupees, formatSavedAt } from "@/lib/format";
 import { getViewer } from "@/lib/server/auth-guard";
 import { getSheetsContext } from "@/lib/server/context";
+import { readWrittenAt } from "@/lib/server/freshness";
 import { problemMessage } from "@/lib/server/problem";
 import { readActivity, type ActivityItem } from "@/lib/sheets/service";
 
@@ -23,7 +24,7 @@ export default async function ActivityPage() {
   let items: ActivityItem[] | null = null;
   let problem: string | null = null;
   try {
-    items = await readActivity(getSheetsContext());
+    items = await readActivity(getSheetsContext(), undefined, { minFetchedAt: await readWrittenAt(viewer.email) });
   } catch (error) {
     problem = problemMessage(error, viewer);
   }
