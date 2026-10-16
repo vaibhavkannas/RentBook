@@ -2,12 +2,9 @@ import "server-only";
 import { z } from "zod";
 import { MAX_NAME_LENGTH } from "@/lib/domain/input-rules";
 import { ADVANCE_STATUSES, MAX_NOTES_LENGTH, MAX_PHONE_LENGTH } from "@/lib/domain/tenancy";
-import { isoDay, safeText } from "./validators";
+import { isoDay, MAX_TEXT, safeText } from "./validators";
 
 const monthString = z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, "month must look like 2026-10");
-
-/** The longest text the log requests take from the browser. */
-const MAX_TEXT = 200;
 
 /** A tenant's name: the text the person typed, which the sheets will hold. */
 const tenantName = safeText(MAX_NAME_LENGTH, { label: "Tenant name", required: true });
@@ -73,11 +70,17 @@ export const settingsBody = z.object({
     .max(20),
 });
 
-/** Create (no `id`) or update (`id` plus the `expectedUpdatedAt` the person saw). An empty `expectedUpdatedAt` is valid: a hand-typed row can have none. */
+/**
+ * Create (no `id`) or update (`id` plus the `expectedUpdatedAt` the person saw). An empty `expectedUpdatedAt` is valid:
+ * a hand-typed row can have none.
+ * A create names a tenant who is about to be written to the Tenants tab, so the name is checked like any new one. An
+ * update sends back the name already stored there, which the service ignores, and a hand-typed row can hold a name a
+ * create would refuse (long, or with a line break): that must not stop the owner editing the phone, notes or dates.
+ */
 export const tenancyBody = z
   .object({
     portionId: z.string().min(1).max(20),
-    tenant: tenantName,
+    tenant: z.string().max(MAX_TEXT, "Tenant name is too long."),
     id: z.string().min(1).optional(),
     expectedUpdatedAt: z.string().optional(),
     fields: tenancyFieldsSchema,
@@ -85,7 +88,16 @@ export const tenancyBody = z
   .refine((body) => body.id === undefined || body.expectedUpdatedAt !== undefined, {
     message: "expectedUpdatedAt is required when id is given",
     path: ["expectedUpdatedAt"],
-  });
+  })
+  .superRefine((body, ctx) => {
+    if (body.id !== undefined) return;
+    const checked = tenantName.safeParse(body.tenant);
+    if (checked.success) return;
+    for (const issue of checked.error.issues) {
+      ctx.addIssue({ code: "custom", message: issue.message, path: ["tenant"] });
+    }
+  })
+  .transform((body) => (body.id === undefined ? { ...body, tenant: body.tenant.trim() } : body));
 
 export const moveOutBody = z.object({
   id: z.string().min(1),

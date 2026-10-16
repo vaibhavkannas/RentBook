@@ -77,6 +77,42 @@ describe("tenancyBody", () => {
     );
   });
 
+  describe("the tenant name on an edit and on a create", () => {
+    // An edit sends back the name stored in the Tenants tab, which the service ignores. A hand-typed row can hold a name
+    // a create would refuse, and that must not stop the owner from editing the phone, notes or dates.
+    const hardNames = {
+      "a name over 60 characters": "x".repeat(61),
+      "a name over 100 characters": "x".repeat(150),
+      "a name with a line break": "Asha\nK",
+      "a name with a control character": "Asha\u0000K",
+      "a blank name": "   ",
+      "an empty name": "",
+    };
+    const edit = (tenant: string) => ({ ...tenancy, tenant, id: "t-1", expectedUpdatedAt: "2026-10-01T00:00:00.000Z" });
+
+    it.each(Object.entries(hardNames))("accepts %s on an edit, and passes it on as it was stored", (_label, tenant) => {
+      expect(problem(tenancyBody, edit(tenant))).toBeNull();
+      expect(tenancyBody.parse(edit(tenant)).tenant).toBe(tenant);
+    });
+
+    it.each(Object.entries(hardNames))("refuses %s on a create", (_label, tenant) => {
+      expect(problem(tenancyBody, { ...tenancy, tenant })).toMatch(/^tenant: Tenant name /);
+    });
+
+    it("still bounds the name on an edit, so a huge text is refused", () => {
+      expect(problem(tenancyBody, edit("x".repeat(201)))).toMatch(/^tenant: /);
+    });
+
+    it("still checks the rest of an edit: the fields, and expectedUpdatedAt", () => {
+      expect(problem(tenancyBody, { ...edit("x".repeat(61)), fields: { moveIn: "1999-12-31" } })).toBe(
+        "fields.moveIn: Move-in date must be a date from 2000 to 2100.",
+      );
+      expect(problem(tenancyBody, { ...tenancy, tenant: "x".repeat(61), id: "t-1" })).toBe(
+        "expectedUpdatedAt: expectedUpdatedAt is required when id is given",
+      );
+    });
+  });
+
   it("takes a phone of up to 30 characters on one line", () => {
     const fields = (phone: string) => ({ ...tenancy, fields: { moveIn: "2026-10-01", phone } });
     expect(tenancyBody.parse(fields(" 98765 43210 ")).fields.phone).toBe("98765 43210");

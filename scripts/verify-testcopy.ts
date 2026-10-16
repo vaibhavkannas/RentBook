@@ -4,6 +4,11 @@
  *
  *   TEST_SHEET_ID=<id of the test copy> npm run verify:testcopy
  *
+ * Run it through npm, not with a bare tsx. The scripts in package.json pass --conditions=react-server, which lets
+ * the code this imports load outside Next (it starts with import "server-only", which throws without the condition).
+ * The condition also makes every package pick its react-server build, so a future script that imports react would
+ * get that one.
+ *
  * It writes to the test copy, only for portion p5 and the month 2040-04:
  *  - one payment is logged (as a new tenant "Verify Tenant", with tenancy details), edited and undone, and
  *    three rows are added to the Payments Log;

@@ -29,8 +29,8 @@ export function safeText(max: number, options: SafeTextOptions = {}) {
     });
 }
 
-/** The longest text a date field takes, so a huge string is refused before it is looked at. */
-const MAX_DAY_TEXT = 200;
+/** The longest text the requests take from the browser where no finer limit applies: a day, or a name stored earlier. */
+export const MAX_TEXT = 200;
 
 /**
  * A day written YYYY-MM-DD, real, in a year from 2000 to 2100. The spaces around it are ignored when it is judged,
@@ -39,7 +39,7 @@ const MAX_DAY_TEXT = 200;
 export function isoDay(label: string, options: { allowBlank?: boolean } = {}) {
   return z
     .string()
-    .max(MAX_DAY_TEXT, `${label} must be a real date (YYYY-MM-DD).`)
+    .max(MAX_TEXT, `${label} must be a real date (YYYY-MM-DD).`)
     .superRefine((text, ctx) => {
       const day = text.trim();
       if (day === "" && options.allowBlank) return;
