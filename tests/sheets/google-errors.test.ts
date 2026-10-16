@@ -86,6 +86,61 @@ describe("translateGoogleError", () => {
     expect(inspect(result, { depth: 6 })).not.toContain(SHEET_ID);
   });
 
+  describe("a tab that is gone", () => {
+    const MISSING = (tab: string) =>
+      `The tab "${tab}" was not found in your Sheet. Restore it from File > Version history or rename it back.`;
+
+    it.each(["Unable to parse range: 'Payments Log'!A1:I", "Requested entity was not found."])(
+      "maps a 400 saying %j to a sheet-structure error naming the tab it was asked for",
+      (message) => {
+        const error = translateGoogleError(googleError({ status: 400, message }), EMAIL, "Payments Log") as AppError;
+        expect(error).toBeInstanceOf(AppError);
+        expect(error.code).toBe("sheet-structure");
+        expect(error.message).toBe(MISSING("Payments Log"));
+        expect(inspect(error, { depth: 6 })).not.toContain(SHEET_ID);
+      },
+    );
+
+    it("reads the status from code or response.status too", () => {
+      for (const fields of [{ code: 400 }, { response: { status: 400 } }, { code: "400" }]) {
+        const error = translateGoogleError(
+          googleError({ ...fields, message: "Unable to parse range: Tenants!A1" }),
+          EMAIL,
+          "Tenants",
+        ) as AppError;
+        expect(error.message).toBe(MISSING("Tenants"));
+      }
+    });
+
+    it("does nothing special when no tab is known, as for listing the tabs", () => {
+      const result = translateGoogleError(
+        googleError({ status: 400, message: "Unable to parse range: Schedule!A1" }),
+        EMAIL,
+      ) as Error;
+      expect(result).not.toBeInstanceOf(AppError);
+      expect(result.message).toBe("Google Sheets request failed (HTTP 400): Unable to parse range: Schedule!A1");
+    });
+
+    it("only reacts to a 400", () => {
+      expect(
+        (translateGoogleError(googleError({ status: 404, message: "Requested entity was not found." }), EMAIL, "Schedule") as AppError)
+          .message,
+      ).toBe("Google could not find that Sheet. Check SHEET_ID.");
+      expect(
+        (translateGoogleError(googleError({ status: 500, message: "Unable to parse range: x" }), EMAIL, "Schedule") as Error).message,
+      ).toBe("Google Sheets request failed (HTTP 500): Unable to parse range: x");
+    });
+
+    it("leaves another 400 alone", () => {
+      const result = translateGoogleError(
+        googleError({ status: 400, message: "Invalid value at 'data'" }),
+        EMAIL,
+        "Schedule",
+      ) as Error;
+      expect(result.message).toBe("Google Sheets request failed (HTTP 400): Invalid value at 'data'");
+    });
+  });
+
   it("does not leak the request through a recognised error either", () => {
     for (const status of [400, 403, 404, 429]) {
       const error = translateGoogleError(

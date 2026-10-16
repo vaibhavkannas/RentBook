@@ -1,8 +1,9 @@
 import type { PortionConfig } from "@/lib/domain/types";
-import { sheetStructure, validation } from "@/lib/errors";
+import { sheetStructure, tabMissing, validation } from "@/lib/errors";
 import { findHeaderRowIndex } from "./schedule";
 import type { SheetsGateway } from "./gateway";
-import { ensureTenantsTab } from "./tenants-store";
+import { addTabIfMissing } from "./tabs";
+import { ensureTenantsTab, TENANTS_TAB } from "./tenants-store";
 
 export const SETTINGS_TAB = "Settings";
 export const LOG_TAB = "Payments Log";
@@ -105,33 +106,83 @@ const toSettingsRow = (p: PortionConfig) => [
 const bootstrapped = new WeakSet<SheetsGateway>();
 
 /**
- * Creates the Settings, Payments Log and Tenants tabs when they are missing.
- * Settings is seeded from the Schedule header row. Runs once per gateway instance.
+ * Forgets that a gateway's tabs were checked, so the next ensureTabs looks at them again. The Google gateway
+ * calls this when Google says a tab is gone, so a tab deleted or renamed while the app runs is noticed (and a
+ * deleted Payments Log or Tenants tab put back) without a restart.
+ */
+export function resetBootstrap(gateway: SheetsGateway): void {
+  bootstrapped.delete(gateway);
+}
+
+const SETTINGS_MISSING =
+  "The Settings tab is missing. Restore it from File > Version history or rename it back. RentBook will not recreate it because that would reset your rent cycle lengths and hike percentages.";
+
+const isBlankRow = (row: unknown[]) =>
+  row.every((cell) => cell === undefined || cell === null || String(cell).trim() === "");
+
+/**
+ * True when a Settings tab holds nothing but, at most, its header row, so it is safe to fill in. Anything
+ * else (a note, a header that is not ours, rows without a portion id) is left exactly as it is.
+ */
+function settingsIsEmpty(values: unknown[][]): boolean {
+  const [header = [], ...rest] = values;
+  const headerOnly = isBlankRow(header) || String(header[0] ?? "").trim().toLowerCase() === "portion";
+  return headerOnly && rest.every(isBlankRow);
+}
+
+/**
+ * Writes the default Settings (header and one row per portion found in the Schedule header). The Schedule
+ * header is read first, so a header that cannot be read creates nothing. `exists` says the tab is already
+ * there; otherwise it is added, and when another instance added it first the tab is left alone if that
+ * instance has already filled it.
+ */
+async function seedSettings(
+  gateway: SheetsGateway,
+  scheduleTab: string,
+  exists: boolean,
+): Promise<void> {
+  const top = await gateway.getValues(scheduleTab, "A1:ZZ25", "FORMATTED_VALUE");
+  const headerIndex = findHeaderRowIndex(top);
+  if (headerIndex === -1) {
+    throw sheetStructure('No header row containing "Month" was found in the Schedule tab.');
+  }
+  const portions = inferPortions(top[headerIndex]);
+  if (!exists && !(await addTabIfMissing(gateway, SETTINGS_TAB))) {
+    const theirs = await gateway.getValues(SETTINGS_TAB, "A1:G50", "UNFORMATTED_VALUE");
+    if (!settingsIsEmpty(theirs)) return;
+  }
+  await gateway.updateValues([
+    {
+      tab: SETTINGS_TAB,
+      a1: "A1",
+      values: [SETTINGS_HEADERS, ...portions.map(toSettingsRow)],
+    },
+  ]);
+}
+
+/**
+ * Creates the Settings, Payments Log and Tenants tabs when they are missing, once per gateway instance
+ * (until resetBootstrap). Settings is seeded from the Schedule header row, and only on a Sheet that has none
+ * of the three app tabs yet, or whose Settings tab holds no portions: a Settings tab that went missing while
+ * the others are still there is refused, never recreated, because the defaults would silently replace the
+ * owner's cycle lengths and hike percentages.
  */
 export async function ensureTabs(gateway: SheetsGateway, scheduleTab: string): Promise<void> {
   if (bootstrapped.has(gateway)) return;
   const tabs = await gateway.listTabs();
-  if (!tabs.includes(scheduleTab)) {
-    throw sheetStructure(`The tab "${scheduleTab}" was not found in the Google Sheet.`);
+  if (!tabs.includes(scheduleTab)) throw tabMissing(scheduleTab);
+
+  const hasSettings = tabs.includes(SETTINGS_TAB);
+  if (!hasSettings && (tabs.includes(LOG_TAB) || tabs.includes(TENANTS_TAB))) {
+    throw sheetStructure(SETTINGS_MISSING);
   }
-  if (!tabs.includes(SETTINGS_TAB)) {
-    const top = await gateway.getValues(scheduleTab, "A1:ZZ25", "FORMATTED_VALUE");
-    const headerIndex = findHeaderRowIndex(top);
-    if (headerIndex === -1) {
-      throw sheetStructure('No header row containing "Month" was found in the Schedule tab.');
-    }
-    const portions = inferPortions(top[headerIndex]);
-    await gateway.addTab(SETTINGS_TAB);
-    await gateway.updateValues([
-      {
-        tab: SETTINGS_TAB,
-        a1: "A1",
-        values: [SETTINGS_HEADERS, ...portions.map(toSettingsRow)],
-      },
-    ]);
-  }
-  if (!tabs.includes(LOG_TAB)) {
-    await gateway.addTab(LOG_TAB);
+  const settings = hasSettings
+    ? await gateway.getValues(SETTINGS_TAB, "A1:G50", "UNFORMATTED_VALUE")
+    : [];
+  if (settingsIsEmpty(settings)) await seedSettings(gateway, scheduleTab, hasSettings);
+
+  // A Payments Log tab that another instance added a moment ago is treated as an existing one.
+  if (!tabs.includes(LOG_TAB) && (await addTabIfMissing(gateway, LOG_TAB))) {
     await gateway.updateValues([{ tab: LOG_TAB, a1: "A1", values: [LOG_HEADERS] }]);
   } else {
     // An older Payments Log has only the first seven columns. Add the two new headers once.

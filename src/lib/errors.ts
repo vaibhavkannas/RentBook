@@ -29,3 +29,9 @@ export const sheetStructure = (message: string) =>
   new AppError("sheet-structure", message);
 
 export const configError = (message: string) => new AppError("config", message);
+
+/** A tab the app needs is not in the Sheet: it was deleted or renamed. The owner can put it back. */
+export const tabMissing = (tab: string) =>
+  sheetStructure(
+    `The tab "${tab}" was not found in your Sheet. Restore it from File > Version history or rename it back.`,
+  );

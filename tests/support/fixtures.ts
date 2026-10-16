@@ -1,5 +1,6 @@
 import type { PortionConfig } from "@/lib/domain/types";
 import { serialFromYm } from "@/lib/domain/year-month";
+import { SETTINGS_HEADERS } from "@/lib/sheets/settings-store";
 
 export const TOTAL_HEADER = "Total Rent";
 
@@ -18,6 +19,22 @@ export const PORTIONS: PortionConfig[] = [
   cycleLength: 11,
   hikePercent: 5,
 }));
+
+/** A Settings tab as the app seeds it: the header and one row per portion. */
+export function settingsGrid(): unknown[][] {
+  return [
+    [...SETTINGS_HEADERS],
+    ...PORTIONS.map((p) => [
+      p.id,
+      p.name,
+      p.tenantHeader,
+      p.countHeader,
+      p.amountHeader,
+      p.cycleLength ?? "",
+      p.hikePercent,
+    ]),
+  ];
+}
 
 export const SCHEDULE_HEADERS = [
   "Month",

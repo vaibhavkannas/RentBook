@@ -74,7 +74,7 @@ describe("GoogleSheetsGateway", () => {
 
   it("still translates other read failures", async () => {
     const { api } = mockApi({
-      valuesGetFailWith: Object.assign(new Error("Unable to parse range: Schedule!A1"), {
+      valuesGetFailWith: Object.assign(new Error("Invalid value at 'data'"), {
         status: 400,
         code: 400,
         config: { url: "https://sheets.googleapis.com/v4/spreadsheets/sheet-id/values/x" },
@@ -86,7 +86,7 @@ describe("GoogleSheetsGateway", () => {
         () => null,
         (e: unknown) => e as Error,
       );
-    expect(error?.message).toBe("Google Sheets request failed (HTTP 400): Unable to parse range: Schedule!A1");
+    expect(error?.message).toBe("Google Sheets request failed (HTTP 400): Invalid value at 'data'");
     expect("config" in (error as object)).toBe(false);
   });
 

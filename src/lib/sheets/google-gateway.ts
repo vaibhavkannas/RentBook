@@ -1,7 +1,8 @@
 import { auth as googleAuth, sheets as createSheets, type sheets_v4 } from "@googleapis/sheets";
-import { configError } from "@/lib/errors";
+import { configError, tabMissing } from "@/lib/errors";
 import type { CellWrite, RowOverride, SheetsGateway, ValueRender } from "./gateway";
-import { translateGoogleError } from "./google-errors";
+import { missingTabOf, translateGoogleError } from "./google-errors";
+import { resetBootstrap } from "./settings-store";
 
 const SCOPE = "https://www.googleapis.com/auth/spreadsheets";
 
@@ -48,12 +49,23 @@ export class GoogleSheetsGateway implements SheetsGateway {
     );
   }
 
-  private async call<T>(run: () => Promise<T>): Promise<T> {
+  /**
+   * Makes one Google call. `tabs` are the tabs the request names: a failure that says one of them does not
+   * exist becomes "tab not found", and the app's tab check is run again on the next request, so a tab deleted
+   * or renamed while the app runs is noticed (and a deleted Payments Log or Tenants tab put back).
+   */
+  private async call<T>(run: () => Promise<T>, tabs: string[] = []): Promise<T> {
     try {
       return await run();
     } catch (error) {
-      throw translateGoogleError(error, this.serviceAccountEmail);
+      throw this.translate(error, tabs);
     }
+  }
+
+  private translate(error: unknown, tabs: string[]): unknown {
+    const tab = missingTabOf(error, tabs);
+    if (tab !== null) resetBootstrap(this);
+    return translateGoogleError(error, this.serviceAccountEmail, tab ?? undefined);
   }
 
   private async sheetProps(): Promise<SheetProps[]> {
@@ -98,35 +110,39 @@ export class GoogleSheetsGateway implements SheetsGateway {
       // relies on this when the table fills the whole grid).
       const message = error instanceof Error ? error.message : "";
       if (/exceeds grid limits/i.test(message)) return [];
-      throw translateGoogleError(error, this.serviceAccountEmail);
+      throw this.translate(error, [tab]);
     }
   }
 
   async updateValues(writes: CellWrite[]) {
     if (writes.length === 0) return;
-    await this.call(() =>
-      this.api.spreadsheets.values.batchUpdate({
-        spreadsheetId: this.spreadsheetId,
-        requestBody: {
-          valueInputOption: "RAW",
-          data: writes.map((write) => ({
-            range: `${quote(write.tab)}!${write.a1}`,
-            values: write.values,
-          })),
-        },
-      }),
+    await this.call(
+      () =>
+        this.api.spreadsheets.values.batchUpdate({
+          spreadsheetId: this.spreadsheetId,
+          requestBody: {
+            valueInputOption: "RAW",
+            data: writes.map((write) => ({
+              range: `${quote(write.tab)}!${write.a1}`,
+              values: write.values,
+            })),
+          },
+        }),
+      [...new Set(writes.map((write) => write.tab))],
     );
   }
 
   async appendRow(tab: string, row: unknown[]) {
-    await this.call(() =>
-      this.api.spreadsheets.values.append({
-        spreadsheetId: this.spreadsheetId,
-        range: `${quote(tab)}!A1`,
-        valueInputOption: "RAW",
-        insertDataOption: "INSERT_ROWS",
-        requestBody: { values: [row] },
-      }),
+    await this.call(
+      () =>
+        this.api.spreadsheets.values.append({
+          spreadsheetId: this.spreadsheetId,
+          range: `${quote(tab)}!A1`,
+          valueInputOption: "RAW",
+          insertDataOption: "INSERT_ROWS",
+          requestBody: { values: [row] },
+        }),
+      [tab],
     );
   }
 
@@ -138,7 +154,10 @@ export class GoogleSheetsGateway implements SheetsGateway {
     overrides: RowOverride[],
   ) {
     const props = (await this.sheetProps()).find((sheet) => sheet.title === tab);
-    if (!props) throw configError(`The tab "${tab}" was not found in the Google Sheet.`);
+    if (!props) {
+      resetBootstrap(this);
+      throw tabMissing(tab);
+    }
     const { sheetId } = props;
 
     const rowRange = (row: number) => ({
@@ -181,11 +200,13 @@ export class GoogleSheetsGateway implements SheetsGateway {
       });
     }
 
-    await this.call(() =>
-      this.api.spreadsheets.batchUpdate({
-        spreadsheetId: this.spreadsheetId,
-        requestBody: { requests },
-      }),
+    await this.call(
+      () =>
+        this.api.spreadsheets.batchUpdate({
+          spreadsheetId: this.spreadsheetId,
+          requestBody: { requests },
+        }),
+      [tab],
     );
   }
 }

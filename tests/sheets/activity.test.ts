@@ -1,11 +1,15 @@
 import { describe, expect, it } from "vitest";
 import { readActivity, type SheetsContext } from "@/lib/sheets/service";
-import { LOG_HEADERS, LOG_TAB } from "@/lib/sheets/settings-store";
+import { LOG_HEADERS, LOG_TAB, SETTINGS_TAB } from "@/lib/sheets/settings-store";
 import { FakeGateway } from "../support/fake-gateway";
-import { baseSchedule, TOTAL_HEADER } from "../support/fixtures";
+import { baseSchedule, settingsGrid, TOTAL_HEADER } from "../support/fixtures";
 
 function setup(logRows: unknown[][]) {
-  const fake = new FakeGateway({ Schedule: baseSchedule(), [LOG_TAB]: [[...LOG_HEADERS], ...logRows] });
+  const fake = new FakeGateway({
+    Schedule: baseSchedule(),
+    [SETTINGS_TAB]: settingsGrid(),
+    [LOG_TAB]: [[...LOG_HEADERS], ...logRows],
+  });
   const ctx: SheetsContext = { gateway: fake, scheduleTab: "Schedule", totalHeader: TOTAL_HEADER };
   return { fake, ctx };
 }

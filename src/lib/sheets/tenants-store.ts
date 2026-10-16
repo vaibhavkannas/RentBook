@@ -3,6 +3,7 @@ import { isoDayFromSerial } from "@/lib/domain/year-month";
 import { sheetStructure } from "@/lib/errors";
 import { colLetter } from "./a1";
 import type { CellWrite, SheetsGateway } from "./gateway";
+import { addTabIfMissing } from "./tabs";
 
 export const TENANTS_TAB = "Tenants";
 
@@ -37,8 +38,8 @@ export async function ensureTenantsTab(
   gateway: SheetsGateway,
   existingTabs: string[],
 ): Promise<void> {
-  if (!existingTabs.includes(TENANTS_TAB)) {
-    await gateway.addTab(TENANTS_TAB);
+  // A tab another instance added a moment ago is treated as an existing one: its header is checked below.
+  if (!existingTabs.includes(TENANTS_TAB) && (await addTabIfMissing(gateway, TENANTS_TAB))) {
     await gateway.updateValues([{ tab: TENANTS_TAB, a1: "A1", values: [TENANT_HEADERS] }]);
     return;
   }

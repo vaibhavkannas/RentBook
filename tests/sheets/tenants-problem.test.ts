@@ -12,10 +12,11 @@ import {
   withSnapshotCache,
   type SheetsContext,
 } from "@/lib/sheets/service";
+import { SETTINGS_TAB } from "@/lib/sheets/settings-store";
 import { getPortionTenants, moveOutTenancy, saveTenancy } from "@/lib/sheets/tenancy-service";
 import { appendTenancy, readTenancies, TENANT_HEADERS, TENANTS_TAB } from "@/lib/sheets/tenants-store";
 import { FakeGateway } from "../support/fake-gateway";
-import { baseSchedule, PORTIONS, TOTAL_HEADER } from "../support/fixtures";
+import { baseSchedule, PORTIONS, settingsGrid, TOTAL_HEADER } from "../support/fixtures";
 
 // A wrong Tenants header must only switch off the tenant details. Month views, payments, undo, Activity and
 // Settings keep working, the tenancy writes refuse and write nothing, and the tenant page says what is wrong.
@@ -94,6 +95,7 @@ describe("ensureTabs and a wrong Tenants header (a)", () => {
     const { fake, ctx } = setup();
     const wrong = [...TENANT_HEADERS];
     wrong[9] = "Money back";
+    fake.tabs.set(SETTINGS_TAB, settingsGrid());
     fake.tabs.set(TENANTS_TAB, [wrong]);
     await expect(getSettings(ctx)).resolves.toHaveLength(PORTIONS.length);
     await expect(getMonthView(ctx, OCT)).resolves.toMatchObject({ cards: expect.any(Array) });
