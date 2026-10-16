@@ -15,6 +15,7 @@ import { sign } from "@/lib/server/signing";
 import { logPayment, withSnapshotCache, type SheetsContext } from "@/lib/sheets/service";
 import { FakeGateway } from "../support/fake-gateway";
 import { baseSchedule, TOTAL_HEADER } from "../support/fixtures";
+import { captureLogs, loggedLines } from "../support/logs";
 
 const SECRET = "a-test-secret-that-is-at-least-32-characters-long";
 const EMAIL = "member@example.com";
@@ -28,7 +29,10 @@ beforeEach(() => {
   jar.store.clear();
   jar.set.mockClear();
 });
-afterEach(() => vi.unstubAllEnvs());
+afterEach(() => {
+  vi.unstubAllEnvs();
+  vi.restoreAllMocks();
+});
 
 describe("freshness cookie", () => {
   it("round-trips the write time for the same person", async () => {
@@ -57,29 +61,44 @@ describe("freshness cookie", () => {
     expect(await readWrittenAt("MEMBER@example.com", NOW)).toBe(NOW);
   });
 
-  it("does not throw when the cookie cannot be set, because the Sheet was already written", async () => {
-    const logged = vi.spyOn(console, "error").mockImplementation(() => undefined);
-    try {
-      jar.set.mockImplementationOnce(() => {
-        throw new Error("cookies can only be set in a Route Handler or Server Function");
+  it("does not throw when the cookie cannot be set, because the Sheet was already written, and logs one warning line", async () => {
+    const logs = captureLogs();
+    jar.set.mockImplementationOnce(() => {
+      throw new Error("cookies can only be set in a Route Handler or Server Function");
+    });
+    await expect(markWritten(EMAIL, NOW)).resolves.toBeUndefined();
+    const lines = loggedLines(logs.warn);
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toMatchObject({
+      level: "warn",
+      event: "freshness-cookie-not-set",
+      message: expect.stringContaining("cookies can only be set in a Route Handler or Server Function"),
+    });
+    expect(logs.error).not.toHaveBeenCalled();
+    expect(logs.info).not.toHaveBeenCalled();
+  });
+
+  it("does not log what the failing error carries, nor the person's address", async () => {
+    const logs = captureLogs();
+    jar.set.mockImplementationOnce(() => {
+      throw Object.assign(new Error("cookie store closed"), {
+        details: { tenant: "Canary Tenant" },
+        config: { headers: { Cookie: "authjs.session-token=canary-token" } },
       });
-      await expect(markWritten(EMAIL, NOW)).resolves.toBeUndefined();
-      expect(logged).toHaveBeenCalled();
-    } finally {
-      logged.mockRestore();
-    }
+    });
+    await markWritten(EMAIL, NOW);
+    const text = [logs.info, logs.warn, logs.error].flatMap((spy) => spy.mock.calls.flat()).join(" ");
+    expect(text).toContain("cookie store closed");
+    expect(text).not.toMatch(/Canary|canary-token|Cookie|member@example\.com/);
   });
 
   it("does not throw, and sets nothing, when AUTH_SECRET is not usable", async () => {
-    const logged = vi.spyOn(console, "error").mockImplementation(() => undefined);
-    try {
-      vi.stubEnv("AUTH_SECRET", "short");
-      await expect(markWritten(EMAIL, NOW)).resolves.toBeUndefined();
-      expect(jar.set).not.toHaveBeenCalled();
-      expect(logged.mock.calls.flat().join(" ")).not.toContain("short");
-    } finally {
-      logged.mockRestore();
-    }
+    const logs = captureLogs();
+    vi.stubEnv("AUTH_SECRET", "short");
+    await expect(markWritten(EMAIL, NOW)).resolves.toBeUndefined();
+    expect(jar.set).not.toHaveBeenCalled();
+    expect(loggedLines(logs.warn)).toHaveLength(1);
+    expect(logs.warn.mock.calls.flat().join(" ")).not.toContain("short");
   });
 
   it("returns undefined when absent, empty or not shaped like a signed time", async () => {

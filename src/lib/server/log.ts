@@ -86,3 +86,15 @@ export function describeError(error: unknown): string {
 export function messageForLog(error: AppError): string {
   return error.code === "conflict" ? "The Sheet no longer matches what the person was looking at." : error.message;
 }
+
+/**
+ * The `code` and `message` of a line about a caught `error`, for the sites that log a failure they handle
+ * themselves (handle() and instrumentation.ts build the same two fields for an answer or an uncaught error).
+ * `what` says where it happened and what it left behind; the error follows in brackets, as `messageForLog` for
+ * an AppError (with its code in `code`) and as `describeError` for anything else (no code). The error object
+ * itself is never printed, so what a library's error carries along never reaches the log.
+ */
+export function errorLogFields(error: unknown, what: string): Pick<LogFields, "code" | "message"> {
+  if (error instanceof AppError) return { code: error.code, message: `${what} (${messageForLog(error)}).` };
+  return { message: `${what} (${describeError(error)}).` };
+}

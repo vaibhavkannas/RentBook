@@ -19,6 +19,7 @@ import {
 import { appendTenancy, readTenancies, TENANTS_TAB } from "@/lib/sheets/tenants-store";
 import { cell, FakeGateway } from "../support/fake-gateway";
 import { baseSchedule, PORTIONS, TOTAL_HEADER } from "../support/fixtures";
+import { loggedLines } from "../support/logs";
 
 const NOW = new Date("2026-10-05T04:30:00Z");
 const LATER = new Date("2026-10-06T09:00:00Z");
@@ -1270,7 +1271,7 @@ describe("getPortionTenants", () => {
 });
 
 describe("logPayment: tenancy details for a new tenant", () => {
-  // A tenancy failure is logged with console.error. Keep the test output clean and let tests look at the calls.
+  // A tenancy failure is logged at level error (console.error). Keep the test output clean and let tests look at the lines.
   let errorSpy: MockInstance<typeof console.error>;
   beforeEach(() => {
     errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
@@ -1521,18 +1522,56 @@ describe("logPayment: tenancy details for a new tenant", () => {
     expect(await tenancies(ctx)).toMatchObject([{ id: asha.id, tenant: "Asha", moveOut: "" }]);
   });
 
-  it("logs the reason when the tenancy work fails after the payment was saved", async () => {
+  it("logs the reason when the tenancy work fails after the payment was saved, as one error line", async () => {
     const { fake, ctx } = await ready();
     await create(ctx);
     failTenantsWrites(fake, "appendRow");
 
     await payNew(ctx, { tenancy: NEW_FIELDS });
 
-    expect(errorSpy).toHaveBeenCalledOnce();
-    const [message, error] = errorSpy.mock.calls[0];
-    expect(message).toBe("Tenancy write failed after the payment was saved");
-    expect(error).toBeInstanceOf(Error);
-    expect((error as Error).message).toBe("appendRow failed on the Tenants tab");
+    const lines = loggedLines(errorSpy);
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toMatchObject({ level: "error", event: "tenancy-write-failed" });
+    expect(lines[0].message).toBe(
+      "The payment was saved, but the tenancy details were not (Error: appendRow failed on the Tenants tab).",
+    );
+    expect(lines[0]).not.toHaveProperty("code");
+  });
+
+  it("does not log what the failing error carries: the request it made holds the tenant and the phone number", async () => {
+    const { fake, ctx } = await ready();
+    await create(ctx);
+    const original = fake.appendRow.bind(fake);
+    fake.appendRow = async (tab, values) => {
+      if (tab !== TENANTS_TAB) return original(tab, values);
+      throw Object.assign(new Error("socket hang up"), {
+        details: { tenant: "Hari" },
+        config: { data: { values: [values] }, headers: { Authorization: "Bearer canary-token" } },
+      });
+    };
+
+    await payNew(ctx, { tenancy: NEW_FIELDS });
+
+    const text = errorSpy.mock.calls.flat().join(" ");
+    expect(loggedLines(errorSpy)).toHaveLength(1);
+    expect(text).toContain("socket hang up");
+    expect(text).not.toMatch(/Hari|98000|12345|12000|canary-token|Bearer|Authorization/);
+  });
+
+  it("logs the code of an error of ours, and not the text of a conflict, which can name a tenant", async () => {
+    const { fake, ctx } = await ready();
+    await create(ctx);
+    const original = fake.appendRow.bind(fake);
+    fake.appendRow = async (tab, values) => {
+      if (tab !== TENANTS_TAB) return original(tab, values);
+      throw new AppError("conflict", "Asha has already moved out. Refresh the page.", { tenant: "Asha" });
+    };
+
+    await payNew(ctx, { tenancy: NEW_FIELDS });
+
+    const [line] = loggedLines(errorSpy);
+    expect(line).toMatchObject({ event: "tenancy-write-failed", code: "conflict" });
+    expect(errorSpy.mock.calls.flat().join(" ")).not.toContain("Asha");
   });
 
   it("keeps the payment when closing the previous tenancy fails, and says so", async () => {

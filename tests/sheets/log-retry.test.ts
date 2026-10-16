@@ -3,6 +3,7 @@ import { retryLogRow, type LogRow, type SheetsContext } from "@/lib/sheets/servi
 import { LOG_HEADERS, LOG_TAB, SETTINGS_TAB } from "@/lib/sheets/settings-store";
 import { FakeGateway } from "../support/fake-gateway";
 import { baseSchedule, settingsGrid, TOTAL_HEADER } from "../support/fixtures";
+import { loggedLines } from "../support/logs";
 
 const ROW: LogRow = [
   "2026-10-05T04:30:00.000Z",
@@ -121,7 +122,27 @@ describe("retryLogRow", () => {
     expect(await retryLogRow(ctx, ROW, 0)).toBe(false);
     fake.failOn.clear();
     expect(logRows()).toEqual([other(1)]);
-    expect(log).toHaveBeenCalled();
+    const lines = loggedLines(log);
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toMatchObject({ level: "error", event: "payments-log-check-failed" });
+    expect(String(lines[0].message)).toMatch(/nothing was added/);
+  });
+
+  it("does not log the row, nor what the failing read carries, when the log cannot be read", async () => {
+    const { fake, ctx } = setup();
+    await retryLogRow(ctx, other(1), 0);
+    fake.getValues = async () => {
+      throw Object.assign(new Error("socket hang up"), {
+        details: { tenant: "Asha" },
+        config: { headers: { Authorization: "Bearer canary-token" } },
+      });
+    };
+    expect(await retryLogRow(ctx, ROW, 0)).toBe(false);
+    const [line] = loggedLines(log);
+    expect(line).not.toHaveProperty("code");
+    expect(String(line.message)).toContain("Error: socket hang up");
+    const text = log.mock.calls.flat().join(" ");
+    expect(text).not.toMatch(/Asha|5450|member@example\.com|canary-token|Bearer|Authorization/);
   });
 
   it("still gives up quietly when the append itself fails", async () => {

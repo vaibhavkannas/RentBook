@@ -17,6 +17,7 @@ import { getPortionTenants, moveOutTenancy, saveTenancy } from "@/lib/sheets/ten
 import { appendTenancy, readTenancies, TENANT_HEADERS, TENANTS_TAB } from "@/lib/sheets/tenants-store";
 import { FakeGateway } from "../support/fake-gateway";
 import { baseSchedule, PORTIONS, settingsGrid, TOTAL_HEADER } from "../support/fixtures";
+import { loggedLines } from "../support/logs";
 
 // A wrong Tenants header must only switch off the tenant details. Month views, payments, undo, Activity and
 // Settings keep working, the tenancy writes refuse and write nothing, and the tenant page says what is wrong.
@@ -306,10 +307,11 @@ describe("tenancy writes with a wrong Tenants header (d)", () => {
     expect(result).toMatchObject({ logWritten: true, tenancyWritten: false, entry: { tenant: "Hari", count: 1, amount: 6000 } });
     expect(p1Cell(fake, 6)).toBe("Hari"); // the new Oct-26 row of the Schedule
     expect(fake.tabs.get(TENANTS_TAB)).toEqual(tenantsBefore);
-    expect(errorSpy).toHaveBeenCalledTimes(1);
-    const [message, reason] = errorSpy.mock.calls[0];
-    expect(message).toMatch(/Tenancy write failed after the payment was saved/);
-    expect(String((reason as Error).message)).toContain('"Move-in date"');
+    const lines = loggedLines(errorSpy);
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toMatchObject({ level: "error", event: "tenancy-write-failed", code: "sheet-structure" });
+    expect(String(lines[0].message)).toMatch(/payment was saved/);
+    expect(String(lines[0].message)).toContain('"Move-in date"');
   });
 
   it("logPayment for a new tenant with no details also leaves the previous tenancy alone and says so", async () => {

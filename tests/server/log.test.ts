@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AppError, conflict, rateLimited } from "@/lib/errors";
-import { describeError, logEvent, messageForLog, requestIdFrom } from "@/lib/server/log";
+import { describeError, errorLogFields, logEvent, messageForLog, requestIdFrom } from "@/lib/server/log";
 import { captureLogs, loggedLines, type LogSpies } from "../support/logs";
 
 let logs: LogSpies;
@@ -167,5 +167,40 @@ describe("messageForLog", () => {
     expect(messageForLog(new AppError("sheet-structure", 'The tab "Tenants" was not found.'))).toBe(
       'The tab "Tenants" was not found.',
     );
+  });
+});
+
+describe("errorLogFields", () => {
+  it("gives the code and the text of an AppError, after the sentence that says where it happened", () => {
+    expect(errorLogFields(rateLimited(), "A page could not read the Sheet")).toEqual({
+      code: "rate-limited",
+      message: `A page could not read the Sheet (${rateLimited().message}).`,
+    });
+  });
+
+  it("keeps a conflict's text, which can name a tenant, out, as handle() does", () => {
+    const fields = errorLogFields(conflict("Asha Verma has already moved out."), "Saving failed");
+    expect(fields.code).toBe("conflict");
+    expect(fields.message).toBe(`Saving failed (${messageForLog(conflict("x"))}).`);
+    expect(fields.message).not.toContain("Asha");
+  });
+
+  it("names the kind of an error that is not ours and leaves out its code", () => {
+    const fields = errorLogFields(new TypeError("bad thing"), "A page could not read the Sheet");
+    expect(fields).toEqual({ message: "A page could not read the Sheet (TypeError: bad thing)." });
+    expect(fields).not.toHaveProperty("code");
+  });
+
+  it("never includes the rest of the error object", () => {
+    const error = Object.assign(new Error("socket hang up"), {
+      config: { headers: { Authorization: "Bearer abc" } },
+      details: { tenant: "Asha Verma" },
+    });
+    expect(JSON.stringify(errorLogFields(error, "x"))).not.toMatch(/Bearer|Authorization|Asha/);
+  });
+
+  it("copes with a thrown value that is not an Error", () => {
+    expect(errorLogFields("Asha Verma", "x")).toEqual({ message: "x (unknown error)." });
+    expect(errorLogFields(undefined, "x")).toEqual({ message: "x (unknown error)." });
   });
 });

@@ -1,4 +1,5 @@
 import "server-only";
+import { logEvent } from "./log";
 
 /**
  * How long a sign-in lasts, counted from the moment of signing in. Using the app does not extend it: `auth()` without
@@ -29,7 +30,9 @@ export function isSessionCurrent(issuedAt: unknown, notBefore: string | undefine
   if (!notBefore?.trim()) return true;
   const cutOff = Date.parse(notBefore.trim());
   if (Number.isNaN(cutOff)) {
-    console.error("SESSION_NOT_BEFORE is not a date and time (for example 2026-10-16T10:00:00Z), so every session is refused.");
+    logEvent("error", "session-not-before-unreadable", {
+      message: "SESSION_NOT_BEFORE is not a date and time (for example 2026-10-16T10:00:00Z), so every session is refused.",
+    });
     return false;
   }
   const signedInAt = typeof issuedAt === "number" && Number.isFinite(issuedAt) ? issuedAt : 0;

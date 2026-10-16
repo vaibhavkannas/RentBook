@@ -2,6 +2,7 @@ import "server-only";
 import { cookies } from "next/headers";
 import type { MonthView, YearMonth } from "@/lib/domain/types";
 import { getMonthView, type SheetsContext } from "@/lib/sheets/service";
+import { errorLogFields, logEvent } from "./log";
 import { macMatches, sign } from "./signing";
 
 const COOKIE = "rb-wrote";
@@ -32,7 +33,7 @@ export async function markWritten(email: string, now = Date.now()): Promise<void
       maxAge: COOKIE_LIFETIME_SECONDS,
     });
   } catch (error) {
-    console.error("Could not set the write-time cookie", error);
+    logEvent("warn", "freshness-cookie-not-set", errorLogFields(error, "Could not set the write-time cookie"));
   }
 }
 

@@ -19,7 +19,7 @@ import type {
 import { addMonths, compareYm, ymKey } from "@/lib/domain/year-month";
 import { AppError, conflict, sheetStructure, validation } from "@/lib/errors";
 import { formatMonthTitle } from "@/lib/format";
-import { describeError, logEvent } from "@/lib/server/log";
+import { describeError, errorLogFields, logEvent } from "@/lib/server/log";
 import { colLetter } from "./a1";
 import { text } from "./cells";
 import type { SheetsGateway } from "./gateway";
@@ -350,9 +350,10 @@ async function confirmWritten(ctx: SheetsContext, row: number, written: WrittenC
   try {
     stored = (await ctx.gateway.getValues(ctx.scheduleTab, `A${row}:ZZ${row}`, "UNFORMATTED_VALUE"))[0] ?? [];
   } catch (error) {
-    console.error(
-      `Schedule row ${row} was written but could not be read back (written, not verified); carrying on.`,
-      error,
+    logEvent(
+      "warn",
+      "read-back-failed",
+      errorLogFields(error, `Schedule row ${row} was written but could not be read back (written, not verified); carrying on`),
     );
     return;
   }
@@ -489,7 +490,7 @@ async function logPaymentUnchecked(
       );
       result.tenancyWritten = true;
     } catch (error) {
-      console.error("Tenancy write failed after the payment was saved", error);
+      logEvent("error", "tenancy-write-failed", errorLogFields(error, "The payment was saved, but the tenancy details were not"));
       result.tenancyWritten = false;
     }
   }
@@ -713,7 +714,11 @@ export async function retryLogRow(
       try {
         recent = (await ctx.gateway.getValues(LOG_TAB, "A1:I", "UNFORMATTED_VALUE")).slice(-RETRY_LOOKBACK_ROWS);
       } catch (error) {
-        console.error(`Payments Log: could not check whether the row is already there (${describeError(error)}). Nothing was added.`);
+        logEvent(
+          "error",
+          "payments-log-check-failed",
+          errorLogFields(error, "Payments Log: could not check whether the row is already there, so nothing was added"),
+        );
         return false;
       }
       if (recent.some((stored) => sameLogEntry(stored, row))) return true;

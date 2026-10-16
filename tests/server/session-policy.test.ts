@@ -1,5 +1,6 @@
-import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { isSessionCurrent, SESSION_MAX_AGE_SECONDS, stampIssuedAt } from "@/lib/server/session-policy";
+import { captureLogs, loggedLines, type LogSpies } from "../support/logs";
 
 const NOW = Date.parse("2026-10-16T10:00:00Z");
 
@@ -26,11 +27,11 @@ describe("stampIssuedAt", () => {
 });
 
 describe("isSessionCurrent", () => {
-  let log: MockInstance<typeof console.error>;
+  let logs: LogSpies;
   beforeEach(() => {
-    log = vi.spyOn(console, "error").mockImplementation(() => {});
+    logs = captureLogs();
   });
-  afterEach(() => log.mockRestore());
+  afterEach(() => vi.restoreAllMocks());
 
   const CUT = "2026-10-16T10:00:00Z";
 
@@ -68,17 +69,25 @@ describe("isSessionCurrent", () => {
     }
   });
 
-  it("says in the server log when the cut-off cannot be read, without repeating its value", () => {
+  it("says in the server log, as one error line, when the cut-off cannot be read, without repeating its value", () => {
     isSessionCurrent(NOW, "tomorrow-ish");
-    expect(log).toHaveBeenCalled();
-    const text = log.mock.calls.flat().join(" ");
-    expect(text).toMatch(/SESSION_NOT_BEFORE/);
-    expect(text).not.toContain("tomorrow-ish");
+    const lines = loggedLines(logs.error);
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toMatchObject({
+      level: "error",
+      event: "session-not-before-unreadable",
+      message: expect.stringMatching(/SESSION_NOT_BEFORE/),
+    });
+    expect(String(logs.error.mock.calls[0][0])).not.toContain("tomorrow-ish");
+    expect(logs.info).not.toHaveBeenCalled();
+    expect(logs.warn).not.toHaveBeenCalled();
   });
 
   it("logs nothing for a cut-off that reads fine, or for none", () => {
     isSessionCurrent(NOW, CUT);
     isSessionCurrent(NOW, undefined);
-    expect(log).not.toHaveBeenCalled();
+    expect(logs.error).not.toHaveBeenCalled();
+    expect(logs.warn).not.toHaveBeenCalled();
+    expect(logs.info).not.toHaveBeenCalled();
   });
 });

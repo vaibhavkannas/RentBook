@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AppError, configError, rateLimited, unavailable } from "@/lib/errors";
 import type { CellWrite, ValueRender } from "@/lib/sheets/gateway";
 import {
@@ -12,6 +12,7 @@ import {
 import { LOG_TAB } from "@/lib/sheets/settings-store";
 import { cell, FakeGateway } from "../support/fake-gateway";
 import { baseSchedule, TOTAL_HEADER } from "../support/fixtures";
+import { captureLogs, loggedLines, type LogSpies } from "../support/logs";
 
 const NOW = new Date("2026-10-05T04:30:00Z");
 const OCT = { year: 2026, month: 10 };
@@ -70,12 +71,12 @@ const pay = (ctx: SheetsContext, input: Partial<LogPaymentInput> & { portionId: 
 const logRows = (fake: FakeGateway) => fake.tabs.get(LOG_TAB)!.slice(1);
 const appends = (fake: FakeGateway) => fake.calls.filter((call) => call === "appendRow").length;
 
-let log: MockInstance<typeof console.error>;
+let logs: LogSpies;
 beforeEach(() => {
-  log = vi.spyOn(console, "error").mockImplementation(() => {});
+  logs = captureLogs();
 });
 afterEach(() => {
-  log.mockRestore();
+  vi.restoreAllMocks();
   vi.useRealTimers();
 });
 
@@ -109,15 +110,34 @@ describe("when the read-back of a written payment cannot be done", () => {
     expect(logRows(fake)[0][8]).toBe("Undone");
   });
 
-  it("says in the server log that the change was written but not verified, without hiding the cause", async () => {
+  it("says in the server log, as one warning line, that the change was written but not verified, without hiding the cause", async () => {
     const { fake, ctx } = await ready();
     fake.readBackFailure = unavailable();
     await pay(ctx, { portionId: "p1" });
-    expect(log).toHaveBeenCalledTimes(1);
-    const [message, cause] = log.mock.calls[0];
-    expect(String(message)).toMatch(/read back/i);
-    expect(String(message)).toMatch(/not verified/i);
-    expect((cause as AppError).code).toBe("unavailable");
+    const lines = loggedLines(logs.warn);
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toMatchObject({ level: "warn", event: "read-back-failed", code: "unavailable" });
+    expect(String(lines[0].message)).toMatch(/Schedule row 6/);
+    expect(String(lines[0].message)).toMatch(/read back/i);
+    expect(String(lines[0].message)).toMatch(/not verified/i);
+    expect(String(lines[0].message)).toContain(unavailable().message);
+    expect(logs.error).not.toHaveBeenCalled();
+    expect(logs.info).not.toHaveBeenCalled();
+  });
+
+  it("names the kind of an error it does not know, and never prints what the error carries", async () => {
+    const { fake, ctx } = await ready();
+    fake.readBackFailure = Object.assign(new Error("socket hang up"), {
+      details: { tenant: "Canary Tenant" },
+      config: { data: { values: [["Canary Tenant", 5450]] }, headers: { Authorization: "Bearer canary-token" } },
+    });
+    await pay(ctx, { portionId: "p1" });
+    const [line] = loggedLines(logs.warn);
+    expect(line.event).toBe("read-back-failed");
+    expect(line).not.toHaveProperty("code");
+    expect(String(line.message)).toContain("Error: socket hang up");
+    const text = logs.warn.mock.calls.flat().join(" ");
+    expect(text).not.toMatch(/Canary|canary-token|Bearer|Authorization/);
   });
 
   it("still refuses a genuine mismatch, and writes no log row", async () => {
@@ -135,7 +155,8 @@ describe("when the read-back of a written payment cannot be done", () => {
     expect(error!.code).toBe("conflict");
     expect(error!.message).toBe("Your change may not have been saved. Refresh and check this month.");
     expect(fake.tabs.get(LOG_TAB)).toHaveLength(1);
-    expect(log).not.toHaveBeenCalled();
+    expect(logs.error).not.toHaveBeenCalled();
+    expect(logs.warn).not.toHaveBeenCalled();
   });
 });
 
@@ -229,8 +250,8 @@ describe("a Payments Log row is added again only after a refusal that cannot hav
       fake.appendFailures = [rateLimited(), rateLimited(), rateLimited()];
       const result = await pay(ctx, { portionId: "p1" });
       expect(result.logWritten).toBe(false);
-      expect(log).toHaveBeenCalledTimes(3);
-      const text = log.mock.calls.map((call) => call.map(String).join(" "));
+      expect(logs.error).toHaveBeenCalledTimes(3);
+      const text = logs.error.mock.calls.map((call) => call.map(String).join(" "));
       expect(text[0]).toMatch(/Payments Log/);
       expect(text[0]).toMatch(/try 1 of 3/);
       expect(text[2]).toMatch(/try 3 of 3/);
@@ -243,8 +264,8 @@ describe("a Payments Log row is added again only after a refusal that cannot hav
       const { fake, ctx } = await ready();
       fake.appendFailures = [Object.assign(new Error("socket hang up"), { config: { headers: { Authorization: "Bearer abc" } } })];
       await pay(ctx, { portionId: "p1" });
-      expect(log).toHaveBeenCalledTimes(1);
-      const [message, ...rest] = log.mock.calls[0];
+      expect(logs.error).toHaveBeenCalledTimes(1);
+      const [message, ...rest] = logs.error.mock.calls[0];
       expect(String(message)).toMatch(/Error: socket hang up/);
       expect(rest).toEqual([]);
       expect(String(message)).not.toMatch(/Bearer|Authorization/);
@@ -254,7 +275,7 @@ describe("a Payments Log row is added again only after a refusal that cannot hav
       const { fake, ctx } = await ready();
       fake.appendFailures = [rateLimited(), rateLimited(), rateLimited()];
       await pay(ctx, { portionId: "p1" });
-      const lines = log.mock.calls.map(([line]) => JSON.parse(String(line)));
+      const lines = logs.error.mock.calls.map(([line]) => JSON.parse(String(line)));
       expect(lines).toHaveLength(3);
       for (const line of lines) {
         expect(line).toMatchObject({ level: "error", event: "payments-log-append-failed", code: "rate-limited" });
@@ -268,7 +289,7 @@ describe("a Payments Log row is added again only after a refusal that cannot hav
       const { fake, ctx } = await ready();
       fake.appendFailures = [new Error("socket hang up")];
       await pay(ctx, { portionId: "p1" });
-      const [line] = log.mock.calls.map(([text]) => JSON.parse(String(text)));
+      const [line] = logs.error.mock.calls.map(([text]) => JSON.parse(String(text)));
       expect(line).not.toHaveProperty("code");
       expect(line.message).toMatch(/Error: socket hang up/);
     });
@@ -276,7 +297,8 @@ describe("a Payments Log row is added again only after a refusal that cannot hav
     it("logs nothing when the first try works", async () => {
       const { ctx } = await ready();
       await pay(ctx, { portionId: "p1" });
-      expect(log).not.toHaveBeenCalled();
+      expect(logs.error).not.toHaveBeenCalled();
+      expect(logs.warn).not.toHaveBeenCalled();
     });
   });
 
