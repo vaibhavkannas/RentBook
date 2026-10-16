@@ -18,7 +18,7 @@ const APP_DIR = fileURLToPath(new URL("../../src/app", import.meta.url));
 const OPEN_FOLDERS = [
   "signin", // the sign-in page: it must open for people who are not signed in (it sends signed-in people home)
   "api/auth", // Auth.js's own sign-in, sign-out and callback routes
-  "api/health", // the health check, for uptime monitors (arrives with the error pages)
+  "api/health", // the health check, for uptime monitors: it answers { ok, version } and nothing else
 ];
 
 /** Special files Next serves without any page of ours, as their name without the extension. All are public. */
@@ -153,6 +153,7 @@ describe("the pages and routes under src/app", () => {
         "tenants/[portionId]/page.tsx",
         "signin/page.tsx",
         "api/auth/[...nextauth]/route.ts",
+        "api/health/route.ts",
         "api/payments/route.ts",
         "api/payments/log-retry/route.ts",
         "api/payments/undo/route.ts",
