@@ -19,5 +19,5 @@ export async function POST(request: Request) {
       moveOutTenancy(getSheetsContext(), body, { now: new Date(), updatedBy: viewer.email }),
     );
     return { ...result };
-  });
+  }, request);
 }

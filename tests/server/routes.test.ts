@@ -34,6 +34,7 @@ vi.mock("@/lib/sheets/tenancy-service", async (importOriginal) => ({
 }));
 
 import { conflict, configError, rateLimited, unavailable, validation } from "@/lib/errors";
+import { captureLogs, loggedLines, type LogSpies } from "../support/logs";
 import { createRetryToken, RETRY_TOKEN_MAX_AGE_MS } from "@/lib/server/retry-token";
 import { POST as postRetry } from "@/app/api/payments/log-retry/route";
 import { POST as postPayment } from "@/app/api/payments/route";
@@ -56,8 +57,11 @@ const signedInAs = (email: string | null) =>
 
 const SECRET = "a-test-secret-that-is-at-least-32-characters-long";
 
+// Every refused request is logged as one line (see handle): held back, so the output stays clean.
+let logs: LogSpies;
 let savedEnv: string | undefined;
 beforeEach(() => {
+  logs = captureLogs();
   savedEnv = process.env.ALLOWED_EMAILS;
   process.env.ALLOWED_EMAILS = "owner@example.com, member@example.com";
   vi.stubEnv("AUTH_SECRET", SECRET);
@@ -72,6 +76,7 @@ beforeEach(() => {
   moveOutTenancy.mockReset();
 });
 afterEach(() => {
+  for (const spy of Object.values(logs)) spy.mockRestore();
   vi.unstubAllEnvs();
   if (savedEnv === undefined) delete process.env.ALLOWED_EMAILS;
   else process.env.ALLOWED_EMAILS = savedEnv;
@@ -876,6 +881,17 @@ describe("request integrity on every route", () => {
       expect(res.status).toBe(415);
       expect((await res.json()).error.code).toBe("validation");
       expect(auth).not.toHaveBeenCalled();
+    });
+
+    it("answers a refusal with the request id of the request, and logs it with the route", async () => {
+      signedInAs("owner@example.com");
+      const id = "iad1::sfo1::abcde-1760592600000-0123456789ab";
+      const res = await handler(make(method, `${url}?x=1`, { "Content-Type": "text/plain", "x-vercel-id": id }, "{}"));
+      expect(res.status).toBe(415);
+      expect((await res.json()).requestId).toBe(id);
+      expect(loggedLines(logs.info)).toEqual([
+        expect.objectContaining({ level: "info", code: "validation", requestId: id, route: new URL(url).pathname }),
+      ]);
     });
 
     it("refuses a body over 32 KB with 413, even from someone who is not signed in", async () => {

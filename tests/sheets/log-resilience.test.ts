@@ -250,6 +250,29 @@ describe("a Payments Log row is added again only after a refusal that cannot hav
       expect(String(message)).not.toMatch(/Bearer|Authorization/);
     });
 
+    it("writes each one as a line of the shared logger: level error, a named event and the code of the error", async () => {
+      const { fake, ctx } = await ready();
+      fake.appendFailures = [rateLimited(), rateLimited(), rateLimited()];
+      await pay(ctx, { portionId: "p1" });
+      const lines = log.mock.calls.map(([line]) => JSON.parse(String(line)));
+      expect(lines).toHaveLength(3);
+      for (const line of lines) {
+        expect(line).toMatchObject({ level: "error", event: "payments-log-append-failed", code: "rate-limited" });
+        expect(typeof line.ts).toBe("string");
+        expect(Object.keys(line).sort()).toEqual(["code", "event", "level", "message", "ts"]);
+      }
+      expect(lines[1].message).toMatch(/try 2 of 3/);
+    });
+
+    it("leaves out the code for an error that is not one of ours", async () => {
+      const { fake, ctx } = await ready();
+      fake.appendFailures = [new Error("socket hang up")];
+      await pay(ctx, { portionId: "p1" });
+      const [line] = log.mock.calls.map(([text]) => JSON.parse(String(text)));
+      expect(line).not.toHaveProperty("code");
+      expect(line.message).toMatch(/Error: socket hang up/);
+    });
+
     it("logs nothing when the first try works", async () => {
       const { ctx } = await ready();
       await pay(ctx, { portionId: "p1" });

@@ -19,6 +19,7 @@ import type {
 import { addMonths, compareYm, ymKey } from "@/lib/domain/year-month";
 import { AppError, conflict, sheetStructure, validation } from "@/lib/errors";
 import { formatMonthTitle } from "@/lib/format";
+import { describeError, logEvent } from "@/lib/server/log";
 import { colLetter } from "./a1";
 import { text } from "./cells";
 import type { SheetsGateway } from "./gateway";
@@ -599,16 +600,6 @@ const LOG_MAX_WAIT_MS = 1_000;
 const LOG_BUDGET_MS = 4_000;
 
 /**
- * Why a call failed, in a few words, for the server log: the kind of error and its message, never the error
- * object (a library's error can carry the request it made, headers and all).
- */
-function describeFailure(error: unknown): string {
-  if (error instanceof AppError) return `${error.code}: ${error.message}`;
-  if (error instanceof Error) return `${error.name}: ${error.message}`;
-  return "unknown error";
-}
-
-/**
  * Adds a row to the Payments Log. Returns false when the row is not known to be there (the owner's "Try
  * again" button takes over). The reason of every failed try goes to the server log, without the row: it holds
  * a tenant's name and amounts.
@@ -628,7 +619,10 @@ async function appendLogRow(
       await gateway.appendRow(LOG_TAB, row);
       return true;
     } catch (error) {
-      console.error(`Payments Log: try ${attempt} of ${LOG_ATTEMPTS} did not add the row (${describeFailure(error)}).`);
+      logEvent("error", "payments-log-append-failed", {
+        code: error instanceof AppError ? error.code : undefined,
+        message: `Payments Log: try ${attempt} of ${LOG_ATTEMPTS} did not add the row (${describeError(error)}).`,
+      });
       const cannotHaveLanded = error instanceof AppError && error.code === "rate-limited";
       if (!cannotHaveLanded || attempt === LOG_ATTEMPTS) return false;
       const wait = Math.min(retryDelayMs * attempt, LOG_MAX_WAIT_MS);
@@ -719,7 +713,7 @@ export async function retryLogRow(
       try {
         recent = (await ctx.gateway.getValues(LOG_TAB, "A1:I", "UNFORMATTED_VALUE")).slice(-RETRY_LOOKBACK_ROWS);
       } catch (error) {
-        console.error(`Payments Log: could not check whether the row is already there (${describeFailure(error)}). Nothing was added.`);
+        console.error(`Payments Log: could not check whether the row is already there (${describeError(error)}). Nothing was added.`);
         return false;
       }
       if (recent.some((stored) => sameLogEntry(stored, row))) return true;

@@ -8,7 +8,8 @@ import {
   unsupportedMediaType,
   validation,
 } from "@/lib/errors";
-import { getViewer } from "./auth-guard";
+import { getViewer, type Viewer } from "./auth-guard";
+import { describeError, logEvent, messageForLog, requestIdFrom, type LogLevel } from "./log";
 
 const STATUS: Record<AppError["code"], number> = {
   unauthorized: 401,
@@ -21,46 +22,70 @@ const STATUS: Record<AppError["code"], number> = {
   unavailable: 503,
 };
 
+/** How loudly an error is logged: what a person caused is info, what Google is doing is warn, what needs fixing is error. */
+const LOG_LEVEL: Record<AppError["code"], LogLevel> = {
+  unauthorized: "info",
+  forbidden: "info",
+  validation: "info",
+  conflict: "info",
+  "rate-limited": "warn",
+  unavailable: "warn",
+  config: "error",
+  "sheet-structure": "error",
+};
+
 /** Seconds a client is asked to wait after "rate-limited". */
 const RETRY_AFTER_SECONDS = "30";
 
-/** True when the signed-in person is the owner. A failed or missing sign-in check counts as not the owner. */
-async function viewerIsOwner(): Promise<boolean> {
+/** The signed-in person, or null when there is none or the sign-in check failed. */
+async function currentViewer(): Promise<Viewer | null> {
   try {
-    return (await getViewer())?.isOwner === true;
+    return await getViewer();
   } catch {
-    return false;
+    return null;
   }
 }
 
 /**
  * Runs a route handler body and turns its result or error into JSON.
- * Success: { ok: true, ...result }. Failure: { ok: false, error: { code, message, details? } }.
+ * Success: { ok: true, ...result }. Failure: { ok: false, error: { code, message, details? }, requestId }.
+ * Every failure is logged as one line (see log.ts) with the request id that the answer carries, so a report of
+ * "it failed" can be found in the log. The id is the x-vercel-id of `request`, or a new one.
  * Unknown errors are logged and shown as a generic message. A config error (the connection to the Sheet) is
  * logged in full, and only the owner is shown its detail: everyone else is told to ask the owner.
  */
-export async function handle(run: () => Promise<Record<string, unknown>>): Promise<Response> {
+export async function handle(run: () => Promise<Record<string, unknown>>, request?: Request): Promise<Response> {
   try {
     const result = await run();
     return Response.json({ ok: true, ...result });
   } catch (error) {
+    const requestId = requestIdFrom(request?.headers.get("x-vercel-id"));
+    const route = request ? new URL(request.url).pathname : undefined;
     if (error instanceof AppError) {
       let message = error.message;
+      let viewer: Viewer | null = null;
       if (error.code === "config") {
-        console.error("Sheet connection problem:", error.message);
-        message = messageFor(error, await viewerIsOwner());
+        viewer = await currentViewer();
+        message = messageFor(error, viewer?.isOwner === true);
       }
+      logEvent(LOG_LEVEL[error.code], "api-error", {
+        requestId,
+        route,
+        code: error.code,
+        message: messageForLog(error),
+        viewer: viewer?.email,
+      });
       return Response.json(
-        { ok: false, error: { code: error.code, message, details: error.details } },
+        { ok: false, error: { code: error.code, message, details: error.details }, requestId },
         {
           status: error.status ?? STATUS[error.code],
           headers: error.code === "rate-limited" ? { "Retry-After": RETRY_AFTER_SECONDS } : undefined,
         },
       );
     }
-    console.error(error);
+    logEvent("error", "api-error", { requestId, route, code: "internal", message: describeError(error) });
     return Response.json(
-      { ok: false, error: { code: "internal", message: "Something went wrong. Try again." } },
+      { ok: false, error: { code: "internal", message: "Something went wrong. Try again." }, requestId },
       { status: 500 },
     );
   }

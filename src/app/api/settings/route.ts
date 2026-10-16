@@ -17,5 +17,5 @@ export async function PUT(request: Request) {
     const saved = await saveSettings(getSheetsContext(), portions);
     await markWritten(viewer.email);
     return { portions: saved };
-  });
+  }, request);
 }

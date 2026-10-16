@@ -19,8 +19,14 @@ import {
 } from "@/lib/errors";
 import { assertJsonSameOrigin, handle, MAX_BODY_BYTES, parseBody, readJsonBody } from "@/lib/server/http";
 import { logRetryBody, paymentBody, settingsBody, undoBody } from "@/lib/server/schemas";
+import { captureLogs, loggedLines, type LogSpies } from "../support/logs";
 
-beforeEach(() => getViewer.mockResolvedValue({ email: "owner@example.com", isOwner: true }));
+// handle() logs every error it answers, so the log is held back for the whole file and read where a test cares.
+let logs: LogSpies;
+beforeEach(() => {
+  logs = captureLogs();
+  getViewer.mockResolvedValue({ email: "owner@example.com", isOwner: true });
+});
 afterEach(() => {
   vi.restoreAllMocks();
   getViewer.mockReset();
@@ -132,6 +138,140 @@ describe("handle: a Sheet connection problem", () => {
       throw sheetStructure("moved");
     });
     expect(getViewer).not.toHaveBeenCalled();
+  });
+});
+
+describe("handle: the log and the request id", () => {
+  const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+  const fail = (error: unknown, request?: Request) =>
+    handle(async () => {
+      throw error;
+    }, request);
+  /** The one line logged at any level. */
+  const theLine = () => {
+    const all = [...loggedLines(logs.info), ...loggedLines(logs.warn), ...loggedLines(logs.error)];
+    expect(all).toHaveLength(1);
+    return all[0];
+  };
+
+  it.each([
+    [validation("bad"), "info", "validation"],
+    [conflict("dup"), "info", "conflict"],
+    [unauthorized(), "info", "unauthorized"],
+    [forbidden(), "info", "forbidden"],
+    [rateLimited(), "warn", "rate-limited"],
+    [unavailable(), "warn", "unavailable"],
+    [configError("setup"), "error", "config"],
+    [sheetStructure("moved"), "error", "sheet-structure"],
+    [new Error("boom"), "error", "internal"],
+  ])("logs %s at level %s with the code %s", async (error, level, code) => {
+    const res = await fail(error);
+    expect(res.ok).toBe(false);
+    const line = theLine();
+    expect(line).toMatchObject({ level, code });
+    expect(typeof line.event).toBe("string");
+    const spies = { info: logs.info, warn: logs.warn, error: logs.error };
+    expect(spies[level as keyof typeof spies]).toHaveBeenCalledTimes(1);
+  });
+
+  it("puts the request id in the error body, and the same id in the log line", async () => {
+    const res = await fail(validation("bad"));
+    const body = await res.json();
+    expect(body.requestId).toMatch(UUID);
+    expect(theLine().requestId).toBe(body.requestId);
+  });
+
+  it("puts it there for an error nobody expected too", async () => {
+    const res = await fail(new Error("boom"));
+    const body = await res.json();
+    expect(res.status).toBe(500);
+    expect(body).toEqual({
+      ok: false,
+      error: { code: "internal", message: "Something went wrong. Try again." },
+      requestId: expect.stringMatching(UUID),
+    });
+    expect(theLine().requestId).toBe(body.requestId);
+  });
+
+  it("makes a new id for each answer", async () => {
+    const first = (await (await fail(validation("bad"))).json()).requestId;
+    const second = (await (await fail(validation("bad"))).json()).requestId;
+    expect(first).not.toBe(second);
+  });
+
+  it("uses the x-vercel-id of the request when there is one", async () => {
+    const id = "iad1::sfo1::abcde-1760592600000-0123456789ab";
+    const request = new Request("http://localhost/api/payments", { method: "POST", headers: { "x-vercel-id": id } });
+    const res = await fail(conflict("dup"), request);
+    expect((await res.json()).requestId).toBe(id);
+    expect(theLine().requestId).toBe(id);
+  });
+
+  it("ignores an x-vercel-id that is not a plain id", async () => {
+    const request = new Request("http://localhost/api/payments", { headers: { "x-vercel-id": 'a"b c' } });
+    const res = await fail(conflict("dup"), request);
+    expect((await res.json()).requestId).toMatch(UUID);
+  });
+
+  it("logs the path of the route, without its query string", async () => {
+    const request = new Request("http://localhost/api/payments/undo?token=abc", { method: "POST" });
+    await fail(validation("bad"), request);
+    expect(theLine().route).toBe("/api/payments/undo");
+  });
+
+  it("logs no route when it was not given the request", async () => {
+    await fail(validation("bad"));
+    expect(theLine()).not.toHaveProperty("route");
+  });
+
+  it("logs a success as nothing and leaves the id out of the body", async () => {
+    const res = await handle(async () => ({ value: 1 }));
+    expect(await res.json()).toEqual({ ok: true, value: 1 });
+    expect(logs.info).not.toHaveBeenCalled();
+    expect(logs.warn).not.toHaveBeenCalled();
+    expect(logs.error).not.toHaveBeenCalled();
+  });
+
+  it("logs what an error that is not ours was, without its stack or anything else it carries", async () => {
+    const error = Object.assign(new Error("socket hang up"), { config: { headers: { Authorization: "Bearer abc" } } });
+    await fail(error);
+    const line = theLine();
+    expect(line.message).toBe("Error: socket hang up");
+    expect(JSON.stringify(line)).not.toMatch(/Bearer|Authorization|\bat /);
+  });
+
+  it("does not log the text of a conflict, which can name a tenant, and still tells the person", async () => {
+    const res = await fail(conflict("Asha Verma has already moved out. Refresh the page.", { existingTenant: "Asha Verma" }));
+    expect((await res.json()).error.message).toBe("Asha Verma has already moved out. Refresh the page.");
+    const line = theLine();
+    expect(line.code).toBe("conflict");
+    expect(JSON.stringify(line)).not.toContain("Asha");
+    expect(typeof line.message).toBe("string");
+  });
+
+  it("logs the text of the other errors, which tell the owner what is wrong with the Sheet", async () => {
+    await fail(sheetStructure('The tab "Tenants" was not found in your Sheet.'));
+    expect(theLine().message).toBe('The tab "Tenants" was not found in your Sheet.');
+  });
+
+  it("logs the person's address, in lower case, for a connection problem, where it already asks who they are", async () => {
+    getViewer.mockResolvedValue({ email: "Member@Example.com", isOwner: false });
+    await fail(configError("Share the Sheet with bot@example.com as Editor."));
+    expect(theLine()).toMatchObject({
+      code: "config",
+      message: "Share the Sheet with bot@example.com as Editor.",
+      viewer: "member@example.com",
+    });
+  });
+
+  it("logs no viewer when the person cannot be found out", async () => {
+    getViewer.mockResolvedValue(null);
+    await fail(configError("setup"));
+    expect(theLine()).not.toHaveProperty("viewer");
+    getViewer.mockRejectedValue(new Error("no session"));
+    logs.error.mockClear();
+    await fail(configError("setup"));
+    expect(theLine()).not.toHaveProperty("viewer");
   });
 });
 

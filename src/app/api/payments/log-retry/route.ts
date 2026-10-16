@@ -21,5 +21,5 @@ export async function POST(request: Request) {
     const stamped: LogRow = [row[0], row[1], row[2], row[3], row[4], row[5], row[6], viewer.email, row[8]];
     // The Activity screen is kept for a short time, so this person's next view must not be answered from it.
     return { logWritten: await runWrite(viewer.email, () => retryLogRow(getSheetsContext(), stamped)) };
-  });
+  }, request);
 }

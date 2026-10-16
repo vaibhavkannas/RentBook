@@ -34,5 +34,5 @@ export async function POST(request: Request) {
     );
     // The raw Payments Log row stays here: the browser gets a signed retry token when the entry did not save.
     return withRetryToken(result, viewer.email);
-  });
+  }, request);
 }
