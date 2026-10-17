@@ -1,6 +1,7 @@
 import type { PortionEntry } from "@/lib/domain/types";
 import { formatRupees } from "@/lib/format";
 import { logRetryFailureMessage, type LogRetryResponse } from "@/lib/payment-request";
+import type { LogEntryState } from "@/lib/toast-copy";
 
 /** What the undo sheet tells the person before they confirm. */
 export function undoConfirmationText(
@@ -28,9 +29,18 @@ export function undoLogUnsavedToastText(portionName: string): string {
   return `${portionName}: payment undone in your Schedule, but not recorded in the Payments Log`;
 }
 
-/** The toast for the moment the undo sheet closes: which of the two is true depends on whether the log entry has saved. */
-export function undoExitToastText(portionName: string, logEntrySaved: boolean): string {
-  return logEntrySaved ? undoToastText(portionName) : undoLogUnsavedToastText(portionName);
+/**
+ * The same, after a retry that got no answer: the log entry may have been saved after all, so the toast says it is not
+ * confirmed, not that it is missing.
+ */
+export function undoLogUnconfirmedToastText(portionName: string): string {
+  return `${portionName}: payment undone in your Schedule, but not confirmed in the Payments Log`;
+}
+
+/** The toast for the moment the undo sheet closes: which of the three is true depends on where the log entry stands. */
+export function undoExitToastText(portionName: string, logEntry: LogEntryState): string {
+  if (logEntry === "saved") return undoToastText(portionName);
+  return logEntry === "unsaved" ? undoLogUnsavedToastText(portionName) : undoLogUnconfirmedToastText(portionName);
 }
 
 /**

@@ -35,7 +35,7 @@ import {
 } from "@/lib/payment-request";
 import { sendJson } from "@/lib/post-json";
 import { PAYMENT_NO_CONFIRMATION, sendFailureMessage } from "@/lib/request-copy";
-import { exitToastText, paymentToasts, type PaymentToasts } from "@/lib/toast-copy";
+import { exitToastText, logEntryState, paymentToasts, type LogEntryState, type PaymentToasts } from "@/lib/toast-copy";
 import { newTenantDetails, type NewTenantDetailsForm } from "@/lib/tenancy-input";
 import { useFieldFocus } from "./useFieldFocus";
 
@@ -107,6 +107,8 @@ export default function PaymentSheet({
   // details did not save) keeps the sheet open, and the toast waits for the person to be done with it. It has two texts:
   // while the Payments Log entry is still unsaved, "logged" would not be true.
   const [doneToasts, setDoneToasts] = useState<PaymentToasts | null>(null);
+  /** The last retry of the Payments Log entry got no answer, so the entry may have saved after all. */
+  const [retryUnanswered, setRetryUnanswered] = useState(false);
   // The optional "Tenancy details" part of the New tenant sheet.
   const [details, setDetails] = useState<NewTenantDetailsForm>({
     moveIn: defaultDate,
@@ -132,12 +134,15 @@ export default function PaymentSheet({
     mode === "new-tenant" ? "New tenant" : mode === "edit" ? "Edit amount" : "Log payment";
 
   /** Closes the sheet, and shows the toast of a payment that was saved while the sheet waited on a notice. */
-  function finishWith(logEntrySaved: boolean) {
-    if (doneToasts) toast.show(exitToastText(doneToasts, logEntrySaved));
+  function finishWith(logEntry: LogEntryState) {
+    if (doneToasts) toast.show(exitToastText(doneToasts, logEntry));
     onClose();
   }
-  /** Every way out (Close, Skip for now, the x, Escape): the log entry is saved unless the notice is still offering to retry it. */
-  const finish = () => finishWith(notice?.retryToken == null);
+  /**
+   * Every way out (Close, Skip for now, the x, Escape): the log entry is saved unless the notice is still offering to retry it,
+   * and then it is not confirmed if the last retry got no answer, because that retry may have gone through.
+   */
+  const finish = () => finishWith(logEntryState(notice?.retryToken != null, retryUnanswered));
 
   async function submit(overwrite: boolean) {
     if (!card) return show(fieldProblem("Choose a portion first.", "portion", known));
@@ -208,8 +213,9 @@ export default function PaymentSheet({
     if (body?.ok && body.logWritten) {
       // The log entry is saved now; the tenancy warning, if any, still has to be seen.
       if (notice.tenancyNotSaved) return setNotice({ retryToken: null, tenancyNotSaved: true });
-      return finishWith(true);
+      return finishWith("saved");
     }
+    setRetryUnanswered(body === null);
     setProblem(
       plainProblem(
         sent.kind === "answer" ? logRetryFailureMessage(body) : sendFailureMessage(sent, LOG_RETRY_UNCONFIRMED_MESSAGE),

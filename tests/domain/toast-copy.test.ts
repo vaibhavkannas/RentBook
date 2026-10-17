@@ -3,7 +3,9 @@ import {
   DETAILS_SAVED_TOAST,
   editToastText,
   exitToastText,
+  logEntryState,
   logToastText,
+  logUnconfirmedToastText,
   logUnsavedToastText,
   moveOutToastText,
   newTenantToastText,
@@ -111,14 +113,44 @@ describe("the toast when the Payments Log entry did not save", () => {
     expect(paymentToasts(saved)).toEqual({
       saved: "Ground floor: ₹ 10,000 logged for October 2026",
       logUnsaved: "Ground floor: ₹ 10,000 saved to your Schedule, but not to the Payments Log",
+      logUnconfirmed: "Ground floor: ₹ 10,000 saved to your Schedule, but not confirmed in the Payments Log",
     });
     expect(paymentToasts({ ...saved, mode: "new-tenant", tenant: "Asha" }).saved).toBe("Ground floor: Asha added, ₹ 10,000 logged");
     expect(paymentToasts({ ...saved, mode: "new-tenant", tenant: "Asha" }).logUnsaved).toBe(logUnsavedToastText("Ground floor", 10000));
+    expect(paymentToasts({ ...saved, mode: "new-tenant", tenant: "Asha" }).logUnconfirmed).toBe(logUnconfirmedToastText("Ground floor", 10000));
   });
 
-  it("picks the text that is true when the sheet closes: the log entry saved or not", () => {
+  it("picks the text that is true when the sheet closes: the log entry saved, not saved, or not confirmed", () => {
     const toasts = paymentToasts(saved);
-    expect(exitToastText(toasts, true)).toBe(toasts.saved);
-    expect(exitToastText(toasts, false)).toBe(toasts.logUnsaved);
+    expect(exitToastText(toasts, "saved")).toBe(toasts.saved);
+    expect(exitToastText(toasts, "unsaved")).toBe(toasts.logUnsaved);
+    expect(exitToastText(toasts, "unconfirmed")).toBe(toasts.logUnconfirmed);
+  });
+});
+
+// A retry that got no answer may have gone through, and the notice said so ("Couldn't confirm that the log entry saved. Check
+// the Activity screen before trying again."): a toast that says the entry was not recorded would then say more than is known.
+describe("the toast when a retry of the Payments Log entry got no answer", () => {
+  it("says the payment is in the Schedule and that the Payments Log entry is not confirmed, in plain words", () => {
+    expect(logUnconfirmedToastText("Ground floor", 10000)).toBe(
+      "Ground floor: ₹ 10,000 saved to your Schedule, but not confirmed in the Payments Log",
+    );
+  });
+
+  it("does not say the entry was not recorded, and does not claim the payment was logged, added or changed", () => {
+    const text = logUnconfirmedToastText("Ground floor", 10000);
+    expect(text).not.toMatch(/not (?:recorded|saved|to)\b/);
+    expect(text).not.toMatch(/\blogged\b|\badded\b|\bchanged\b|\breplaced\b/);
+  });
+});
+
+describe("logEntryState", () => {
+  it.each([
+    [false, false, "saved"],
+    [false, true, "saved"],
+    [true, false, "unsaved"],
+    [true, true, "unconfirmed"],
+  ] as const)("a retry on offer: %s, the last retry got no answer: %s, is %s", (retryOffered, noAnswer, state) => {
+    expect(logEntryState(retryOffered, noAnswer)).toBe(state);
   });
 });

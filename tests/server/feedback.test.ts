@@ -82,16 +82,18 @@ describe("a sheet that stopped on a notice", () => {
     const sheet = code("PaymentSheet");
     // the toasts are kept while the notice is up, and shown by the one function every way out of the notice goes through
     expect(sheet).toMatch(/const \[doneToasts, setDoneToasts\] = useState<PaymentToasts \| null>\(null\)/);
-    expect(sheet).toMatch(/function finishWith\(logEntrySaved: boolean\)\s*\{\s*if \(doneToasts\) toast\.show\(exitToastText\(doneToasts, logEntrySaved\)\);\s*onClose\(\);\s*\}/);
+    expect(sheet).toMatch(/function finishWith\(logEntry: LogEntryState\)\s*\{\s*if \(doneToasts\) toast\.show\(exitToastText\(doneToasts, logEntry\)\);\s*onClose\(\);\s*\}/);
     expect(sheet).toMatch(/onClose=\{finish\}/);
     expect(sheet.match(/onClick=\{finish\}/g)!.length).toBeGreaterThanOrEqual(3);
   });
 
-  it("says what is true on the way out: while the Payments Log entry is unsaved (Skip, Close, Escape) the toast says so, and after a successful retry it says logged", () => {
+  it("says what is true on the way out: while the Payments Log entry is unsaved (Skip, Close, Escape) the toast says so, not confirmed when the last retry got no answer, and after a successful retry it says logged", () => {
     const sheet = code("PaymentSheet");
-    // every way out asks whether the entry is saved from the notice that is showing; a retry that worked says so itself
-    expect(sheet).toMatch(/const finish = \(\) => finishWith\(notice\?\.retryToken == null\)/);
-    expect(sheet).toMatch(/return finishWith\(true\)/);
+    // every way out asks where the entry stands from the notice that is showing and from how the last retry ended; a retry that worked says so itself
+    expect(sheet).toMatch(/const \[retryUnanswered, setRetryUnanswered\] = useState\(false\)/);
+    expect(sheet).toMatch(/const finish = \(\) => finishWith\(logEntryState\(notice\?\.retryToken != null, retryUnanswered\)\)/);
+    expect(sheet).toMatch(/setRetryUnanswered\(body === null\)/);
+    expect(sheet).toMatch(/return finishWith\("saved"\)/);
     expect(sheet).toMatch(/paymentToasts\(/);
     // the plain "logged" text is never handed to the toast directly while a notice may be up
     expect(sheet).not.toMatch(/setDoneToast\(text\)/);
@@ -99,17 +101,21 @@ describe("a sheet that stopped on a notice", () => {
 
   it("shows the undo sheet's toast when the undo is done, after a retry or a skip, and when the sheet is closed on the notice", () => {
     const sheet = code("UndoSheet");
-    expect(sheet).toMatch(/function done\(logEntrySaved: boolean\)\s*\{\s*toast\.show\(undoExitToastText\(card\.name, logEntrySaved\)\);\s*onClose\(\);\s*\}/);
-    expect(sheet).toMatch(/onClose=\{logPending \? \(\) => done\(false\) : onClose\}/);
+    expect(sheet).toMatch(/function done\(logEntry: LogEntryState\)\s*\{\s*toast\.show\(undoExitToastText\(card\.name, logEntry\)\);\s*onClose\(\);\s*\}/);
+    expect(sheet).toMatch(/onClose=\{logPending \? skip : onClose\}/);
   });
 
-  it("says what is true on the way out of the undo sheet: saved after the undo and after a retry that worked, unsaved after Skip for now or Escape", () => {
+  it("says what is true on the way out of the undo sheet: saved after the undo and after a retry that worked, unsaved after Skip for now or Escape, not confirmed when the last retry got no answer", () => {
     const sheet = code("UndoSheet");
     // the undo went through and its log entry saved
-    expect(sheet).toMatch(/if \(body\.logWritten === false\) return setPendingToken\(body\.retryToken \?\? ""\);\s*return done\(true\);/);
+    expect(sheet).toMatch(/if \(body\.logWritten === false\) return setPendingToken\(body\.retryToken \?\? ""\);\s*return done\("saved"\);/);
     // a retry that worked
-    expect(sheet).toMatch(/if \(body\?\.ok && body\.logWritten\) return done\(true\);/);
-    // Skip for now
-    expect(sheet).toMatch(/onClick=\{\(\) => done\(false\)\}/);
+    expect(sheet).toMatch(/if \(body\?\.ok && body\.logWritten\) return done\("saved"\);/);
+    // how the last retry ended
+    expect(sheet).toMatch(/const \[retryUnanswered, setRetryUnanswered\] = useState\(false\)/);
+    expect(sheet).toMatch(/setRetryUnanswered\(body === null\)/);
+    // Skip for now, and Escape or the x on the notice
+    expect(sheet).toMatch(/const skip = \(\) => done\(logEntryState\(true, retryUnanswered\)\)/);
+    expect(sheet).toMatch(/onClick=\{skip\}/);
   });
 });

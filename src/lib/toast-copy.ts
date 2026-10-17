@@ -62,14 +62,38 @@ export function logUnsavedToastText(portion: string, amount: number): string {
   return `${portion}: ${formatRupees(amount)} saved to your Schedule, but not to the Payments Log`;
 }
 
-/** What the toast of a saved payment may say, kept while the sheet stops on a notice before it closes. */
-export type PaymentToasts = { saved: string; logUnsaved: string };
-
-export function paymentToasts(saved: SavedPayment): PaymentToasts {
-  return { saved: paymentToastText(saved), logUnsaved: logUnsavedToastText(saved.portion, saved.amount) };
+/**
+ * The same, after a retry that got no answer: the entry may have been saved after all (the notice said so), so the toast
+ * says it is not confirmed, not that it is missing.
+ */
+export function logUnconfirmedToastText(portion: string, amount: number): string {
+  return `${portion}: ${formatRupees(amount)} saved to your Schedule, but not confirmed in the Payments Log`;
 }
 
-/** The toast for the moment the sheet closes: which of the two is true depends on whether the log entry has saved by now. */
-export function exitToastText(toasts: PaymentToasts, logEntrySaved: boolean): string {
-  return logEntrySaved ? toasts.saved : toasts.logUnsaved;
+/** Where the Payments Log entry of a saved change stands: in the log, not in it, or not known (a retry got no answer). */
+export type LogEntryState = "saved" | "unsaved" | "unconfirmed";
+
+/**
+ * Where the entry stands when its sheet closes. With no retry on offer it is saved. While one is on offer it is not, unless
+ * the last retry got no answer at all: then it may have saved, and nothing more than that is known.
+ */
+export function logEntryState(retryOffered: boolean, lastRetryGotNoAnswer: boolean): LogEntryState {
+  if (!retryOffered) return "saved";
+  return lastRetryGotNoAnswer ? "unconfirmed" : "unsaved";
+}
+
+/** What the toast of a saved payment may say, kept while the sheet stops on a notice before it closes. */
+export type PaymentToasts = { saved: string; logUnsaved: string; logUnconfirmed: string };
+
+export function paymentToasts(saved: SavedPayment): PaymentToasts {
+  return {
+    saved: paymentToastText(saved),
+    logUnsaved: logUnsavedToastText(saved.portion, saved.amount),
+    logUnconfirmed: logUnconfirmedToastText(saved.portion, saved.amount),
+  };
+}
+
+/** The toast for the moment the sheet closes: which of the three is true depends on where the log entry stands by now. */
+export function exitToastText(toasts: PaymentToasts, logEntry: LogEntryState): string {
+  return logEntry === "saved" ? toasts.saved : logEntry === "unsaved" ? toasts.logUnsaved : toasts.logUnconfirmed;
 }

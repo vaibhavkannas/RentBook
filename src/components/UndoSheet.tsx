@@ -11,6 +11,7 @@ import type { PortionCard } from "@/lib/domain/types";
 import { LOG_RETRY_UNCONFIRMED_MESSAGE, type LogRetryResponse } from "@/lib/payment-request";
 import { sendJson } from "@/lib/post-json";
 import { apiErrorMessage, sendFailureMessage, UNDO_NO_CONFIRMATION } from "@/lib/request-copy";
+import { logEntryState, type LogEntryState } from "@/lib/toast-copy";
 import {
   undoConfirmationText,
   undoLogRetryFailureMessage,
@@ -43,13 +44,17 @@ export default function UndoSheet({ monthKey, monthLabel, card, onClose }: Props
   // The token that retries the Payments Log entry, once the undo saved but its log entry did not. "" if none came.
   const [pendingToken, setPendingToken] = useState<string | null>(null);
   const logPending = pendingToken !== null;
+  /** The last retry of the Payments Log entry got no answer, so the entry may have saved after all. */
+  const [retryUnanswered, setRetryUnanswered] = useState(false);
   const safeButton = useRef<HTMLButtonElement>(null);
 
-  /** The undo is saved: say so, and close. The words say whether its Payments Log entry is saved too. */
-  function done(logEntrySaved: boolean) {
-    toast.show(undoExitToastText(card.name, logEntrySaved));
+  /** The undo is saved: say so, and close. The words say whether its Payments Log entry is saved, not saved or not confirmed. */
+  function done(logEntry: LogEntryState) {
+    toast.show(undoExitToastText(card.name, logEntry));
     onClose();
   }
+  /** Skip for now, and Escape or the x on the retry notice: the entry is not saved, or not confirmed if the last retry got no answer. */
+  const skip = () => done(logEntryState(true, retryUnanswered));
 
   // Focus the safe choice: Keep, then Close once the card changed, or Retry after a log failure. The Sheet puts focus
   // on it when it opens (initialFocus) and gives focus back to what opened the sheet when it closes.
@@ -71,7 +76,7 @@ export default function UndoSheet({ monthKey, monthLabel, card, onClose }: Props
     if (body.ok) {
       router.refresh();
       if (body.logWritten === false) return setPendingToken(body.retryToken ?? "");
-      return done(true);
+      return done("saved");
     }
     if (body.error?.code === "conflict") {
       router.refresh();
@@ -86,7 +91,8 @@ export default function UndoSheet({ monthKey, monthLabel, card, onClose }: Props
     const sent = await sendJson<ApiBody>("/api/payments/log-retry", { token: pendingToken });
     setBusy(false);
     const body = sent.kind === "answer" ? sent.body : null;
-    if (body?.ok && body.logWritten) return done(true);
+    if (body?.ok && body.logWritten) return done("saved");
+    setRetryUnanswered(body === null);
     setError(
       sent.kind === "answer"
         ? undoLogRetryFailureMessage(body)
@@ -98,7 +104,7 @@ export default function UndoSheet({ monthKey, monthLabel, card, onClose }: Props
     <Sheet
       labelledBy="undo-title"
       describedBy="undo-description"
-      onClose={logPending ? () => done(false) : onClose}
+      onClose={logPending ? skip : onClose}
       canClose={!busy}
       closeOnBackdrop={false}
       initialFocus={safeButton}
@@ -133,7 +139,7 @@ export default function UndoSheet({ monthKey, monthLabel, card, onClose }: Props
           <Button
             variant="quiet"
             className="w-full"
-            onClick={() => done(false)}
+            onClick={skip}
             disabled={busy}
           >
             Skip for now

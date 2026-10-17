@@ -4,6 +4,7 @@ import {
   undoConfirmationText,
   undoExitToastText,
   undoLogRetryFailureMessage,
+  undoLogUnconfirmedToastText,
   undoLogUnsavedToastText,
   undoToastText,
   UNDO_CONFLICT_MESSAGE,
@@ -53,10 +54,23 @@ describe("the toast when the undo's Payments Log entry did not save", () => {
     );
   });
 
-  it("picks the text that is true when the sheet closes: the log entry saved or not", () => {
-    expect(undoExitToastText("Ground floor", true)).toBe(undoToastText("Ground floor"));
-    expect(undoExitToastText("Ground floor", false)).toBe(undoLogUnsavedToastText("Ground floor"));
-    expect(undoExitToastText("Ground floor", false)).not.toBe(undoExitToastText("Ground floor", true));
+  it("picks the text that is true when the sheet closes: the log entry saved, not saved, or not confirmed", () => {
+    expect(undoExitToastText("Ground floor", "saved")).toBe(undoToastText("Ground floor"));
+    expect(undoExitToastText("Ground floor", "unsaved")).toBe(undoLogUnsavedToastText("Ground floor"));
+    expect(undoExitToastText("Ground floor", "unconfirmed")).toBe(undoLogUnconfirmedToastText("Ground floor"));
+    const texts = (["saved", "unsaved", "unconfirmed"] as const).map((state) => undoExitToastText("Ground floor", state));
+    expect(new Set(texts).size).toBe(3);
+  });
+});
+
+// A retry that got no answer may have gone through (the notice says "Couldn't confirm that the log entry saved"), so the
+// toast does not say the entry was not recorded.
+describe("the toast when a retry of the undo's Payments Log entry got no answer", () => {
+  it("says the undo is in the Schedule and that the Payments Log entry is not confirmed", () => {
+    expect(undoLogUnconfirmedToastText("First floor, single bedroom")).toBe(
+      "First floor, single bedroom: payment undone in your Schedule, but not confirmed in the Payments Log",
+    );
+    expect(undoLogUnconfirmedToastText("Ground floor")).not.toMatch(/not recorded/);
   });
 });
 
