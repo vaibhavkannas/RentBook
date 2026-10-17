@@ -9,6 +9,7 @@ import type {
   ScheduleRow,
   YearMonth,
 } from "./types";
+import { latestEntryRow, occupancyFor } from "./vacancy";
 import { compareYm } from "./year-month";
 
 /** The entry saved for this month, if any. If a month appears twice, the lower row wins. */
@@ -29,18 +30,7 @@ function latestEntry(
   portionId: string,
   before?: YearMonth,
 ): PortionEntry | null {
-  let best: ScheduleRow | null = null;
-  for (const row of rows) {
-    if ((before && compareYm(row.month, before) >= 0) || !row.entries.get(portionId)) continue;
-    if (
-      !best ||
-      compareYm(row.month, best.month) > 0 ||
-      (compareYm(row.month, best.month) === 0 && row.rowNumber > best.rowNumber)
-    ) {
-      best = row;
-    }
-  }
-  return best ? (best.entries.get(portionId) ?? null) : null;
+  return latestEntryRow(rows, portionId, before)?.entry ?? null;
 }
 
 /** The most recent entry from a month strictly before `month`. */
@@ -108,6 +98,23 @@ export function deriveMonthView(
 ): MonthView {
   const cards: PortionCard[] = portions.map((portion) => {
     const entry = findEntryForMonth(rows, portion.id, month);
+    // A portion whose last tenant has moved out has nothing due: no rent suggested, nothing to log or undo.
+    const occupancy = entry ? null : occupancyFor(rows, tenancies, portion.id, month);
+    if (occupancy?.state === "vacant") {
+      return {
+        portionId: portion.id,
+        name: portion.name,
+        cycleLength: portion.cycleLength,
+        status: "vacant",
+        entry: null,
+        next: null,
+        rentReference: null,
+        rentDifference: null,
+        undoBlockedReason: null,
+        tenancy: null,
+        vacancy: { since: occupancy.since, previousTenant: occupancy.previousTenant },
+      };
+    }
     const prior = findPriorEntry(rows, portion.id, month);
     const next = prior ? nextPayment(prior, portion) : null;
     const reference = rentReference(entry, next);
@@ -129,6 +136,7 @@ export function deriveMonthView(
         current && name !== undefined && sameTenantName(current.tenant, name)
           ? summarize(current)
           : null,
+      vacancy: null,
     };
   });
 

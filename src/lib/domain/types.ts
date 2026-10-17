@@ -31,7 +31,14 @@ export type NextPayment = {
   startsNewCycle: boolean;
 };
 
-export type CardStatus = "paid" | "pending" | "needs-tenant";
+/**
+ * "needs-tenant" is a portion that never had a tenant; "vacant" one whose last tenant moved out (see vacancy.ts). Neither has
+ * rent due.
+ */
+export type CardStatus = "paid" | "pending" | "needs-tenant" | "vacant";
+
+/** A portion whose last tenant has moved out: since when (YYYY-MM-DD, the move-out day) and who, as the Schedule names them. */
+export type Vacancy = { since: string; previousTenant: string };
 
 export type PortionCard = {
   portionId: string;
@@ -58,6 +65,11 @@ export type PortionCard = {
    * Null when there are no details yet, or the details are for a different tenant name.
    */
   tenancy: TenancySummary | null;
+  /**
+   * Set on a vacant card: since when and who moved out. Null on every other card. Always set by `deriveMonthView`; optional
+   * so that a card built by hand (a test's) still compiles.
+   */
+  vacancy?: Vacancy | null;
 };
 
 export type MonthView = {

@@ -6,6 +6,7 @@ import {
   LATER_ENTRY_REASON,
 } from "@/lib/domain/month-view";
 import { summarize, type Tenancy } from "@/lib/domain/tenancy";
+import type { YearMonth } from "@/lib/domain/types";
 import { parseSchedule } from "@/lib/sheets/schedule";
 import { baseSchedule, monthCell, PORTIONS, scheduleRow, TOTAL_HEADER } from "../support/fixtures";
 
@@ -385,5 +386,302 @@ describe("rent due against received (October after the base schedule)", () => {
     expect(view.cards.every((c) => c.status === "paid")).toBe(true);
     expect(view.difference).toBe(50 - 335);
     expect(view.received - view.due).toBe(view.difference);
+  });
+});
+
+/**
+ * PINNED before vacancy existed (wave 3, task 3-8): what the owner's month screens show when no tenancy in the Tenants tab
+ * has a move-out date. The numbers are written out by hand from what the app computed before the vacancy rule was added;
+ * they must never move. Two Schedules (the base one, and the base one with October and November entries), six months each
+ * (August 2026 to January 2027), with no tenancies at all and with open tenancies (one of them for another name than the
+ * Schedule's).
+ */
+describe("the owner's month views with no move-out in the Tenants tab (pinned)", () => {
+  const openTenancy = (id: string, portionId: string, tenant: string, rowNumber: number): Tenancy => ({
+    rowNumber,
+    id,
+    portionId,
+    tenant,
+    phone: "",
+    moveIn: "2026-01-15",
+    agreementEnd: "",
+    advance: null,
+    advanceDate: "",
+    advanceStatus: null,
+    refund: null,
+    deductions: null,
+    notes: "",
+    moveOut: "",
+    updatedBy: "owner@example.com",
+    updatedAt: "2026-01-15T05:00:00.000Z",
+  });
+  // p3's open tenancy is for "Zed", not the Schedule's Chitra; p4 never had a tenant.
+  const OPEN = [
+    openTenancy("t-1", "p1", "Asha", 2),
+    openTenancy("t-2", "p2", "Bala", 3),
+    openTenancy("t-3", "p3", "Zed", 4),
+    openTenancy("t-5", "p5", "Esha", 5),
+  ];
+
+  const LONGER = [
+    ...baseSchedule(),
+    scheduleRow(monthCell("text", 2026, 10), [["Asha", 4, 5450], null, null, null, ["Esha", 2, 5100]], 6),
+    scheduleRow(monthCell("text", 2026, 11), [["Asha", 5, 5480], null, null, null, null], 7),
+  ];
+
+  type Pin = {
+    statuses: string[];
+    entries: Array<string | null>;
+    /** tenant/count/suggestedAmount/previousAmount/startsNewCycle */
+    next: Array<string | null>;
+    reference: Array<number | null>;
+    difference: Array<number | null>;
+    undoBlocked: boolean[];
+    /** received, due, difference, paidCount */
+    totals: [number, number, number, number];
+  };
+
+  const NONE = [null, null, null, null, null];
+  const ALL_PENDING = ["pending", "pending", "pending", "needs-tenant", "pending"];
+  const NEXT_AFTER_SEP = [
+    "Asha/4/5450/5450/false",
+    "Bala/1/13335/12700/true",
+    "Chitra/6/9000/9000/false",
+    null,
+    "Esha/2/5100/5100/false",
+  ];
+  const NO_UNDO = [false, false, false, false, false];
+
+  const AUGUST: Pin = {
+    statuses: ["paid", "paid", "paid", "needs-tenant", "needs-tenant"],
+    entries: ["Asha/2/5450", "Bala/10/12700", "Chitra/4/9000", null, null],
+    next: NONE,
+    reference: NONE,
+    difference: NONE,
+    undoBlocked: [true, true, true, false, false],
+    totals: [27150, 27150, 0, 3],
+  };
+  const SEPTEMBER: Pin = {
+    statuses: ["paid", "paid", "paid", "needs-tenant", "paid"],
+    entries: ["Asha/3/5450", "Bala/11/12700", "Chitra/5/9000", null, "Esha/1/5100"],
+    next: ["Asha/3/5450/5450/false", "Bala/11/12700/12700/false", "Chitra/5/9000/9000/false", null, null],
+    reference: [5450, 12700, 9000, null, null],
+    difference: [0, 0, 0, null, null],
+    undoBlocked: NO_UNDO,
+    totals: [32250, 32250, 0, 4],
+  };
+  /** The base Schedule has nothing after September, so every later month looks the same. */
+  const BASE_AFTER: Pin = {
+    statuses: ALL_PENDING,
+    entries: NONE,
+    next: NEXT_AFTER_SEP,
+    reference: [5450, 13335, 9000, null, 5100],
+    difference: NONE,
+    undoBlocked: NO_UNDO,
+    totals: [0, 32885, 0, 0],
+  };
+  const LONGER_AFTER_NOV: Pin = {
+    statuses: ALL_PENDING,
+    entries: NONE,
+    next: ["Asha/6/5480/5480/false", "Bala/1/13335/12700/true", "Chitra/6/9000/9000/false", null, "Esha/3/5100/5100/false"],
+    reference: [5480, 13335, 9000, null, 5100],
+    difference: NONE,
+    undoBlocked: NO_UNDO,
+    totals: [0, 32915, 0, 0],
+  };
+
+  const MONTHS: Array<[string, YearMonth]> = [
+    ["August 2026", { year: 2026, month: 8 }],
+    ["September 2026", { year: 2026, month: 9 }],
+    ["October 2026", { year: 2026, month: 10 }],
+    ["November 2026", { year: 2026, month: 11 }],
+    ["December 2026", { year: 2026, month: 12 }],
+    ["January 2027", { year: 2027, month: 1 }],
+  ];
+
+  const PINS: Record<"base" | "longer", Pin[]> = {
+    base: [AUGUST, SEPTEMBER, BASE_AFTER, BASE_AFTER, BASE_AFTER, BASE_AFTER],
+    longer: [
+      AUGUST,
+      { ...SEPTEMBER, undoBlocked: [true, false, false, false, true] },
+      {
+        statuses: ["paid", "pending", "pending", "needs-tenant", "paid"],
+        entries: ["Asha/4/5450", null, null, null, "Esha/2/5100"],
+        next: NEXT_AFTER_SEP,
+        reference: [5450, 13335, 9000, null, 5100],
+        difference: [0, null, null, null, 0],
+        undoBlocked: [true, false, false, false, false],
+        totals: [10550, 32885, 0, 2],
+      },
+      {
+        statuses: ["paid", "pending", "pending", "needs-tenant", "pending"],
+        entries: ["Asha/5/5480", null, null, null, null],
+        next: ["Asha/5/5450/5450/false", "Bala/1/13335/12700/true", "Chitra/6/9000/9000/false", null, "Esha/3/5100/5100/false"],
+        reference: [5450, 13335, 9000, null, 5100],
+        difference: [30, null, null, null, null],
+        undoBlocked: NO_UNDO,
+        totals: [5480, 32885, 30, 1],
+      },
+      LONGER_AFTER_NOV,
+      LONGER_AFTER_NOV,
+    ],
+  };
+
+  /** What a month view shows about its cards and totals, for comparing with the written-out numbers. */
+  function shown(view: ReturnType<typeof deriveMonthView>): Pin {
+    return {
+      statuses: view.cards.map((c) => c.status),
+      entries: view.cards.map((c) => (c.entry ? `${c.entry.tenant}/${c.entry.count}/${c.entry.amount}` : null)),
+      next: view.cards.map((c) =>
+        c.next ? `${c.next.tenant}/${c.next.count}/${c.next.suggestedAmount}/${c.next.previousAmount}/${c.next.startsNewCycle}` : null,
+      ),
+      reference: view.cards.map((c) => c.rentReference),
+      difference: view.cards.map((c) => c.rentDifference),
+      undoBlocked: view.cards.map((c) => c.undoBlockedReason !== null),
+      totals: [view.received, view.due, view.difference, view.paidCount],
+    };
+  }
+
+  describe.each([
+    ["base", baseSchedule()],
+    ["longer", LONGER],
+  ] as const)("the %s Schedule", (name, grid) => {
+    const { rows } = parseSchedule(grid, PORTIONS, TOTAL_HEADER);
+
+    it.each(MONTHS.map(([label, month], index) => [label, month, PINS[name][index]] as const))(
+      "%s: the statuses, counts, suggested rent, due and received are as they were",
+      (_label, month, pin) => {
+        expect(shown(deriveMonthView(rows, PORTIONS, month))).toEqual(pin);
+        expect(shown(deriveMonthView(rows, PORTIONS, month, []))).toEqual(pin);
+        expect(shown(deriveMonthView(rows, PORTIONS, month, OPEN))).toEqual(pin);
+      },
+    );
+
+    it.each(MONTHS)("%s: details show only for a tenant whose name the card shows", (_label, month) => {
+      const ids = (tenancies: Tenancy[]) => deriveMonthView(rows, PORTIONS, month, tenancies).cards.map((c) => c.tenancy?.id ?? null);
+      expect(ids([])).toEqual([null, null, null, null, null]);
+      // p1, p2 and p5 match their Schedule tenants; p3's open tenancy is for Zed; p4 has no tenant at all
+      const expected = ["t-1", "t-2", null, null, month.month === 8 && month.year === 2026 ? null : "t-5"];
+      expect(ids(OPEN)).toEqual(expected);
+    });
+  });
+});
+
+describe("vacant cards", () => {
+  const NOV = { year: 2026, month: 11 };
+  const DEC = { year: 2026, month: 12 };
+  const OCT = { year: 2026, month: 10 };
+
+  const ASHA_LEFT: Tenancy = {
+    rowNumber: 2,
+    id: "t-1",
+    portionId: "p1",
+    tenant: "Asha",
+    phone: "",
+    moveIn: "2026-01-15",
+    agreementEnd: "",
+    advance: null,
+    advanceDate: "",
+    advanceStatus: null,
+    refund: null,
+    deductions: null,
+    notes: "",
+    moveOut: "2026-10-20",
+    updatedBy: "owner@example.com",
+    updatedAt: "2026-01-15T05:00:00.000Z",
+  };
+
+  /** The base Schedule with Asha (p1) and Esha (p5) paid in October. */
+  const { rows: withOctober } = parseSchedule(
+    [
+      ...baseSchedule(),
+      scheduleRow(monthCell("text", 2026, 10), [["Asha", 4, 5450], null, null, null, ["Esha", 2, 5100]], 6),
+    ],
+    PORTIONS,
+    TOTAL_HEADER,
+  );
+
+  it("keeps October paid and makes November and December vacant, since the move-out", () => {
+    const october = card(deriveMonthView(withOctober, PORTIONS, OCT, [ASHA_LEFT]), "p1");
+    expect(october).toMatchObject({ status: "paid", entry: { tenant: "Asha", count: 4, amount: 5450 }, vacancy: null });
+    for (const month of [NOV, DEC]) {
+      expect(card(deriveMonthView(withOctober, PORTIONS, month, [ASHA_LEFT]), "p1")).toEqual({
+        portionId: "p1",
+        name: "First floor, single bedroom",
+        cycleLength: 11,
+        status: "vacant",
+        entry: null,
+        next: null,
+        rentReference: null,
+        rentDifference: null,
+        undoBlockedReason: null,
+        tenancy: null,
+        vacancy: { since: "2026-10-20", previousTenant: "Asha" },
+      });
+    }
+  });
+
+  it("adds nothing to what is due, and does not count as paid", () => {
+    const view = deriveMonthView(withOctober, PORTIONS, NOV, [ASHA_LEFT]);
+    // Bala is on a new cycle (13335), Chitra 9000, Esha 5100; Asha is vacant and p4 never had a tenant
+    expect(view.due).toBe(13335 + 9000 + 5100);
+    expect(view.received).toBe(0);
+    expect(view.difference).toBe(0);
+    expect(view.paidCount).toBe(0);
+    expect(view.cards.map((c) => c.status)).toEqual(["vacant", "pending", "pending", "needs-tenant", "pending"]);
+  });
+
+  it("leaves every other card as it was, with a null vacancy", () => {
+    const before = deriveMonthView(withOctober, PORTIONS, NOV);
+    const after = deriveMonthView(withOctober, PORTIONS, NOV, [ASHA_LEFT]);
+    for (const id of ["p2", "p3", "p4", "p5"]) {
+      expect(card(after, id)).toEqual({ ...card(before, id), vacancy: null });
+    }
+  });
+
+  it("gives a card that is not vacant a null vacancy, even without any tenancies", () => {
+    const view = deriveMonthView(withOctober, PORTIONS, NOV);
+    expect(view.cards.map((c) => c.vacancy)).toEqual([null, null, null, null, null]);
+  });
+
+  it("makes November due when the tenant moved out after its 1st, and December vacant", () => {
+    const left = { ...ASHA_LEFT, moveOut: "2026-11-02" };
+    expect(card(deriveMonthView(withOctober, PORTIONS, NOV, [left]), "p1")).toMatchObject({ status: "pending", vacancy: null });
+    expect(card(deriveMonthView(withOctober, PORTIONS, DEC, [left]), "p1")).toMatchObject({
+      status: "vacant",
+      vacancy: { since: "2026-11-02", previousTenant: "Asha" },
+    });
+  });
+
+  it("makes November vacant when the tenant moved out on its 1st", () => {
+    const left = { ...ASHA_LEFT, moveOut: "2026-11-01" };
+    expect(card(deriveMonthView(withOctober, PORTIONS, NOV, [left]), "p1")).toMatchObject({ status: "vacant" });
+  });
+
+  it("is not vacant while the portion has an open tenancy, and shows nobody else's details", () => {
+    const open: Tenancy = { ...ASHA_LEFT, rowNumber: 3, id: "t-2", tenant: "Hari", moveOut: "" };
+    // with an open tenancy the portion is not vacant: Asha's card is pending, and her details are not Hari's
+    expect(card(deriveMonthView(withOctober, PORTIONS, NOV, [ASHA_LEFT, open]), "p1")).toMatchObject({ status: "pending", tenancy: null });
+  });
+
+  it("has no undo reason for a vacant month, even when a later month has an entry", () => {
+    const { rows } = parseSchedule(
+      [
+        ...baseSchedule(),
+        scheduleRow(monthCell("text", 2026, 10), [["Asha", 4, 5450], null, null, null, null], 6),
+        scheduleRow(monthCell("text", 2026, 11), [null, null, null, null, null], 7),
+        scheduleRow(monthCell("text", 2026, 12), [["Hari", 1, 6000], null, null, null, null], 8),
+      ],
+      PORTIONS,
+      TOTAL_HEADER,
+    );
+    expect(card(deriveMonthView(rows, PORTIONS, NOV, [ASHA_LEFT]), "p1")).toMatchObject({ status: "vacant", undoBlockedReason: null });
+    // and December, where Hari moved in, is paid
+    expect(card(deriveMonthView(rows, PORTIONS, DEC, [ASHA_LEFT]), "p1")).toMatchObject({ status: "paid", entry: { tenant: "Hari", count: 1 } });
+    // January: the new tenant is not the one who left, so the portion is let again
+    expect(card(deriveMonthView(rows, PORTIONS, { year: 2027, month: 1 }, [ASHA_LEFT]), "p1")).toMatchObject({
+      status: "pending",
+      next: { tenant: "Hari", count: 2 },
+    });
   });
 });

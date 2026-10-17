@@ -36,12 +36,14 @@ const PILL_TONE: Record<PortionCard["status"], PillTone> = {
   paid: "success",
   pending: "warn",
   "needs-tenant": "neutral",
+  vacant: "neutral",
 };
 
 const PILL_LABEL = {
   paid: "Paid",
   pending: "Pending",
   "needs-tenant": "No tenant",
+  vacant: "Vacant",
 } as const;
 
 export default function PortionBoard({ monthKey, monthLabel, cards, defaultDate }: Props) {
@@ -55,6 +57,8 @@ export default function PortionBoard({ monthKey, monthLabel, cards, defaultDate 
           const tenant = card.entry?.tenant ?? card.next?.tenant;
           const lastOfCycle =
             card.cycleLength !== null && count !== undefined && count === card.cycleLength;
+          // A vacant card, like one that never had a tenant, has no rent to show and nothing to log.
+          const noTenant = card.status === "needs-tenant" || card.status === "vacant";
           // Only a paid card says how the amount received compares with the rent.
           const rentLine =
             card.status === "paid" ? cardDifferenceText(card.rentDifference, card.rentReference) : null;
@@ -66,7 +70,7 @@ export default function PortionBoard({ monthKey, monthLabel, cards, defaultDate 
                   <Pill tone={PILL_TONE[card.status]}>{PILL_LABEL[card.status]}</Pill>
                 </div>
 
-                {card.status === "needs-tenant" ? (
+                {noTenant ? (
                   <p className="mt-1 text-sm text-muted">No tenant recorded yet.</p>
                 ) : (
                   <p className="mt-1 text-sm text-muted">
@@ -75,7 +79,7 @@ export default function PortionBoard({ monthKey, monthLabel, cards, defaultDate 
                   </p>
                 )}
 
-                {card.status !== "needs-tenant" && (
+                {!noTenant && (
                   <>
                     <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
                       {card.tenancy &&
@@ -145,7 +149,7 @@ export default function PortionBoard({ monthKey, monthLabel, cards, defaultDate 
                       )}
                     </>
                   )}
-                  {card.status === "needs-tenant" && (
+                  {noTenant && (
                     <Button
                       className="flex-1"
                       onClick={() => setActive({ mode: "new-tenant", portionId: card.portionId })}
