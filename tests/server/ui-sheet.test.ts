@@ -62,7 +62,7 @@ describe("Sheet", () => {
   it("is a panel that scrolls on its own, does not pass its scrolling on to the page, and clears the home indicator", () => {
     const panel = /<div role="dialog"[^>]*class="([^"]*)"/.exec(sheet())?.[1] ?? "";
     for (const wanted of [
-      "max-h-dvh",
+      "max-h-sheet",
       "w-full",
       "max-w-md",
       "overflow-y-auto",

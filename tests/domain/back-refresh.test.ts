@@ -32,6 +32,19 @@ describe("backRefreshStep", () => {
     expect(backRefreshStep({ path: "/activity", at: 1_000 }, "/", 1_001)).toBe("wait");
   });
 
+  it("skips the refresh while the device is offline, because the router would fall back to a browser navigation and land on the browser's error page", () => {
+    expect(backRefreshStep(target, "/", 1_001, false)).toBe("skip");
+    expect(backRefreshStep(target, "/", 1_001, true)).toBe("refresh");
+    // online is the default, so a caller that does not know still gets the refresh
+    expect(backRefreshStep(target, "/", 1_001)).toBe("refresh");
+  });
+
+  it("still waits for the screen and still gives up on an old wish while offline", () => {
+    expect(backRefreshStep(target, "/tenants/p1", 1_001, false)).toBe("wait");
+    expect(backRefreshStep(target, "/", 1_000 + BACK_REFRESH_MAX_AGE_MS + 1, false)).toBe("drop");
+    expect(backRefreshStep(null, "/", 1_001, false)).toBe("none");
+  });
+
   it("gives up after ten seconds, so a back that never arrived cannot refresh some later screen", () => {
     expect(BACK_REFRESH_MAX_AGE_MS).toBe(10_000);
     expect(backRefreshStep(target, "/", 1_000 + BACK_REFRESH_MAX_AGE_MS)).toBe("refresh");
@@ -73,6 +86,19 @@ describe("expectBack and takeBackRefresh", () => {
     expectBack("/more", 1_100);
     expect(takeBackRefresh("/", 1_200)).toBe(false);
     expect(takeBackRefresh("/more", 1_300)).toBe(true);
+  });
+
+  it("says no while offline, and the wish is spent: coming back online later does not refresh a screen the person has moved on from", () => {
+    expectBack("/", 1_000);
+    expect(takeBackRefresh("/", 1_100, false)).toBe(false);
+    expect(takeBackRefresh("/", 1_200, true)).toBe(false);
+  });
+
+  it("keeps the wish while offline and another screen is showing, then skips it when the screen shows", () => {
+    expectBack("/more", 1_000);
+    expect(takeBackRefresh("/settings", 1_100, false)).toBe(false);
+    expect(takeBackRefresh("/more", 1_200, false)).toBe(false);
+    expect(takeBackRefresh("/more", 1_300, true)).toBe(false);
   });
 
   it("cannot loop: the refresh it asks for does not ask for another", () => {

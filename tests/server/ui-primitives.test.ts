@@ -330,19 +330,19 @@ describe("EmptyState", () => {
 });
 
 describe("Page", () => {
-  it("is the phone column: centred, at most 28rem wide, with a 16 px gutter and room for the tab bar", () => {
-    expect(html(createElement(Page, null, "x"))).toBe('<main class="mx-auto min-h-dvh max-w-md px-4 pt-4 pb-tabbar">x</main>');
+  it("is the phone column: centred, at most 28rem wide, with a 16 px gutter that clears a notch and room for the tab bar", () => {
+    expect(html(createElement(Page, null, "x"))).toBe('<main class="mx-auto min-h-dvh max-w-md px-safe pt-safe pb-tabbar">x</main>');
   });
 
   it("says when there is no tab bar (the sign-in page), and keeps the old bottom padding then", () => {
-    expect(html(createElement(Page, { tabBar: false }, "x"))).toBe('<main class="mx-auto min-h-dvh max-w-md px-4 pb-10 pt-4">x</main>');
+    expect(html(createElement(Page, { tabBar: false }, "x"))).toBe('<main class="mx-auto min-h-dvh max-w-md px-safe pb-10 pt-safe">x</main>');
   });
 
   it("can centre its content, for the sign-in and error pages", () => {
     const out = html(createElement(Page, { center: true, tabBar: false }, "x"));
     expect(out).toContain("flex min-h-dvh max-w-md flex-col justify-center");
     expect(out).not.toContain("pb-10");
-    expect(out).not.toContain("pt-4");
+    expect(out).not.toMatch(/\bpt-/);
     expect(html(createElement(Page, { center: true }, "x"))).toContain("pb-tabbar");
   });
 

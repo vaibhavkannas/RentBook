@@ -76,6 +76,37 @@
 }
 
 @layer base {
+  /*
+   * Touch. No grey flash on a tap (the `press` utility is the feedback), no delay waiting for a double-tap zoom (pinch
+   * zoom still works: the viewport never sets a maximum scale), and no resizing of text when the phone turns. The
+   * background is on <html> too, so the scroll edges and the overscroll show the page colour and no flash of white.
+   * The page's scrollbar room is kept even when it has no scrollbar, so locking the page behind a sheet (overflow:
+   * hidden) does not move it sideways on a desktop browser that draws a scrollbar of its own; a phone has none.
+   */
+  html {
+    background: var(--background);
+    -webkit-text-size-adjust: 100%;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+    scrollbar-gutter: stable;
+  }
+
+  /* A button and the tab bar are not text to select, and a long press on them opens no callout menu. */
+  button,
+  nav[aria-label="Main"] {
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
+  }
+
+  /* The installed app does not rubber-band at the top and bottom. A browser tab keeps pull to refresh. */
+  @media (display-mode: standalone) {
+    html,
+    body {
+      overscroll-behavior-y: none;
+    }
+  }
+
   /* One focus ring for everything a keyboard can reach. It shows for the keyboard, not for a tap. */
   :is(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
     outline: 2px solid var(--focus);
@@ -89,9 +120,30 @@ html.sheet-open body {
   overflow: hidden;
 }
 
+/*
+ * Safe areas. The viewport is drawn to the edges of the screen (viewport-fit: cover), so these keep content clear of a
+ * notch, rounded corners and the home indicator, and never take less than the usual gutter.
+ */
+
+/* Top padding for a page: the usual 1rem, or the notch if that is more. */
+@utility pt-safe {
+  padding-top: max(1rem, env(safe-area-inset-top));
+}
+
+/* Side padding for a page: the usual 1rem gutter, or the inset beside a cut-out in the screen (a phone held sideways). */
+@utility px-safe {
+  padding-left: max(1rem, env(safe-area-inset-left));
+  padding-right: max(1rem, env(safe-area-inset-right));
+}
+
 /* Bottom padding for a sheet: clears the home indicator, and is never less than the usual 1.25rem. */
 @utility pb-safe {
   padding-bottom: max(1.25rem, env(safe-area-inset-bottom));
+}
+
+/* The tallest a sheet may be: the screen below the notch, so a tall sheet does not run up under the status bar. */
+@utility max-h-sheet {
+  max-height: calc(100dvh - env(safe-area-inset-top));
 }
 
 /* The tab bar: its height plus the home indicator, and its links kept above the indicator. */

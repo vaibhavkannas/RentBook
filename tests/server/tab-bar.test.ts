@@ -248,7 +248,12 @@ describe("BackRefresh", () => {
   });
 
   it("loads the screen again, through the router, when back-refresh says the screen a tap went back to is showing", () => {
-    expect(code).toMatch(/useEffect\(\(\) => \{\s*if \(takeBackRefresh\(pathname\)\) router\.refresh\(\);\s*\}, \[pathname, router\]\);/);
+    expect(code).toMatch(/if \(takeBackRefresh\(pathname, .*\)\) router\.refresh\(\);/);
+    expect(code).toMatch(/useEffect\(\(\) => \{[\s\S]*\}, \[pathname, router\]\);/);
+  });
+
+  it("tells back-refresh whether the device is offline, so that it does not refresh into the browser's error page", () => {
+    expect(code).toMatch(/takeBackRefresh\(pathname, Date\.now\(\), navigator\.onLine !== false\)/);
   });
 
   it("renders as nothing at all", () => {

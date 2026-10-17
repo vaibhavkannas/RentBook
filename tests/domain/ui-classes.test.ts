@@ -136,20 +136,20 @@ describe("the card, the skeleton bar and the page", () => {
     expect(SKELETON_BAR).toBe("rounded-chip bg-line animate-pulse motion-reduce:animate-none");
   });
 
-  it("makes the page the single phone column with a 16 px gutter, and leaves room under it for the tab bar", () => {
-    expect(pageClasses(false)).toBe("mx-auto min-h-dvh max-w-md px-4 pt-4 pb-tabbar");
+  it("makes the page the single phone column with a 16 px gutter that clears a notch, and leaves room under it for the tab bar", () => {
+    expect(pageClasses(false)).toBe("mx-auto min-h-dvh max-w-md px-safe pt-safe pb-tabbar");
   });
 
   it("keeps the old 2.5rem of bottom padding where there is no tab bar", () => {
-    expect(pageClasses(false, false)).toBe("mx-auto min-h-dvh max-w-md px-4 pb-10 pt-4");
+    expect(pageClasses(false, false)).toBe("mx-auto min-h-dvh max-w-md px-safe pb-10 pt-safe");
   });
 
   it("centres the content of a sign-in or error page in the whole screen, with no vertical padding to push it off centre", () => {
-    expect(pageClasses(true, false)).toBe("mx-auto flex min-h-dvh max-w-md flex-col justify-center px-4");
+    expect(pageClasses(true, false)).toBe("mx-auto flex min-h-dvh max-w-md flex-col justify-center px-safe");
   });
 
   it("clears the tab bar on a centred page that has one (an error page inside the app)", () => {
-    expect(pageClasses(true)).toBe("mx-auto flex min-h-dvh max-w-md flex-col justify-center px-4 pb-tabbar");
+    expect(pageClasses(true)).toBe("mx-auto flex min-h-dvh max-w-md flex-col justify-center px-safe pb-tabbar");
   });
 });
 

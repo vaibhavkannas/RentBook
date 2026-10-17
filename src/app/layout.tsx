@@ -19,10 +19,18 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 
+// Pinch zoom stays on: never set maximumScale or userScalable. viewportFit "cover" draws the page edge to edge, so the
+// safe-area padding (pt-safe, px-safe, pb-safe, pb-tabbar in globals.css) keeps content clear of a notch and the home
+// indicator. The browser bar takes the accent in light mode and the page's own colour in dark mode.
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  themeColor: BRAND.colors.accent,
+  viewportFit: "cover",
+  colorScheme: "light dark",
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: BRAND.colors.accent },
+    { media: "(prefers-color-scheme: dark)", color: BRAND.colors.backgroundDark },
+  ],
   interactiveWidget: "resizes-content",
 };
 

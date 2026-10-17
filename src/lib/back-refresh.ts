@@ -16,15 +16,18 @@ export type BackTarget = { path: string; at: number } | null;
 /**
  *  - none: no back was asked for.
  *  - refresh: the screen the back was heading for is showing.
+ *  - skip: that screen is showing but the device is offline, so loading it again is not worth it: the router would fall
+ *    back to a full browser navigation and the person would land on the browser's own error page. Forget the wish.
  *  - wait: another screen is showing, the traversal has not arrived.
  *  - drop: the back never arrived (it is older than BACK_REFRESH_MAX_AGE_MS), so forget it.
  */
-export type BackRefreshStep = "none" | "wait" | "refresh" | "drop";
+export type BackRefreshStep = "none" | "wait" | "refresh" | "skip" | "drop";
 
-export function backRefreshStep(target: BackTarget, pathname: string, now: number): BackRefreshStep {
+export function backRefreshStep(target: BackTarget, pathname: string, now: number, online = true): BackRefreshStep {
   if (target === null) return "none";
   if (now - target.at > BACK_REFRESH_MAX_AGE_MS) return "drop";
-  return hrefPath(pathname) === target.path ? "refresh" : "wait";
+  if (hrefPath(pathname) !== target.path) return "wait";
+  return online ? "refresh" : "skip";
 }
 
 let target: BackTarget = null;
@@ -35,11 +38,12 @@ export function expectBack(href: string, now: number = Date.now()): void {
 }
 
 /**
- * Asked each time the screen changes. True once, when the screen a tap went back to is showing; the wish is spent
- * then, so the refresh it causes cannot cause another. A wish that is too old is forgotten.
+ * Asked each time the screen changes. True once, when the screen a tap went back to is showing and the device is
+ * online; the wish is spent then (offline too), so the refresh it causes cannot cause another. A wish that is too old
+ * is forgotten.
  */
-export function takeBackRefresh(pathname: string, now: number = Date.now()): boolean {
-  const step = backRefreshStep(target, pathname, now);
-  if (step === "refresh" || step === "drop") target = null;
+export function takeBackRefresh(pathname: string, now: number = Date.now(), online = true): boolean {
+  const step = backRefreshStep(target, pathname, now, online);
+  if (step === "refresh" || step === "skip" || step === "drop") target = null;
   return step === "refresh";
 }

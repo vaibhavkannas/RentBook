@@ -147,7 +147,7 @@ export default async function TenantsPage({
             <dl className="mt-2 divide-y divide-line">
               <Detail label="Phone">
                 {phoneLink ? (
-                  <a href={phoneLink} className="inline-flex min-h-11 items-center underline">
+                  <a href={phoneLink} className="press inline-flex min-h-11 items-center underline">
                     {current.phone}
                   </a>
                 ) : (

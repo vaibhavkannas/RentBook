@@ -84,13 +84,14 @@ export const CARD = "rounded-card border border-line bg-surface p-4";
 export const SKELETON_BAR = "rounded-chip bg-line animate-pulse motion-reduce:animate-none";
 
 /**
- * The single phone column, with a 16 px gutter. `center` is for the sign-in and error pages: their content sits in
- * the middle of the whole screen, so they have no vertical padding to push it off centre. `tabBar` leaves room under
- * the page for the tab bar (pb-tabbar); a page without the bar (the sign-in page) keeps the usual 2.5rem.
+ * The single phone column, with a 16 px gutter that grows to clear a notch or a rounded corner (px-safe) and a top
+ * that clears the notch (pt-safe). `center` is for the sign-in and error pages: their content sits in the middle of
+ * the whole screen, so they have no vertical padding to push it off centre. `tabBar` leaves room under the page for
+ * the tab bar (pb-tabbar); a page without the bar (the sign-in page) keeps the usual 2.5rem.
  */
 export const pageClasses = (center: boolean, tabBar = true) =>
   center
-    ? cx("mx-auto flex min-h-dvh max-w-md flex-col justify-center px-4", tabBar && "pb-tabbar")
+    ? cx("mx-auto flex min-h-dvh max-w-md flex-col justify-center px-safe", tabBar && "pb-tabbar")
     : tabBar
-      ? "mx-auto min-h-dvh max-w-md px-4 pt-4 pb-tabbar"
-      : "mx-auto min-h-dvh max-w-md px-4 pb-10 pt-4";
+      ? "mx-auto min-h-dvh max-w-md px-safe pt-safe pb-tabbar"
+      : "mx-auto min-h-dvh max-w-md px-safe pb-10 pt-safe";

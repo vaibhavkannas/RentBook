@@ -137,7 +137,7 @@ export function Sheet({ labelledBy, describedBy, onClose, canClose, closeOnBackd
         aria-labelledby={labelledBy}
         aria-describedby={describedBy}
         tabIndex={-1}
-        className="max-h-dvh w-full max-w-md overflow-y-auto overscroll-contain rounded-t-2xl bg-surface p-5 pb-safe focus:outline-none"
+        className="max-h-sheet w-full max-w-md overflow-y-auto overscroll-contain rounded-t-2xl bg-surface p-5 pb-safe focus:outline-none"
       >
         <div aria-hidden="true" className="mx-auto mb-3 h-1 w-9 rounded-full bg-control" />
         {children}
