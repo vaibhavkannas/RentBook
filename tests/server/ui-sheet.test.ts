@@ -81,7 +81,34 @@ describe("Sheet", () => {
   });
 
   it("has a grab bar on top, 4 by 36 px, hidden from screen readers", () => {
-    expect(sheet()).toMatch(/<div aria-hidden="true" class="[^"]*\bh-1\b[^"]*\bw-9\b[^"]*\bbg-line\b[^"]*"><\/div>/);
+    expect(sheet()).toMatch(/<div aria-hidden="true" class="[^"]*\bh-1\b[^"]*\bw-9\b[^"]*\bbg-control\b[^"]*"><\/div>/);
+  });
+
+  it("draws the grab bar in a tone that can be seen on the panel, in both themes, not in the hairline colour", () => {
+    const bar = /<div aria-hidden="true" class="([^"]*)"><\/div>/.exec(sheet())?.[1] ?? "";
+    expect(bar).not.toMatch(/\bbg-line\b/);
+    const css = source("src/app/globals.css");
+    const light = /(?:^|\n):root\s*\{([^}]*)\}/.exec(css)![1];
+    const dark = /@media\s*\(prefers-color-scheme:\s*dark\)\s*\{\s*:root\s*\{([^}]*)\}/.exec(css)![1];
+    const token = (block: string, name: string) => new RegExp(`${name}:\\s*(#[0-9a-f]{6});`, "i").exec(block)![1];
+    // the WCAG contrast of one colour on another; 3:1 is what a control or a graphic needs to be seen
+    const channel = (value: number) => {
+      const c = value / 255;
+      return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+    };
+    const luminance = (hex: string) => {
+      const [r, g, b] = [1, 3, 5].map((at) => channel(parseInt(hex.slice(at, at + 2), 16)));
+      return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    };
+    const contrast = (a: string, b: string) => {
+      const [high, low] = [luminance(a), luminance(b)].sort((x, y) => y - x);
+      return (high + 0.05) / (low + 0.05);
+    };
+    for (const [theme, block] of [["light", light], ["dark", dark]] as const) {
+      expect(contrast(token(block, "--control"), token(block, "--surface")), theme).toBeGreaterThanOrEqual(3);
+    }
+    // the colour it replaces was about 1.3:1 on the light panel
+    expect(contrast(token(light, "--line"), token(light, "--surface"))).toBeLessThan(1.5);
   });
 
   it("shows what it is given", () => {
@@ -99,6 +126,12 @@ describe("the Sheet source", () => {
     expect(code).toMatch(/sheetKeyAction\(/);
     expect(code).toMatch(/sheetLock\.acquire\(\)/);
     expect(code).toMatch(/sheetLock\.release\(\)/);
+    // released before paint, so a toast that arrives as the sheet closes is not drawn once at the top
+    expect(code).toMatch(/useLayoutEffect\(\(\) => \{\s*sheetLock\.acquire\(\);\s*return \(\) => sheetLock\.release\(\);/);
+    // focus goes back to the control that was pressed, where the browser did not focus it (iOS Safari)
+    expect(code).toMatch(/import \{[^}]*\bchooseOpener\b[^}]*\} from "@\/lib\/opener"/);
+    expect(code).toMatch(/installPressTracker\(document\)/);
+    expect(code).toMatch(/chooseOpener\(\{[^}]*pressed:\s*lastPressedControl\(\)/);
     // the backdrop still closes the sheet only while it may be closed, and only for a press that began and ended on it
     expect(code).toMatch(/canClose && shouldCloseOnBackdrop\(/);
     expect(code).not.toContain("classList");
@@ -193,7 +226,7 @@ describe("PaymentSheet on Sheet", () => {
 
 describe("UndoSheet on Sheet", () => {
   const out = html(
-    createElement(UndoSheet, { monthKey: "2026-10", monthLabel: "October 2026", card: card(), onClose: () => {}, onDone: () => {} }),
+    createElement(UndoSheet, { monthKey: "2026-10", monthLabel: "October 2026", card: card(), onClose: () => {} }),
   );
 
   it("is a modal dialog named by its title and described by what the undo will do", () => {

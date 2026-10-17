@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Pill } from "@/components/ui/Pill";
@@ -32,9 +32,6 @@ type Active =
   | { mode: "undo"; portionId: string; card: PortionCard; monthKey: string; monthLabel: string }
   | null;
 
-/** The toast carries an id so a second one, even with the same text, restarts the timer. */
-type Toast = { id: number; text: string };
-
 const PILL_TONE: Record<PortionCard["status"], PillTone> = {
   paid: "success",
   pending: "warn",
@@ -49,14 +46,6 @@ const PILL_LABEL = {
 
 export default function PortionBoard({ monthKey, monthLabel, cards, defaultDate }: Props) {
   const [active, setActive] = useState<Active>(null);
-  const [toast, setToast] = useState<Toast | null>(null);
-  const toastCount = useRef(0);
-
-  useEffect(() => {
-    if (!toast) return;
-    const timer = setTimeout(() => setToast(null), 4000);
-    return () => clearTimeout(timer);
-  }, [toast]);
 
   return (
     <>
@@ -193,7 +182,6 @@ export default function PortionBoard({ monthKey, monthLabel, cards, defaultDate 
             monthLabel={active.monthLabel}
             card={active.card}
             onClose={() => setActive(null)}
-            onDone={(text) => setToast({ id: ++toastCount.current, text })}
           />
         ) : (
           <PaymentSheet
@@ -207,18 +195,6 @@ export default function PortionBoard({ monthKey, monthLabel, cards, defaultDate 
             onClose={() => setActive(null)}
           />
         ))}
-
-      {/* The live region is always on the page, so screen readers announce text that appears in it. */}
-      <div role="status" className="pointer-events-none fixed inset-x-4 bottom-4 z-50 mx-auto max-w-md">
-        {toast && (
-          <p
-            key={toast.id}
-            className="rounded-xl bg-foreground px-4 py-3 text-center text-sm text-background"
-          >
-            {toast.text}
-          </p>
-        )}
-      </div>
     </>
   );
 }

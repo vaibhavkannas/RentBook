@@ -131,9 +131,9 @@ export default function ExitGuard() {
   });
 
   // The live region is always on the page, so screen readers announce text that appears in it. It sits
-  // higher than the payment toast's region (bottom-4), so the two stack instead of covering each other.
+  // higher than the shared toast's region (bottom-toast), so the two stack instead of covering each other.
   return (
-    <div role="status" className="pointer-events-none fixed inset-x-4 bottom-20 z-50 mx-auto max-w-md">
+    <div role="status" className="pointer-events-none fixed inset-x-4 bottom-toast-high toast-region z-50 mx-auto max-w-md">
       {showToast && (
         <p className="rounded-xl bg-foreground px-4 py-3 text-center text-sm text-background">
           {EXIT_TOAST_TEXT}

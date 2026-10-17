@@ -4,8 +4,10 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { Field, Input, TextArea } from "@/components/ui/Field";
-import { LiveNotice, Notice } from "@/components/ui/Notice";
+import { Notice } from "@/components/ui/Notice";
+import { useToast } from "@/components/ui/Toast";
 import { postJson } from "@/lib/post-json";
+import { DETAILS_SAVED_TOAST } from "@/lib/toast-copy";
 import {
   buildTenancyDraftRequest,
   editDraft,
@@ -42,6 +44,7 @@ type Props = {
  */
 export default function TenancyForm({ target, initial, noticeShown = false, monthKey = null }: Props) {
   const router = useRouter();
+  const toast = useToast();
   const editing = target.mode === "edit";
   const [open, setOpen] = useState(!editing);
   const [draft, setDraft] = useState(() => startDraft(target, initial));
@@ -75,6 +78,7 @@ export default function TenancyForm({ target, initial, noticeShown = false, mont
     const body = await postJson<TenancyApiBody>("/api/tenancies", request.body);
     if (body?.ok) {
       applyPageMove(router, pageAfterSave(target.portionId, noticeShown, monthKey));
+      toast.show(DETAILS_SAVED_TOAST);
       setSaved(true);
       // An edit form closes. A create form stays disabled until the refreshed page replaces it.
       if (editing) {
@@ -96,20 +100,16 @@ export default function TenancyForm({ target, initial, noticeShown = false, mont
     setError(failure.message);
   }
 
-  const statusText = saved ? (editing ? "Saved." : busy ? "Saved. Updating the page…" : null) : null;
+  // The create form stays disabled until the refreshed page replaces it, and says so. An edit form closes, and the toast
+  // says it was saved.
+  const statusText = saved && !editing && busy ? "Saved. Updating the page…" : null;
 
   return (
     <>
-      {/* Live regions stay on the page, so screen readers announce the text that appears in them. */}
-      {editing ? (
-        <LiveNotice tone="success" className="mt-3">
-          {statusText}
-        </LiveNotice>
-      ) : (
-        <div role="status" className={statusText ? "mt-3 text-sm text-muted" : undefined}>
-          {statusText}
-        </div>
-      )}
+      {/* The live region stays on the page, so screen readers announce the text that appears in it. */}
+      <div role="status" className={statusText ? "mt-3 text-sm text-muted" : undefined}>
+        {statusText}
+      </div>
       {!open ? (
         <div className="mt-3">
           <Button
@@ -135,69 +135,72 @@ export default function TenancyForm({ target, initial, noticeShown = false, mont
             void save();
           }}
         >
-          <Field label="Phone">
-            <Input
-              type="tel"
-              value={form.phone}
-              onChange={(event) => set({ phone: event.target.value })}
-              autoComplete="off"
-              autoFocus={editing}
-              maxLength={30}
-            />
-          </Field>
+          {/* While the details are being saved no field can be edited. */}
+          <fieldset disabled={busy} className="min-w-0 space-y-3">
+            <Field label="Phone">
+              <Input
+                type="tel"
+                value={form.phone}
+                onChange={(event) => set({ phone: event.target.value })}
+                autoComplete="off"
+                autoFocus={editing}
+                maxLength={30}
+              />
+            </Field>
 
-          <Field label="Move-in date" hint={editing ? undefined : "Change this if the tenant moved in earlier."}>
-            <Input
-              type="date"
-              value={form.moveIn}
-              onChange={(event) => set({ moveIn: event.target.value })}
-              required
-            />
-          </Field>
+            <Field label="Move-in date" hint={editing ? undefined : "Change this if the tenant moved in earlier."}>
+              <Input
+                type="date"
+                value={form.moveIn}
+                onChange={(event) => set({ moveIn: event.target.value })}
+                required
+              />
+            </Field>
 
-          <Field label="Agreement end">
-            <Input
-              type="date"
-              value={form.agreementEnd}
-              onChange={(event) => set({ agreementEnd: event.target.value })}
-            />
-          </Field>
+            <Field label="Agreement end">
+              <Input
+                type="date"
+                value={form.agreementEnd}
+                onChange={(event) => set({ agreementEnd: event.target.value })}
+              />
+            </Field>
 
-          <Field label="Advance (₹)">
-            <Input
-              value={form.advance}
-              onChange={(event) => set({ advance: event.target.value })}
-              inputMode="numeric"
-              autoComplete="off"
-            />
-          </Field>
+            <Field label="Advance (₹)">
+              <Input
+                value={form.advance}
+                onChange={(event) => set({ advance: event.target.value })}
+                inputMode="numeric"
+                autoComplete="off"
+              />
+            </Field>
 
-          <Field label="Advance date">
-            <Input
-              type="date"
-              value={form.advanceDate}
-              onChange={(event) => set({ advanceDate: event.target.value })}
-            />
-          </Field>
+            <Field label="Advance date">
+              <Input
+                type="date"
+                value={form.advanceDate}
+                onChange={(event) => set({ advanceDate: event.target.value })}
+              />
+            </Field>
 
-          <Field label="Notes">
-            <TextArea
-              value={form.notes}
-              onChange={(event) => set({ notes: event.target.value })}
-              rows={3}
-              maxLength={500}
-            />
-          </Field>
+            <Field label="Notes">
+              <TextArea
+                value={form.notes}
+                onChange={(event) => set({ notes: event.target.value })}
+                rows={3}
+                maxLength={500}
+              />
+            </Field>
 
-          {error && (
-            <Notice tone="danger" role="alert">
-              {error}
-            </Notice>
-          )}
+            {error && (
+              <Notice tone="danger" role="alert">
+                {error}
+              </Notice>
+            )}
 
-          <Button type="submit" size="lg" className="w-full" pending={busy} pendingLabel="Saving…">
-            Save details
-          </Button>
+            <Button type="submit" size="lg" className="w-full" pending={busy} pendingLabel="Saving…">
+              Save details
+            </Button>
+          </fieldset>
           {editing && (
             <Button
               variant="quiet"

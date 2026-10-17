@@ -6,9 +6,11 @@ import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Checkbox, Field, Input } from "@/components/ui/Field";
 import { Notice } from "@/components/ui/Notice";
+import { useToast } from "@/components/ui/Toast";
 import type { PortionConfig } from "@/lib/domain/types";
 import { postJson, POST_TIMEOUT_MS } from "@/lib/post-json";
 import { parseSettingsRows, type SettingsRowInput } from "@/lib/settings-input";
+import { SETTINGS_SAVED_TOAST } from "@/lib/toast-copy";
 
 const toRow = (p: PortionConfig): SettingsRowInput => ({
   id: p.id,
@@ -22,34 +24,36 @@ type SaveBody = { ok: boolean; error?: { message: string }; portions?: PortionCo
 
 export default function SettingsForm({ portions }: { portions: PortionConfig[] }) {
   const router = useRouter();
+  const toast = useToast();
   const [rows, setRows] = useState(() => portions.map(toRow));
   const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
+  // Only a problem is shown here. A save that went through is a toast.
+  const [error, setError] = useState<string | null>(null);
 
   const update = (id: string, patch: Partial<SettingsRowInput>) => {
-    setMessage(null);
+    setError(null);
     setRows((current) => current.map((row) => (row.id === id ? { ...row, ...patch } : row)));
   };
 
   async function save() {
     const parsed = parseSettingsRows(rows);
     if (!parsed.ok) {
-      setMessage({ kind: "error", text: parsed.message });
+      setError(parsed.message);
       return;
     }
     setBusy(true);
-    setMessage(null);
+    setError(null);
     const body = await postJson<SaveBody>("/api/settings", { portions: parsed.portions }, POST_TIMEOUT_MS, "PUT");
     setBusy(false);
     if (!body) {
-      setMessage({ kind: "error", text: "Couldn't reach the server. Try again." });
+      setError("Couldn't reach the server. Try again.");
     } else if (body.ok) {
       // Show what was really stored, so the screen can never disagree with the Sheet.
       if (body.portions) setRows(body.portions.map(toRow));
-      setMessage({ kind: "ok", text: "Saved" });
+      toast.show(SETTINGS_SAVED_TOAST);
       router.refresh();
     } else {
-      setMessage({ kind: "error", text: body.error?.message ?? "Couldn't save settings." });
+      setError(body.error?.message ?? "Couldn't save settings.");
     }
   }
 
@@ -61,47 +65,50 @@ export default function SettingsForm({ portions }: { portions: PortionConfig[] }
         void save();
       }}
     >
-      {rows.map((row) => (
-        <Card as="fieldset" key={row.id} className="space-y-2">
-          <legend className="sr-only">Settings for {row.name || row.id}</legend>
-          <Field label="Name">
-            <Input
-              value={row.name}
-              onChange={(event) => update(row.id, { name: event.target.value })}
-              required
-              maxLength={60}
+      {/* While the settings are being saved no field can be edited. */}
+      <fieldset disabled={busy} className="min-w-0 space-y-3">
+        {rows.map((row) => (
+          <Card as="fieldset" key={row.id} className="space-y-2">
+            <legend className="sr-only">Settings for {row.name || row.id}</legend>
+            <Field label="Name">
+              <Input
+                value={row.name}
+                onChange={(event) => update(row.id, { name: event.target.value })}
+                required
+                maxLength={60}
+              />
+            </Field>
+
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Cycle length">
+                <Input
+                  value={row.cycle}
+                  onChange={(event) => update(row.id, { cycle: event.target.value })}
+                  inputMode="numeric"
+                  disabled={row.never}
+                />
+              </Field>
+              <Field label="Hike %">
+                <Input
+                  value={row.hike}
+                  onChange={(event) => update(row.id, { hike: event.target.value })}
+                  inputMode="decimal"
+                />
+              </Field>
+            </div>
+
+            <Checkbox
+              label="Count never resets"
+              checked={row.never}
+              onChange={(event) => update(row.id, { never: event.target.checked })}
             />
-          </Field>
+          </Card>
+        ))}
+      </fieldset>
 
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Cycle length">
-              <Input
-                value={row.cycle}
-                onChange={(event) => update(row.id, { cycle: event.target.value })}
-                inputMode="numeric"
-                disabled={row.never}
-              />
-            </Field>
-            <Field label="Hike %">
-              <Input
-                value={row.hike}
-                onChange={(event) => update(row.id, { hike: event.target.value })}
-                inputMode="decimal"
-              />
-            </Field>
-          </div>
-
-          <Checkbox
-            label="Count never resets"
-            checked={row.never}
-            onChange={(event) => update(row.id, { never: event.target.checked })}
-          />
-        </Card>
-      ))}
-
-      {message && (
-        <Notice tone={message.kind === "ok" ? "success" : "danger"} role={message.kind === "error" ? "alert" : "status"}>
-          {message.text}
+      {error && (
+        <Notice tone="danger" role="alert">
+          {error}
         </Notice>
       )}
 

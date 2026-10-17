@@ -5,8 +5,10 @@ import { useEffect, useId, useRef, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { Field, Input, Select, TextArea } from "@/components/ui/Field";
 import { Notice } from "@/components/ui/Notice";
+import { useToast } from "@/components/ui/Toast";
 import type { AdvanceStatus } from "@/lib/domain/tenancy";
 import { postJson } from "@/lib/post-json";
+import { moveOutToastText } from "@/lib/toast-copy";
 import {
   buildMoveOutDraftRequest,
   editDraft,
@@ -54,6 +56,7 @@ const OUTCOMES: Array<{ value: AdvanceStatus; label: string }> = [
  */
 export default function MoveOutForm({ target, initial, tenant, portionId, noticeShown = false, monthKey = null }: Props) {
   const router = useRouter();
+  const toast = useToast();
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState(() => startDraft(target, initial));
   const [busy, setBusy] = useState(false);
@@ -87,6 +90,7 @@ export default function MoveOutForm({ target, initial, tenant, portionId, notice
     if (body?.ok) {
       // The refreshed page shows the tenancy as a past one and replaces this form. Until then it stays disabled.
       applyPageMove(router, pageAfterSave(portionId, noticeShown, monthKey));
+      toast.show(moveOutToastText(tenant));
       return;
     }
     setBusy(false);
@@ -127,76 +131,79 @@ export default function MoveOutForm({ target, initial, tenant, portionId, notice
             void save();
           }}
         >
-          <Field label="Move-out date">
-            <Input
-              type="date"
-              value={form.moveOut}
-              onChange={(event) => set({ moveOut: event.target.value })}
-              required
-              autoFocus
-            />
-          </Field>
-
-          {draft.seen.hasAdvance && (
-            <Field label="What happened to the advance?" hint={MOVE_OUT_OUTCOME_HINT}>
-              <Select
-                value={form.advanceStatus}
-                onChange={(event) => set({ advanceStatus: event.target.value as AdvanceStatus })}
-              >
-                {OUTCOMES.map((outcome) => (
-                  <option key={outcome.value} value={outcome.value}>
-                    {outcome.label}
-                  </option>
-                ))}
-              </Select>
-            </Field>
-          )}
-
-          {/* One hint covers both amounts, so each field points at it. */}
-          <div>
-            <Field label="Refund (₹)">
+          {/* While the move-out is being saved no field can be edited. */}
+          <fieldset disabled={busy} className="min-w-0 space-y-3">
+            <Field label="Move-out date">
               <Input
-                value={form.refund}
-                onChange={(event) => set({ refund: event.target.value })}
-                inputMode="numeric"
-                autoComplete="off"
-                aria-describedby={rupeesHint}
+                type="date"
+                value={form.moveOut}
+                onChange={(event) => set({ moveOut: event.target.value })}
+                required
+                autoFocus
               />
             </Field>
-            <div className="mt-3">
-              <Field label="Deductions (₹)">
+
+            {draft.seen.hasAdvance && (
+              <Field label="What happened to the advance?" hint={MOVE_OUT_OUTCOME_HINT}>
+                <Select
+                  value={form.advanceStatus}
+                  onChange={(event) => set({ advanceStatus: event.target.value as AdvanceStatus })}
+                >
+                  {OUTCOMES.map((outcome) => (
+                    <option key={outcome.value} value={outcome.value}>
+                      {outcome.label}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+            )}
+
+            {/* One hint covers both amounts, so each field points at it. */}
+            <div>
+              <Field label="Refund (₹)">
                 <Input
-                  value={form.deductions}
-                  onChange={(event) => set({ deductions: event.target.value })}
+                  value={form.refund}
+                  onChange={(event) => set({ refund: event.target.value })}
                   inputMode="numeric"
                   autoComplete="off"
                   aria-describedby={rupeesHint}
                 />
               </Field>
+              <div className="mt-3">
+                <Field label="Deductions (₹)">
+                  <Input
+                    value={form.deductions}
+                    onChange={(event) => set({ deductions: event.target.value })}
+                    inputMode="numeric"
+                    autoComplete="off"
+                    aria-describedby={rupeesHint}
+                  />
+                </Field>
+              </div>
+              <p id={rupeesHint} className="mt-1 text-sm text-muted">
+                {MOVE_OUT_RUPEES_HINT}
+              </p>
             </div>
-            <p id={rupeesHint} className="mt-1 text-sm text-muted">
-              {MOVE_OUT_RUPEES_HINT}
-            </p>
-          </div>
 
-          <Field label="Notes">
-            <TextArea
-              value={form.notes}
-              onChange={(event) => set({ notes: event.target.value })}
-              rows={3}
-              maxLength={500}
-            />
-          </Field>
+            <Field label="Notes">
+              <TextArea
+                value={form.notes}
+                onChange={(event) => set({ notes: event.target.value })}
+                rows={3}
+                maxLength={500}
+              />
+            </Field>
 
-          {error && (
-            <Notice tone="danger" role="alert">
-              {error}
-            </Notice>
-          )}
+            {error && (
+              <Notice tone="danger" role="alert">
+                {error}
+              </Notice>
+            )}
 
-          <Button type="submit" size="lg" className="w-full" pending={busy} pendingLabel="Saving…">
-            Record move-out
-          </Button>
+            <Button type="submit" size="lg" className="w-full" pending={busy} pendingLabel="Saving…">
+              Record move-out
+            </Button>
+          </fieldset>
           <Button
             variant="quiet"
             className="w-full"

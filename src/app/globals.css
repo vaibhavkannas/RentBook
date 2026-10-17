@@ -105,6 +105,25 @@ html.sheet-open body {
   padding-bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom) + 1.5rem);
 }
 
+/*
+ * Where a toast sits: above the tab bar and the home indicator, with a little air. The exit toast of the installed app
+ * is lifted by a toast's height (3.5rem), so the two stack. Both regions carry the class toast-region.
+ */
+@utility bottom-toast {
+  bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom) + 0.75rem + var(--toast-lift, 0rem));
+}
+
+@utility bottom-toast-high {
+  --toast-lift: 3.5rem;
+  bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom) + 0.75rem + var(--toast-lift));
+}
+
+/* A sheet's buttons are at the bottom of the screen, so while one is open a toast goes to the top, inside the safe area. */
+html.sheet-open .toast-region {
+  bottom: auto;
+  top: calc(env(safe-area-inset-top) + 0.75rem + var(--toast-lift, 0rem));
+}
+
 /* A little press feedback for buttons and links: the control shrinks while it is held down. */
 @utility press {
   transition:

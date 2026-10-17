@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { Notice } from "@/components/ui/Notice";
 import { Sheet } from "@/components/ui/Sheet";
+import { useToast } from "@/components/ui/Toast";
 import type { PortionCard } from "@/lib/domain/types";
 import type { LogRetryResponse } from "@/lib/payment-request";
 import { postJson } from "@/lib/post-json";
@@ -21,7 +22,6 @@ type Props = {
   /** The paid card as it was when Undo was tapped. It must have an entry. */
   card: PortionCard;
   onClose: () => void;
-  onDone: (message: string) => void;
 };
 
 type ApiBody = LogRetryResponse & {
@@ -33,8 +33,9 @@ type ApiBody = LogRetryResponse & {
 const NO_CONFIRMATION =
   "Couldn't confirm that the undo went through. Check your connection and refresh the page before trying again.";
 
-export default function UndoSheet({ monthKey, monthLabel, card, onClose, onDone }: Props) {
+export default function UndoSheet({ monthKey, monthLabel, card, onClose }: Props) {
   const router = useRouter();
+  const toast = useToast();
   const entry = card.entry!;
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -45,6 +46,12 @@ export default function UndoSheet({ monthKey, monthLabel, card, onClose, onDone 
   const logPending = pendingToken !== null;
   const safeButton = useRef<HTMLButtonElement>(null);
   const toastText = undoToastText(card.name);
+
+  /** The undo is saved: say so, and close. */
+  function done() {
+    toast.show(toastText);
+    onClose();
+  }
 
   // Focus the safe choice: Keep, then Close once the card changed, or Retry after a log failure. The Sheet puts focus
   // on it when it opens (initialFocus) and gives focus back to what opened the sheet when it closes.
@@ -65,8 +72,7 @@ export default function UndoSheet({ monthKey, monthLabel, card, onClose, onDone 
     if (body.ok) {
       router.refresh();
       if (body.logWritten === false) return setPendingToken(body.retryToken ?? "");
-      onDone(toastText);
-      return onClose();
+      return done();
     }
     if (body.error?.code === "conflict") {
       router.refresh();
@@ -80,10 +86,7 @@ export default function UndoSheet({ monthKey, monthLabel, card, onClose, onDone 
     setError(null);
     const body = await postJson<ApiBody>("/api/payments/log-retry", { token: pendingToken });
     setBusy(false);
-    if (body?.ok && body.logWritten) {
-      onDone(toastText);
-      return onClose();
-    }
+    if (body?.ok && body.logWritten) return done();
     setError(undoLogRetryFailureMessage(body));
   }
 
@@ -91,7 +94,7 @@ export default function UndoSheet({ monthKey, monthLabel, card, onClose, onDone 
     <Sheet
       labelledBy="undo-title"
       describedBy="undo-description"
-      onClose={onClose}
+      onClose={logPending ? done : onClose}
       canClose={!busy}
       closeOnBackdrop={false}
       initialFocus={safeButton}
@@ -126,10 +129,7 @@ export default function UndoSheet({ monthKey, monthLabel, card, onClose, onDone 
           <Button
             variant="quiet"
             className="w-full"
-            onClick={() => {
-              onDone(toastText);
-              onClose();
-            }}
+            onClick={done}
             disabled={busy}
           >
             Skip for now

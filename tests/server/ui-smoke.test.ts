@@ -19,6 +19,7 @@ import ExitGuard from "@/components/ExitGuard";
 import MoveOutForm from "@/components/MoveOutForm";
 import PaymentSheet from "@/components/PaymentSheet";
 import PortionBoard from "@/components/PortionBoard";
+import { ToastProvider } from "@/components/ui/Toast";
 import TenancyForm from "@/components/TenancyForm";
 import { emptyMoveOutForm, emptyTenancyForm } from "@/lib/tenancy-input";
 import { buttonClasses, CARD, pillClasses } from "@/lib/ui-classes";
@@ -219,11 +220,12 @@ describe("ExitGuard", () => {
     expect(out).toContain("z-50 mx-auto max-w-md");
   });
 
-  it("sits higher than the payment toast, so the two stack instead of covering each other", () => {
-    expect(out).toContain("bottom-20");
-    expect(out).not.toContain("bottom-4");
-    // the payment toast's region is at bottom-4
-    expect(board([card()])).toContain("fixed inset-x-4 bottom-4 z-50");
+  it("sits higher than the shared toast, so the two stack instead of covering each other", () => {
+    expect(out).toContain("bottom-toast-high");
+    expect(out).not.toContain("bottom-20");
+    // the shared region, in the root layout, is at bottom-toast; the board no longer has a region of its own
+    expect(html(createElement(ToastProvider))).toMatch(/class="[^"]*\bbottom-toast\b(?!-)/);
+    expect(board([card()])).not.toContain("fixed inset-x-4");
   });
 });
 

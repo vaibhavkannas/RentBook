@@ -2,6 +2,7 @@
 
 import {
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
   type MouseEvent as ReactMouseEvent,
@@ -11,8 +12,13 @@ import {
 } from "react";
 import { tabbable } from "@/lib/focusable";
 import { shouldCloseOnBackdrop } from "@/lib/month-nav";
+import { chooseOpener, installPressTracker, lastPressedControl } from "@/lib/opener";
 import { sheetLock } from "@/lib/page-lock";
 import { sheetKeyAction } from "@/lib/sheet-keys";
+
+// Remember which control is pressed, from the moment this module is loaded with the page, so a sheet knows its opener
+// even where a tap does not focus a button (iOS Safari). The sheets are imported by the pages that open them.
+if (typeof document !== "undefined") installPressTracker(document);
 
 type Props = {
   /** The id of the element inside that names the dialog. */
@@ -41,10 +47,18 @@ export function Sheet({ labelledBy, describedBy, onClose, canClose, closeOnBackd
   const panelRef = useRef<HTMLDivElement>(null);
   // Where the latest press began and ended, so a drag from the panel onto the backdrop is not a tap on it.
   const press = useRef({ downOnBackdrop: false, upOnBackdrop: false });
-  // What had focus before the sheet opened. It is taken while the sheet renders, because a control with `autoFocus`
-  // takes focus when the sheet is put on the page: an effect would find that control and hand focus back to it.
+  // What opened the sheet: what had focus before it opened, or else the control that was pressed (a tapped button does
+  // not take focus on iOS Safari, so there the page itself has focus). It is taken while the sheet renders, because a
+  // control with `autoFocus` takes focus when the sheet is put on the page: an effect would find that control and hand
+  // focus back to it.
   const [opener] = useState(() =>
-    typeof document !== "undefined" && document.activeElement instanceof HTMLElement ? document.activeElement : null,
+    typeof document === "undefined"
+      ? null
+      : chooseOpener({
+          active: document.activeElement instanceof HTMLElement ? document.activeElement : null,
+          body: document.body,
+          pressed: lastPressedControl(),
+        }),
   );
 
   // Move focus in on open: to the element asked for, else leave a control that took focus itself, else the sheet.
@@ -67,8 +81,9 @@ export function Sheet({ labelledBy, describedBy, onClose, canClose, closeOnBackd
   }, [opener]);
 
   // The page behind does not scroll while a sheet is open. The lock is counted, so closing one of two sheets does not
-  // free the page behind the other.
-  useEffect(() => {
+  // free the page behind the other. It is released before the browser paints the page without the sheet (a layout
+  // effect), so what depends on a sheet being open, such as where a toast sits, is never drawn once in the wrong place.
+  useLayoutEffect(() => {
     sheetLock.acquire();
     return () => sheetLock.release();
   }, []);
@@ -124,7 +139,7 @@ export function Sheet({ labelledBy, describedBy, onClose, canClose, closeOnBackd
         tabIndex={-1}
         className="max-h-dvh w-full max-w-md overflow-y-auto overscroll-contain rounded-t-2xl bg-surface p-5 pb-safe focus:outline-none"
       >
-        <div aria-hidden="true" className="mx-auto mb-3 h-1 w-9 rounded-full bg-line" />
+        <div aria-hidden="true" className="mx-auto mb-3 h-1 w-9 rounded-full bg-control" />
         {children}
       </div>
     </div>
