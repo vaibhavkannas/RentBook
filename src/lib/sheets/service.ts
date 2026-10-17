@@ -17,8 +17,8 @@ import type {
   YearMonth,
 } from "@/lib/domain/types";
 import { addMonths, compareYm, ymKey } from "@/lib/domain/year-month";
-import { AppError, conflict, sheetStructure, validation } from "@/lib/errors";
-import { formatMonthTitle } from "@/lib/format";
+import { AppError, conflict, sheetStructure, unknownPortion, validation } from "@/lib/errors";
+import { formatMonthTitle, formatRupees } from "@/lib/format";
 import { errorLogFields, logEvent } from "@/lib/server/log";
 import { colLetter } from "./a1";
 import { text } from "./cells";
@@ -307,7 +307,7 @@ function validateMonth({ year, month }: YearMonth): void {
 function validateInput(input: LogPaymentInput): string | undefined {
   validateMonth(input.month);
   if (!Number.isInteger(input.amount) || input.amount < 1 || input.amount > MAX_RUPEES) {
-    throw validation("Amount must be a whole number of rupees from 1 to 10,000,000.");
+    throw validation("Amount must be a whole number of rupees from 1 to 10,000,000.", "amount");
   }
   requireDay(input.dateReceived, "Date received");
   if (input.newTenantName === undefined) return undefined;
@@ -376,7 +376,7 @@ async function logPaymentUnchecked(
       : undefined;
   const loaded = await loadSnapshot(ctx);
   const portion = loaded.portions.find((p) => p.id === input.portionId);
-  if (!portion) throw validation(`Unknown portion "${input.portionId}".`);
+  if (!portion) throw unknownPortion();
 
   const monthRow = findMonthRow(loaded.rows, input.month);
   const existing = findEntryForMonth(loaded.rows, portion.id, input.month);
@@ -394,7 +394,7 @@ async function logPaymentUnchecked(
   }
   if (existing && !input.overwrite) {
     throw conflict(
-      `${portion.name} already has ₹${existing.amount} recorded for ${ymKey(input.month)}.`,
+      `${portion.name} already has ${formatRupees(existing.amount)} recorded for ${formatMonthTitle(input.month)}.`,
       // The whole entry, so a Replace can send it back as `expected` and be refused if it changed since.
       { existingAmount: existing.amount, existingTenant: existing.tenant, existingCount: existing.count },
     );
@@ -434,7 +434,7 @@ async function logPaymentUnchecked(
     tenant = prior.tenant;
     count = nextCount(prior.count, portion.cycleLength);
   } else {
-    throw validation("This portion has no tenant yet. Enter a tenant name.");
+    throw validation("This portion has no tenant yet. Enter a tenant name.", "newTenantName");
   }
 
   // The total's style (formula or typed value) is read from the row being written;
@@ -536,7 +536,7 @@ async function undoPaymentUnchecked(
   validateMonth(input.month);
   const loaded = await loadSnapshot(ctx);
   const portion = loaded.portions.find((p) => p.id === input.portionId);
-  if (!portion) throw validation(`Unknown portion "${input.portionId}".`);
+  if (!portion) throw unknownPortion();
 
   const matching = loaded.rows.filter(
     (row) => compareYm(row.month, input.month) === 0 && row.entries.get(portion.id),

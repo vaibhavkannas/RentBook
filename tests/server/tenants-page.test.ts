@@ -117,7 +117,7 @@ describe("the tenant details page", () => {
   });
 
   it("shows a 404 for a portion that does not exist", async () => {
-    mocks.getPortionTenants.mockRejectedValue(validation('Unknown portion "zz".'));
+    mocks.getPortionTenants.mockRejectedValue(validation("That portion isn't in your Settings any more. Refresh the page."));
     await expect(render("zz")).rejects.toThrow("not-found");
   });
 

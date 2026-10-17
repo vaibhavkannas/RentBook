@@ -172,13 +172,22 @@ describe("Field", () => {
 
   it("shows an error under the control, links it to the control, and marks the control invalid", () => {
     const out = html(field({ label: "Amount", error: "Enter the amount as a number." }, createElement(Input, { inputMode: "numeric" })));
-    const errorId = /<p id="([^"]+)" class="mt-1 text-sm text-danger-ink">Enter the amount as a number\.<\/p>/.exec(out)?.[1];
+    const errorId = /<p id="([^"]+)" role="alert" class="mt-1 text-sm text-danger-ink">Enter the amount as a number\.<\/p>/.exec(out)?.[1];
     expect(errorId).toBeTruthy();
     const control = out.match(/<input[^>]*>/)![0];
     expect(attr(control, "aria-describedby")).toBe(errorId);
     expect(control).toContain('aria-invalid="true"');
     // under the control, not inside the label
     expect(out.indexOf("</label>")).toBeLessThan(out.indexOf(`<p id="${errorId}"`));
+  });
+
+  it("announces an error when it appears (role alert), even if the control already has focus, and a hint never", () => {
+    // Moving focus to a control that has it already says nothing, so the message announces itself.
+    const out = html(field({ label: "Amount", hint: "Whole rupees.", error: "Enter the amount." }, createElement(Input)));
+    expect(out.match(/role="alert"/g)).toHaveLength(1);
+    expect(/<p [^>]*role="alert"[^>]*>Enter the amount\.<\/p>/.test(out)).toBe(true);
+    expect(/<p [^>]*role="alert"[^>]*>Whole rupees\.<\/p>/.test(out)).toBe(false);
+    expect(html(field({ label: "Amount", hint: "Whole rupees." }, createElement(Input)))).not.toContain("role=");
   });
 
   it("links both the hint and the error, the hint first", () => {

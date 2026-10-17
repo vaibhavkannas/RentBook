@@ -123,6 +123,14 @@ describe("logPayment: duplicates", () => {
     expect(error.details).toEqual({ existingAmount: 5450, existingTenant: "Asha", existingCount: 4 });
   });
 
+  it("says in plain words what is already recorded: the amount as the screen shows it, and the month by its name", async () => {
+    const { ctx } = setup();
+    await pay(ctx, { portionId: "p1" });
+    const error = await expectCode(pay(ctx, { portionId: "p1", amount: 6000 }), "conflict");
+    expect(error.message).toBe("First floor, single bedroom already has ₹ 5,450 recorded for October 2026.");
+    expect(error.message).not.toMatch(/\d{4}-\d{2}/);
+  });
+
   describe("a replace after the duplicate warning", () => {
     /** The warning for p1 in October, and the entry it named, as the sheet sends it back with the Replace. */
     async function warned() {
@@ -302,6 +310,33 @@ describe("logPayment: input validation", () => {
   it.each([0, -5, 12.5, Number.NaN, 20_000_000])("rejects amount %s", async (amount) => {
     const { ctx } = setup();
     await expectCode(pay(ctx, { portionId: "p1", amount }), "validation");
+  });
+
+  it("names the field in the details of an amount that is out of range, so the screen can show it beside the field", async () => {
+    const { ctx } = setup();
+    const error = await expectCode(pay(ctx, { portionId: "p1", amount: 0 }), "validation");
+    expect(error.message).toBe("Amount must be a whole number of rupees from 1 to 10,000,000.");
+    expect(error.details).toEqual({ field: "amount" });
+  });
+
+  it("names the field when a portion with no tenant is given no tenant name", async () => {
+    const { ctx } = setup();
+    const error = await expectCode(pay(ctx, { portionId: "p4" }), "validation");
+    expect(error.message).toBe("This portion has no tenant yet. Enter a tenant name.");
+    expect(error.details).toEqual({ field: "newTenantName" });
+  });
+
+  it("says in plain words that a portion is not in Settings any more, without its id, for a payment and for an undo", async () => {
+    const { ctx } = setup();
+    const message = "That portion isn't in your Settings any more. Refresh the page.";
+    const log = await expectCode(pay(ctx, { portionId: "p9" }), "validation");
+    expect(log.message).toBe(message);
+    const undo = await expectCode(
+      undoPayment(ctx, { month: OCT, portionId: "p9", expected: { tenant: "Asha", count: 4, amount: 5450 } }, OPTIONS),
+      "validation",
+    );
+    expect(undo.message).toBe(message);
+    for (const error of [log, undo]) expect(error.message).not.toContain("p9");
   });
 
   it("rejects an impossible date, an empty tenant name, and an unknown portion", async () => {

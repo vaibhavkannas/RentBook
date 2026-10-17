@@ -1,4 +1,4 @@
-import { BRAND } from "@/lib/brand";
+import { getBrand } from "@/lib/brand";
 
 export class AppError extends Error {
   constructor(
@@ -26,18 +26,32 @@ export const unauthorized = () =>
 
 export const forbidden = () => new AppError("forbidden", "Only the owner can do that.");
 
-export const validation = (message: string) => new AppError("validation", message);
+/**
+ * `field` says which input the message is about (`amount`, `fields.phone`, `portions.0.name`): it goes in the answer's
+ * details, so a screen can show the message beside that field.
+ */
+export const validation = (message: string, field?: string) =>
+  new AppError("validation", message, field === undefined ? undefined : { field });
+
+/** The request could not be read: it was not sent as JSON, or its body is not JSON. A person cannot act on more than this. */
+export const UNREADABLE_REQUEST_MESSAGE = "That request couldn't be read. Reload the page and try again.";
 
 /** The request was not sent as JSON. */
-export const unsupportedMediaType = () =>
-  new AppError("validation", "That request wasn't sent as JSON.", undefined, 415);
+export const unsupportedMediaType = () => new AppError("validation", UNREADABLE_REQUEST_MESSAGE, undefined, 415);
+
+/** What a person is told when the page they acted on no longer matches the Sheet (a form without its updated-at). */
+export const PAGE_OUT_OF_DATE_MESSAGE = "This page is out of date. Refresh it and try again.";
+
+/** A portion that is not in Settings: removed or renamed since the page was loaded. The page's id for it means nothing to a person. */
+export const unknownPortion = () =>
+  validation("That portion isn't in your Settings any more. Refresh the page.");
 
 /** The request body is bigger than any request the app makes. */
 export const payloadTooLarge = () => new AppError("validation", "That request is too large.", undefined, 413);
 
 /** The request did not come from the app's own page (another site, or a tool that says so). */
 export const crossOriginRequest = () =>
-  new AppError("forbidden", `That request didn't come from ${BRAND.name}'s own page. Reload the page and try again.`);
+  new AppError("forbidden", `That request didn't come from ${getBrand().name}'s own page. Reload the page and try again.`);
 
 export const conflict = (message: string, details?: Record<string, unknown>) =>
   new AppError("conflict", message, details);

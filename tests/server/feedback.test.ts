@@ -22,7 +22,7 @@ describe.each(WRITERS)("%s", (name) => {
 
 describe("the words of each toast", () => {
   it("come from toast-copy.ts and undo-copy.ts, not from the components", () => {
-    expect(code("PaymentSheet")).toMatch(/import \{[^}]*\bpaymentToastText\b[^}]*\} from "@\/lib\/toast-copy"/);
+    expect(code("PaymentSheet")).toMatch(/import \{[^}]*\bpaymentToasts\b[^}]*\} from "@\/lib\/toast-copy"/);
     expect(code("SettingsForm")).toMatch(/import \{[^}]*\bSETTINGS_SAVED_TOAST\b[^}]*\} from "@\/lib\/toast-copy"/);
     expect(code("TenancyForm")).toMatch(/import \{[^}]*\bDETAILS_SAVED_TOAST\b[^}]*\} from "@\/lib\/toast-copy"/);
     expect(code("MoveOutForm")).toMatch(/import \{[^}]*\bmoveOutToastText\b[^}]*\} from "@\/lib\/toast-copy"/);
@@ -80,11 +80,21 @@ describe("TenancyForm", () => {
 describe("a sheet that stopped on a notice", () => {
   it("shows the payment sheet's toast when the sheet finally closes, after a retry or a skip", () => {
     const sheet = code("PaymentSheet");
-    // the toast is kept while the notice is up, and shown by the one function every way out of the notice goes through
-    expect(sheet).toMatch(/const \[doneToast, setDoneToast\] = useState<string \| null>\(null\)/);
-    expect(sheet).toMatch(/function finish\(\)\s*\{\s*if \(doneToast\) toast\.show\(doneToast\);\s*onClose\(\);\s*\}/);
+    // the toasts are kept while the notice is up, and shown by the one function every way out of the notice goes through
+    expect(sheet).toMatch(/const \[doneToasts, setDoneToasts\] = useState<PaymentToasts \| null>\(null\)/);
+    expect(sheet).toMatch(/function finishWith\(logEntrySaved: boolean\)\s*\{\s*if \(doneToasts\) toast\.show\(exitToastText\(doneToasts, logEntrySaved\)\);\s*onClose\(\);\s*\}/);
     expect(sheet).toMatch(/onClose=\{finish\}/);
     expect(sheet.match(/onClick=\{finish\}/g)!.length).toBeGreaterThanOrEqual(3);
+  });
+
+  it("says what is true on the way out: while the Payments Log entry is unsaved (Skip, Close, Escape) the toast says so, and after a successful retry it says logged", () => {
+    const sheet = code("PaymentSheet");
+    // every way out asks whether the entry is saved from the notice that is showing; a retry that worked says so itself
+    expect(sheet).toMatch(/const finish = \(\) => finishWith\(notice\?\.retryToken == null\)/);
+    expect(sheet).toMatch(/return finishWith\(true\)/);
+    expect(sheet).toMatch(/paymentToasts\(/);
+    // the plain "logged" text is never handed to the toast directly while a notice may be up
+    expect(sheet).not.toMatch(/setDoneToast\(text\)/);
   });
 
   it("shows the undo sheet's toast when the undo is done, after a retry or a skip, and when the sheet is closed on the notice", () => {

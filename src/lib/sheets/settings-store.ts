@@ -1,7 +1,7 @@
-import { BRAND } from "@/lib/brand";
+import { getBrand } from "@/lib/brand";
 import { cleanText, MAX_NAME_LENGTH } from "@/lib/domain/input-rules";
 import type { PortionConfig } from "@/lib/domain/types";
-import { sheetStructure, tabMissing, validation } from "@/lib/errors";
+import { sheetStructure, tabMissing, unknownPortion, validation } from "@/lib/errors";
 import { isBlankCell } from "./cells";
 import type { SheetsGateway } from "./gateway";
 import { findHeaderRowIndex, shorten } from "./schedule";
@@ -120,7 +120,9 @@ export function resetBootstrap(gateway: SheetsGateway): void {
   bootstrapped.delete(gateway);
 }
 
-const SETTINGS_MISSING = `The Settings tab is missing. Restore it from File > Version history or rename it back. ${BRAND.name} will not recreate it because that would reset your rent cycle lengths and hike percentages.`;
+// A function, not a constant: the product's name is read when the message is made (wave 3 reads it from the Config tab).
+const settingsMissing = () =>
+  `The Settings tab is missing. Restore it from File > Version history or rename it back. ${getBrand().name} will not recreate it because that would reset your rent cycle lengths and hike percentages.`;
 
 const isBlankRow = (row: unknown[]) => row.every(isBlankCell);
 
@@ -178,7 +180,7 @@ export async function ensureTabs(gateway: SheetsGateway, scheduleTab: string): P
 
   const hasSettings = tabs.includes(SETTINGS_TAB);
   if (!hasSettings && (tabs.includes(LOG_TAB) || tabs.includes(TENANTS_TAB))) {
-    throw sheetStructure(SETTINGS_MISSING);
+    throw sheetStructure(settingsMissing());
   }
   if (hasSettings) {
     // An empty answer is read once more before it is believed: seeding writes over A1:G6, so a read that came
@@ -294,7 +296,7 @@ export async function updateSettings(
   const current = await readSettingsRows(gateway);
   const writes = updates.map((update) => {
     const found = current.find((entry) => entry.portion.id === update.id);
-    if (!found) throw validation(`Unknown portion "${update.id}".`);
+    if (!found) throw unknownPortion();
     const name = cleanText(update.name, "Portion name", { max: MAX_NAME_LENGTH, required: true });
     if (
       update.cycleLength !== null &&

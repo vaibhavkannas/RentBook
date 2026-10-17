@@ -78,8 +78,8 @@ describe("isoDay", () => {
   it("refuses a year outside 2000 to 2100 and a day that is not real", () => {
     expect(problem(moveIn, "1999-12-31")).toBe("Move-in date must be a date from 2000 to 2100.");
     expect(problem(moveIn, "2101-01-01")).toBe("Move-in date must be a date from 2000 to 2100.");
-    expect(problem(moveIn, "2026-02-30")).toBe("Move-in date must be a real date (YYYY-MM-DD).");
-    expect(problem(moveIn, "next year")).toBe("Move-in date must be a real date (YYYY-MM-DD).");
+    expect(problem(moveIn, "2026-02-30")).toBe("Move-in date isn't a real date.");
+    expect(problem(moveIn, "next year")).toBe("Move-in date isn't a real date.");
   });
 
   it("refuses a blank day, and says it is required", () => {

@@ -300,7 +300,7 @@ describe("saveTenancy: create", () => {
     const { fake, ctx } = await ready();
     const before = snapshotOf(fake);
     const error = await expectCode(create(ctx, { portionId: "p9" }), "validation");
-    expect(error.message).toBe('Unknown portion "p9".');
+    expect(error.message).toBe("That portion isn't in your Settings any more. Refresh the page.");
     expect(snapshotOf(fake)).toEqual(before);
   });
 
@@ -772,10 +772,11 @@ describe("saveTenancy: update", () => {
     it("still needs the updated-at to be given at all", async () => {
       const { fake, ctx, stored } = await blankRow();
       const before = snapshotOf(fake);
-      await expectCode(
+      const error = await expectCode(
         saveTenancy(ctx, { portionId: "p1", tenant: "Asha", fields: FIELDS, id: stored.id }, LATER_OPTIONS),
         "validation",
       );
+      expect(error.message).toBe("This page is out of date. Refresh it and try again.");
       expect(snapshotOf(fake)).toEqual(before);
     });
   });
@@ -1056,7 +1057,8 @@ describe("moveOutTenancy", () => {
     const { fake, ctx, tenancy } = await created();
     const before = snapshotOf(fake);
     const error = await expectCode(moveOut(ctx, tenancy, { moveOut: "2026-01-14" }), "validation");
-    expect(error.message).toMatch(/before the move-in date/);
+    expect(error.message).toBe("Move-out date cannot be before the move-in date.");
+    expect(error.details).toEqual({ field: "moveOut" });
     expect(snapshotOf(fake)).toEqual(before);
   });
 
@@ -1143,10 +1145,11 @@ describe("moveOutTenancy", () => {
     const { fake, ctx } = await ready();
     await appendTenancy(fake, row({ updatedAt: "" }));
     const before = snapshotOf(fake);
-    await expectCode(
+    const error = await expectCode(
       moveOutTenancy(ctx, { id: "t-seed", moveOut: "2026-09-30" } as Parameters<typeof moveOutTenancy>[1], LATER_OPTIONS),
       "validation",
     );
+    expect(error.message).toBe("This page is out of date. Refresh it and try again.");
     expect(snapshotOf(fake)).toEqual(before);
   });
 
@@ -1244,7 +1247,7 @@ describe("getPortionTenants", () => {
   it("refuses an unknown portion", async () => {
     const { ctx } = await ready();
     const error = await expectCode(getPortionTenants(ctx, "p9"), "validation");
-    expect(error.message).toBe('Unknown portion "p9".');
+    expect(error.message).toBe("That portion isn't in your Settings any more. Refresh the page.");
   });
 
   it("uses the snapshot cache when the context has one, and honours minFetchedAt", async () => {

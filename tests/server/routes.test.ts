@@ -433,7 +433,7 @@ describe("POST /api/payments/undo", () => {
 
   it("does not mark the write time when the undo fails for another reason", async () => {
     signedInAs("member@example.com");
-    undoPayment.mockRejectedValue(validation("Unknown portion."));
+    undoPayment.mockRejectedValue(validation("That portion isn't in your Settings any more. Refresh the page."));
     expect((await postUndo(undoRequest(good))).status).toBe(400);
     expect(markWritten).not.toHaveBeenCalled();
   });
@@ -575,10 +575,13 @@ describe("POST /api/tenancies", () => {
     expect(saveTenancy).not.toHaveBeenCalled();
   });
 
-  it("names expectedUpdatedAt when an update does not carry it", async () => {
+  it("says the page is out of date, and gives expectedUpdatedAt as the field, when an update does not carry it", async () => {
     signedInAs("member@example.com");
     const res = await postTenancy(request({ ...update, expectedUpdatedAt: undefined }));
-    expect((await res.json()).error.message).toMatch(/expectedUpdatedAt/);
+    expect((await res.json()).error).toMatchObject({
+      message: "This page is out of date. Refresh it and try again.",
+      details: { field: "expectedUpdatedAt" },
+    });
   });
 
   it("answers 409 on a conflict, and marks the write time for the refresh", async () => {
@@ -839,6 +842,105 @@ describe("POST /api/payments/log-retry", () => {
 
 // Request integrity: every route refuses a request that did not come from the app's own page as JSON, and a body
 // over 32 KB, before it asks who is signed in.
+// A refusal says what is wrong in plain words and names the field in details.field, so a screen can show it beside the
+// field. The words carry no field path, no "JSON" and no ISO month.
+describe("a 400 answer: plain words, and the field", () => {
+  const json = (url: string, body: unknown, method = "POST") =>
+    new Request(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  const answer = async (res: Response) => (await res.json()).error as { code: string; message: string; details?: { field?: string } };
+  const payment = { month: "2026-10", portionId: "p1", amount: 5450, dateReceived: "2026-10-05" };
+
+  it("names the month on a payment for a month that is not one", async () => {
+    signedInAs("member@example.com");
+    const res = await postPayment(json("http://localhost/api/payments", { ...payment, month: "Oct" }));
+    expect(res.status).toBe(400);
+    expect(await answer(res)).toMatchObject({
+      code: "validation",
+      message: "That month isn't valid. Open it again from the month screen.",
+      details: { field: "month" },
+    });
+    expect(logPayment).not.toHaveBeenCalled();
+  });
+
+  it("names the date received, in words that need no format", async () => {
+    signedInAs("member@example.com");
+    const res = await postPayment(json("http://localhost/api/payments", { ...payment, dateReceived: "05/10/2026" }));
+    expect(await answer(res)).toMatchObject({ message: "Date received isn't a real date.", details: { field: "dateReceived" } });
+  });
+
+  it("names the amount when it is not a number", async () => {
+    signedInAs("member@example.com");
+    const res = await postPayment(json("http://localhost/api/payments", { ...payment, amount: "5k" }));
+    expect(await answer(res)).toMatchObject({ message: "Amount isn't valid.", details: { field: "amount" } });
+  });
+
+  it("names a field inside the tenancy details by its path, and says the field's name in the message", async () => {
+    signedInAs("member@example.com");
+    const res = await postTenancy(
+      json("http://localhost/api/tenancies", { portionId: "p1", tenant: "Asha", fields: { moveIn: "2026-01-15", phone: "9".repeat(31) } }),
+    );
+    expect(res.status).toBe(400);
+    expect(await answer(res)).toMatchObject({ message: "Phone can have at most 30 characters.", details: { field: "fields.phone" } });
+  });
+
+  it("names a portion's row in the settings, with its position", async () => {
+    signedInAs("owner@example.com");
+    const res = await putSettings(
+      json(
+        "http://localhost/api/settings",
+        { portions: [{ id: "p1", name: "Ground", cycleLength: 11, hikePercent: 5 }, { id: "p2", name: " ", cycleLength: 11, hikePercent: 5 }] },
+        "PUT",
+      ),
+    );
+    expect(await answer(res)).toMatchObject({ message: "Portion name must be 1 to 60 characters.", details: { field: "portions.1.name" } });
+    expect(saveSettings).not.toHaveBeenCalled();
+  });
+
+  it("says the page is out of date, not that a value is missing, when an edit has no updated-at", async () => {
+    signedInAs("member@example.com");
+    const res = await postTenancy(
+      json("http://localhost/api/tenancies", { portionId: "p1", tenant: "Asha", id: "t-abc", fields: { moveIn: "2026-01-15" } }),
+    );
+    const error = await answer(res);
+    expect(error.message).toBe("This page is out of date. Refresh it and try again.");
+    expect(error.message).not.toMatch(/updated-at|expectedUpdatedAt|\bid\b/);
+  });
+
+  it("passes on the field a service gave its refusal (the amount, the new tenant's name, the move-out date)", async () => {
+    signedInAs("member@example.com");
+    logPayment.mockRejectedValueOnce(validation("Amount must be a whole number of rupees from 1 to 10,000,000.", "amount"));
+    expect(await answer(await postPayment(json("http://localhost/api/payments", payment)))).toMatchObject({
+      message: "Amount must be a whole number of rupees from 1 to 10,000,000.",
+      details: { field: "amount" },
+    });
+    logPayment.mockRejectedValueOnce(validation("This portion has no tenant yet. Enter a tenant name.", "newTenantName"));
+    expect((await answer(await postPayment(json("http://localhost/api/payments", payment)))).details).toEqual({ field: "newTenantName" });
+    moveOutTenancy.mockRejectedValueOnce(validation("Move-out date cannot be before the move-in date.", "moveOut"));
+    const moveOut = { id: "t-abc", expectedUpdatedAt: "2026-01-15T05:00:00.000Z", moveOut: "2026-09-30" };
+    expect((await answer(await postMoveOut(json("http://localhost/api/tenancies/move-out", moveOut)))).details).toEqual({
+      field: "moveOut",
+    });
+  });
+
+  it("says the request could not be read, without the word JSON, when the body is not JSON", async () => {
+    signedInAs("member@example.com");
+    const res = await postPayment(
+      new Request("http://localhost/api/payments", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{oops" }),
+    );
+    expect(res.status).toBe(400);
+    expect((await answer(res)).message).toBe("That request couldn't be read. Reload the page and try again.");
+  });
+
+  it("says the same, with the 415 it had, when the request is not sent as JSON at all", async () => {
+    signedInAs("member@example.com");
+    const res = await postPayment(
+      new Request("http://localhost/api/payments", { method: "POST", headers: { "Content-Type": "text/plain" }, body: "x" }),
+    );
+    expect(res.status).toBe(415);
+    expect((await answer(res)).message).toBe("That request couldn't be read. Reload the page and try again.");
+  });
+});
+
 describe("request integrity on every route", () => {
   const ROUTES: [string, (request: Request) => Promise<Response>, string, string][] = [
     ["POST /api/payments", postPayment, "POST", "http://localhost/api/payments"],

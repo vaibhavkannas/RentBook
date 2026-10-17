@@ -375,7 +375,7 @@ describe("updateSettings", () => {
     ).rejects.toThrow(/Hike/);
     await expect(
       updateSettings(fake, [{ id: "zz", name: "A", cycleLength: 11, hikePercent: 5 }]),
-    ).rejects.toThrow(/Unknown portion/);
+    ).rejects.toThrow("That portion isn't in your Settings any more. Refresh the page.");
     expect(JSON.stringify([...fake.tabs.get(SETTINGS_TAB)!])).toBe(before);
   });
 });

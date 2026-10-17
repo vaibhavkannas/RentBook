@@ -69,7 +69,7 @@ export function isDayInRange(day: string): boolean {
 /** What is wrong with `day` (already trimmed) for a field called `label`, in plain words; null when it is a day in range. */
 export function dayProblem(day: string, label: string): string | null {
   if (day === "") return `${label} is required.`;
-  if (!isValidIsoDay(day)) return `${label} must be a real date (YYYY-MM-DD).`;
+  if (!isValidIsoDay(day)) return `${label} isn't a real date.`;
   if (!isDayInRange(day)) return `${label} must be a date from ${FIRST_YEAR} to ${LAST_YEAR}.`;
   return null;
 }

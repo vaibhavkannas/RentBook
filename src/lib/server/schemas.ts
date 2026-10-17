@@ -2,9 +2,15 @@ import "server-only";
 import { z } from "zod";
 import { MAX_NAME_LENGTH } from "@/lib/domain/input-rules";
 import { ADVANCE_STATUSES, MAX_NOTES_LENGTH, MAX_PHONE_LENGTH } from "@/lib/domain/tenancy";
+import { PAGE_OUT_OF_DATE_MESSAGE } from "@/lib/errors";
 import { isoDay, MAX_TEXT, safeText } from "./validators";
 
-const monthString = z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, "month must look like 2026-10");
+// A custom issue (not a regex check), so the message is shown as it stands: the person never types a month, the page sends it.
+const monthString = z.string().superRefine((month, ctx) => {
+  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) {
+    ctx.addIssue({ code: "custom", message: "That month isn't valid. Open it again from the month screen." });
+  }
+});
 
 /** A tenant's name: the text the person typed, which the sheets will hold. */
 const tenantName = safeText(MAX_NAME_LENGTH, { label: "Tenant name", required: true });
@@ -80,13 +86,15 @@ export const settingsBody = z.object({
 export const tenancyBody = z
   .object({
     portionId: z.string().min(1).max(20),
-    tenant: z.string().max(MAX_TEXT, "Tenant name is too long."),
+    tenant: z.string().superRefine((tenant, ctx) => {
+      if (tenant.length > MAX_TEXT) ctx.addIssue({ code: "custom", message: "Tenant name is too long." });
+    }),
     id: z.string().min(1).max(MAX_TEXT).optional(),
     expectedUpdatedAt: z.string().max(MAX_TEXT).optional(),
     fields: tenancyFieldsSchema,
   })
   .refine((body) => body.id === undefined || body.expectedUpdatedAt !== undefined, {
-    message: "expectedUpdatedAt is required when id is given",
+    message: PAGE_OUT_OF_DATE_MESSAGE,
     path: ["expectedUpdatedAt"],
   })
   .superRefine((body, ctx) => {

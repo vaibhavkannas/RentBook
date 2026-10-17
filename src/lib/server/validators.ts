@@ -37,13 +37,15 @@ export const MAX_TEXT = 200;
  * and the text is returned as it was given. `allowBlank` lets an empty field through (an optional date).
  */
 export function isoDay(label: string, options: { allowBlank?: boolean } = {}) {
-  return z
-    .string()
-    .max(MAX_TEXT, `${label} must be a real date (YYYY-MM-DD).`)
-    .superRefine((text, ctx) => {
-      const day = text.trim();
-      if (day === "" && options.allowBlank) return;
-      const problem = dayProblem(day, label);
-      if (problem !== null) ctx.addIssue({ code: "custom", message: problem });
-    });
+  return z.string().superRefine((text, ctx) => {
+    // A text this long is not a day, whatever it says: the same words as for any other text that is not a day.
+    if (text.length > MAX_TEXT) {
+      ctx.addIssue({ code: "custom", message: `${label} isn't a real date.` });
+      return;
+    }
+    const day = text.trim();
+    if (day === "" && options.allowBlank) return;
+    const problem = dayProblem(day, label);
+    if (problem !== null) ctx.addIssue({ code: "custom", message: problem });
+  });
 }

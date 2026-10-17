@@ -21,7 +21,7 @@ import {
   TENANCY_NOT_SAVED_MESSAGE,
 } from "@/lib/payment-request";
 import { postJson } from "@/lib/post-json";
-import { paymentToastText } from "@/lib/toast-copy";
+import { exitToastText, paymentToasts, type PaymentToasts } from "@/lib/toast-copy";
 import { newTenantDetails, type NewTenantDetailsForm } from "@/lib/tenancy-input";
 
 export type SheetMode = "log" | "edit" | "new-tenant";
@@ -85,8 +85,9 @@ export default function PaymentSheet({
   const [conflict, setConflict] = useState<PortionEntry | null>(null);
   const [notice, setNotice] = useState<AfterSave | null>(null);
   // What the toast will say once the sheet closes. The payment is saved, but a notice (the log entry or the tenancy
-  // details did not save) keeps the sheet open, and the toast waits for the person to be done with it.
-  const [doneToast, setDoneToast] = useState<string | null>(null);
+  // details did not save) keeps the sheet open, and the toast waits for the person to be done with it. It has two texts:
+  // while the Payments Log entry is still unsaved, "logged" would not be true.
+  const [doneToasts, setDoneToasts] = useState<PaymentToasts | null>(null);
   // The optional "Tenancy details" part of the New tenant sheet.
   const [details, setDetails] = useState<NewTenantDetailsForm>({
     moveIn: defaultDate,
@@ -103,10 +104,12 @@ export default function PaymentSheet({
     mode === "new-tenant" ? "New tenant" : mode === "edit" ? "Edit amount" : "Log payment";
 
   /** Closes the sheet, and shows the toast of a payment that was saved while the sheet waited on a notice. */
-  function finish() {
-    if (doneToast) toast.show(doneToast);
+  function finishWith(logEntrySaved: boolean) {
+    if (doneToasts) toast.show(exitToastText(doneToasts, logEntrySaved));
     onClose();
   }
+  /** Every way out (Close, Skip for now, the x, Escape): the log entry is saved unless the notice is still offering to retry it. */
+  const finish = () => finishWith(notice?.retryToken == null);
 
   async function submit(overwrite: boolean) {
     if (!card) return setError("Choose a portion first.");
@@ -140,7 +143,7 @@ export default function PaymentSheet({
     if (!body) return setError(NO_CONFIRMATION);
     if (body.ok) {
       router.refresh();
-      const text = paymentToastText({
+      const toasts = paymentToasts({
         mode,
         replaced: overwrite,
         portion: card.name,
@@ -150,10 +153,10 @@ export default function PaymentSheet({
       });
       const outcome = paymentOutcome(body);
       if (outcome.done) {
-        toast.show(text);
+        toast.show(toasts.saved);
         return onClose();
       }
-      setDoneToast(text);
+      setDoneToasts(toasts);
       return setNotice({ retryToken: outcome.retryToken, tenancyNotSaved: outcome.tenancyNotSaved });
     }
     const failure = body.error ?? { code: "unknown", message: "Something went wrong. Try again." };
@@ -175,7 +178,7 @@ export default function PaymentSheet({
     if (body?.ok && body.logWritten) {
       // The log entry is saved now; the tenancy warning, if any, still has to be seen.
       if (notice.tenancyNotSaved) return setNotice({ retryToken: null, tenancyNotSaved: true });
-      return finish();
+      return finishWith(true);
     }
     setError(logRetryFailureMessage(body));
   }

@@ -14,7 +14,7 @@ import {
 } from "@/lib/domain/tenancy";
 import type { PortionConfig } from "@/lib/domain/types";
 import { isValidIsoDay } from "@/lib/domain/year-month";
-import { conflict, sheetStructure, validation } from "@/lib/errors";
+import { conflict, PAGE_OUT_OF_DATE_MESSAGE, sheetStructure, unknownPortion, validation } from "@/lib/errors";
 import { invalidateCaches, loadSnapshot, type SheetsContext, type Snapshot } from "./service";
 import { withWriteLock } from "./write-lock";
 import { checkNewTenancy, recordNewTenant, type WriteStamp } from "./tenancy-writes";
@@ -65,7 +65,7 @@ function requireUsableTenants(snapshot: Snapshot): void {
 
 function requirePortion(snapshot: Snapshot, portionId: string): PortionConfig {
   const portion = snapshot.portions.find((p) => p.id === portionId);
-  if (!portion) throw validation(`Unknown portion "${portionId}".`);
+  if (!portion) throw unknownPortion();
   return portion;
 }
 
@@ -155,7 +155,7 @@ async function updateTenancy(
   const fields = validateTenancyFields(input.fields);
   // Only a missing value is refused: a hand-typed row can have an empty Updated at, which a screen sends as "".
   if (input.expectedUpdatedAt === undefined) {
-    throw validation("Updating a tenancy needs the updated-at value the person saw.");
+    throw validation(PAGE_OUT_OF_DATE_MESSAGE);
   }
   const snapshot = await loadSnapshot(ctx);
   requireUsableTenants(snapshot);
@@ -248,7 +248,7 @@ async function moveOutUnchecked(
       ? undefined
       : cleanText(input.notes, "Notes", { max: MAX_NOTES_LENGTH, allowNewlines: true });
   if (input.expectedUpdatedAt === undefined) {
-    throw validation("Moving out needs the updated-at value the person saw.");
+    throw validation(PAGE_OUT_OF_DATE_MESSAGE);
   }
 
   const snapshot = await loadSnapshot(ctx);
@@ -256,7 +256,7 @@ async function moveOutUnchecked(
   const stored = requireOpenTenancy(snapshot, input.id);
   requireSeen(stored, input.expectedUpdatedAt);
   if (isValidIsoDay(stored.moveIn) && moveOut < stored.moveIn) {
-    throw validation("Move-out date cannot be before the move-in date.");
+    throw validation("Move-out date cannot be before the move-in date.", "moveOut");
   }
 
   // Only a tenancy with an advance has an outcome. A column the person gave nothing for is not written at all,

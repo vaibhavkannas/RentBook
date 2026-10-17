@@ -2,9 +2,12 @@ import { describe, expect, it } from "vitest";
 import {
   DETAILS_SAVED_TOAST,
   editToastText,
+  exitToastText,
   logToastText,
+  logUnsavedToastText,
   moveOutToastText,
   newTenantToastText,
+  paymentToasts,
   paymentToastText,
   replaceToastText,
   SETTINGS_SAVED_TOAST,
@@ -85,5 +88,37 @@ describe("paymentToastText, the one the payment sheet asks for", () => {
 
   it("does not say the tenant's name when the toast is not about a new tenant", () => {
     expect(paymentToastText({ ...base, mode: "log" })).not.toContain("Asha");
+  });
+});
+
+// "Skip for now" on a log-retry notice: the payment is saved in the Schedule but its Payments Log entry is not, so a toast
+// that says "logged" would not be true.
+describe("the toast when the Payments Log entry did not save", () => {
+  it("says the payment is in the Schedule and not in the Payments Log, in plain words", () => {
+    expect(logUnsavedToastText("Ground floor", 10000)).toBe(
+      "Ground floor: ₹ 10,000 saved to your Schedule, but not to the Payments Log",
+    );
+  });
+
+  it("does not claim the payment was logged, added or changed", () => {
+    const text = logUnsavedToastText("Ground floor", 10000);
+    expect(text).not.toMatch(/\blogged\b|\badded\b|\bchanged\b|\breplaced\b/);
+  });
+
+  const saved = { mode: "log" as const, replaced: false, portion: "Ground floor", tenant: "", amount: 10000, monthLabel: "October 2026" };
+
+  it("keeps both texts for a payment, the one for a saved log entry and the one for an unsaved one", () => {
+    expect(paymentToasts(saved)).toEqual({
+      saved: "Ground floor: ₹ 10,000 logged for October 2026",
+      logUnsaved: "Ground floor: ₹ 10,000 saved to your Schedule, but not to the Payments Log",
+    });
+    expect(paymentToasts({ ...saved, mode: "new-tenant", tenant: "Asha" }).saved).toBe("Ground floor: Asha added, ₹ 10,000 logged");
+    expect(paymentToasts({ ...saved, mode: "new-tenant", tenant: "Asha" }).logUnsaved).toBe(logUnsavedToastText("Ground floor", 10000));
+  });
+
+  it("picks the text that is true when the sheet closes: the log entry saved or not", () => {
+    const toasts = paymentToasts(saved);
+    expect(exitToastText(toasts, true)).toBe(toasts.saved);
+    expect(exitToastText(toasts, false)).toBe(toasts.logUnsaved);
   });
 });

@@ -210,17 +210,17 @@ describe("validateTenancyFields", () => {
     expect(validationMessage(() => validateTenancyFields({ moveIn: "" }))).toMatch(/Move-in date is required/);
     expect(validationMessage(() => validateTenancyFields({ moveIn: "   " }))).toMatch(/Move-in date is required/);
     expect(validationMessage(() => validateTenancyFields({ moveIn: "2026-02-30" }))).toMatch(
-      /Move-in date must be a real date/,
+      /Move-in date isn't a real date/,
     );
     expect(validationMessage(() => validateTenancyFields({ moveIn: "01/10/2026" }))).toMatch(
-      /Move-in date must be a real date/,
+      /Move-in date isn't a real date/,
     );
   });
 
   it("refuses an agreement end that is not a real day", () => {
     expect(
       validationMessage(() => validateTenancyFields({ moveIn: "2026-10-01", agreementEnd: "next year" })),
-    ).toMatch(/Agreement end must be a real date/);
+    ).toMatch(/Agreement end isn't a real date/);
   });
 
   it("refuses an agreement end before the move-in date", () => {
@@ -232,7 +232,7 @@ describe("validateTenancyFields", () => {
   it("refuses an advance date that is not a real day", () => {
     expect(
       validationMessage(() => validateTenancyFields({ moveIn: "2026-10-01", advanceDate: "2026-13-01" })),
-    ).toMatch(/Advance date must be a real date/);
+    ).toMatch(/Advance date isn't a real date/);
   });
 
   it("refuses an advance that is not a whole number from 0 to the maximum", () => {

@@ -5,9 +5,11 @@ import {
   crossOriginRequest,
   messageFor,
   payloadTooLarge,
+  UNREADABLE_REQUEST_MESSAGE,
   unsupportedMediaType,
   validation,
 } from "@/lib/errors";
+import { fieldLabel } from "@/lib/field-labels";
 import { getViewer, type Viewer } from "./auth-guard";
 import { describeError, logEvent, messageForLog, requestIdFrom, type LogLevel } from "./log";
 
@@ -86,7 +88,7 @@ export async function handle(run: () => Promise<Record<string, unknown>>, reques
     }
     logEvent("error", "api-error", { requestId, route, code: "internal", message: describeError(error) });
     return Response.json(
-      { ok: false, error: { code: "internal", message: "Something went wrong. Try again." }, requestId },
+      { ok: false, error: { code: "internal", message: "Something went wrong on our side. Try again." }, requestId },
       { status: 500 },
     );
   }
@@ -165,17 +167,28 @@ export async function readJsonBody(request: Request): Promise<unknown> {
   try {
     return JSON.parse(text);
   } catch {
-    throw validation("Request body must be JSON.");
+    throw validation(UNREADABLE_REQUEST_MESSAGE);
   }
 }
 
-/** The body checked against `schema`: typed data, or a validation error naming the first field that is wrong. */
+/** What a person is told when the body is wrong in a way no message of ours covers. */
+const GENERAL_MESSAGE = "Something in that request isn't valid. Reload the page and try again.";
+
+/**
+ * The body checked against `schema`: typed data, or a validation error for the first thing that is wrong.
+ * The message is in plain words and carries no field path. A `custom` issue is one of our own rules (every safeText and
+ * isoDay message already names its field in the screen's words), so its message is kept. Any other issue (a number where
+ * text belongs, a missing value) is "{Label} isn't valid." with the screen's name for the field (src/lib/field-labels.ts),
+ * or something general when there is none. The path of the field (`fields.phone`, `portions.0.name`) goes in the
+ * error's details, for the screen to show the message beside the field.
+ */
 export function parseBody<T extends z.ZodType>(body: unknown, schema: T): z.infer<T> {
   const parsed = schema.safeParse(body);
   if (!parsed.success) {
     const issue = parsed.error.issues[0];
-    const where = issue.path.length > 0 ? `${issue.path.join(".")}: ` : "";
-    throw validation(`${where}${issue.message}`);
+    const label = fieldLabel(issue.path);
+    const message = issue.code === "custom" ? issue.message : label === null ? GENERAL_MESSAGE : `${label} isn't valid.`;
+    throw validation(message, issue.path.length > 0 ? issue.path.join(".") : undefined);
   }
   return parsed.data;
 }

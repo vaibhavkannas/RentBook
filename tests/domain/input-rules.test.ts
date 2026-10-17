@@ -51,8 +51,8 @@ describe("dayProblem", () => {
 
   it("says what is wrong, in plain words, with the field's name", () => {
     expect(dayProblem("", "Move-in date")).toBe("Move-in date is required.");
-    expect(dayProblem("05/10/2026", "Move-in date")).toBe("Move-in date must be a real date (YYYY-MM-DD).");
-    expect(dayProblem("2026-02-30", "Date received")).toBe("Date received must be a real date (YYYY-MM-DD).");
+    expect(dayProblem("05/10/2026", "Move-in date")).toBe("Move-in date isn't a real date.");
+    expect(dayProblem("2026-02-30", "Date received")).toBe("Date received isn't a real date.");
     expect(dayProblem("1999-12-31", "Agreement end")).toBe("Agreement end must be a date from 2000 to 2100.");
     expect(dayProblem("2101-01-01", "Advance date")).toBe("Advance date must be a date from 2000 to 2100.");
   });

@@ -30,7 +30,22 @@ describe("paymentBody", () => {
       "dateReceived: Date received must be a date from 2000 to 2100.",
     );
     expect(problem(paymentBody, { ...payment, dateReceived: "2026-02-30" })).toBe(
-      "dateReceived: Date received must be a real date (YYYY-MM-DD).",
+      "dateReceived: Date received isn't a real date.",
+    );
+  });
+
+  it("says in plain words that a month is not a month, and what to do", () => {
+    for (const month of ["Oct", "2026-13", "2026-1", "2026-10-05", ""]) {
+      expect(problem(paymentBody, { ...payment, month }), month).toBe(
+        "month: That month isn't valid. Open it again from the month screen.",
+      );
+    }
+    expect(problem(paymentBody, { ...payment, month: "2026-12" })).toBeNull();
+  });
+
+  it("treats a date received that is far too long as not a real date, in the same words", () => {
+    expect(problem(paymentBody, { ...payment, dateReceived: "x".repeat(201) })).toBe(
+      "dateReceived: Date received isn't a real date.",
     );
   });
 
@@ -100,7 +115,7 @@ describe("tenancyBody", () => {
     });
 
     it("still bounds the name on an edit, so a huge text is refused", () => {
-      expect(problem(tenancyBody, edit("x".repeat(201)))).toMatch(/^tenant: /);
+      expect(problem(tenancyBody, edit("x".repeat(201)))).toBe("tenant: Tenant name is too long.");
     });
 
     it("still checks the rest of an edit: the fields, and expectedUpdatedAt", () => {
@@ -108,7 +123,7 @@ describe("tenancyBody", () => {
         "fields.moveIn: Move-in date must be a date from 2000 to 2100.",
       );
       expect(problem(tenancyBody, { ...tenancy, tenant: "x".repeat(61), id: "t-1" })).toBe(
-        "expectedUpdatedAt: expectedUpdatedAt is required when id is given",
+        "expectedUpdatedAt: This page is out of date. Refresh it and try again.",
       );
     });
   });
@@ -161,7 +176,7 @@ describe("tenancyBody", () => {
 
   it("still needs expectedUpdatedAt when an id is given", () => {
     expect(problem(tenancyBody, { ...tenancy, id: "t-1" })).toBe(
-      "expectedUpdatedAt: expectedUpdatedAt is required when id is given",
+      "expectedUpdatedAt: This page is out of date. Refresh it and try again.",
     );
   });
 });
