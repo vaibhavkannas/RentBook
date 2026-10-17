@@ -7,7 +7,7 @@ import { describe, expect, it } from "vitest";
 import appleIcon, { generateImageMetadata as appleIconMetadata } from "@/app/apple-icon";
 import icon, { generateImageMetadata as iconMetadata } from "@/app/icon";
 import manifest from "@/app/manifest";
-import BrandMark from "@/components/ui/BrandMark";
+import { BrandMark } from "@/components/ui/BrandMark";
 import { BRAND } from "@/lib/brand";
 import { BRAND_MARK_PATHS, BRAND_MARK_STROKE_WIDTH, brandMarkSvg } from "@/lib/brand-mark";
 import { packIco } from "../../scripts/make-favicon";
