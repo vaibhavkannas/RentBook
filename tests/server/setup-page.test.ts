@@ -275,7 +275,7 @@ describe("a Sheet that is not set up yet", () => {
     const html = await render();
     const text = visibleText(html);
     expect(text).toContain(
-      "Adds the missing tabs (Settings, Payments Log and Tenants) with their headers. Nothing already in your Sheet is changed.",
+      "Adds the missing tabs (Settings, Payments Log and Tenants) with their headers. Nothing already in your Sheet is changed: it only adds tabs and fills in tabs and header cells that are empty.",
     );
     expect(text).toContain(
       "Settings starts with 5 portions from your Schedule header, each with 11 payments per cycle and a 5% hike. Check them in Portion settings before the first payment.",
@@ -439,6 +439,9 @@ describe("what the page never shows", () => {
     });
   }
 
+  // The tab settings (SCHEDULE_TAB, SETTINGS_TAB, LOG_TAB, TENANTS_TAB) are left out of these canaries on purpose: the Sheet checks
+  // show the name of a tab and "Found as ..." by design (tab titles are allowed on this page), so a canary there would be seen.
+  // The environment checks never print them, which tests/server/setup-env.test.ts pins with a canary in every tab setting.
   const env = {
     AUTH_SECRET: secret,
     AUTH_GOOGLE_ID: googleId,

@@ -10,7 +10,8 @@ import { checkSheet } from "@/lib/sheets/sheet-checks";
 import { ensureTabs, LOG_HEADERS, LOG_TAB, readSettings, SETTINGS_HEADERS, SETTINGS_TAB } from "@/lib/sheets/settings-store";
 import { TENANT_HEADERS, TENANTS_TAB } from "@/lib/sheets/tenants-store";
 import { FakeGateway } from "../support/fake-gateway";
-import { baseSchedule, TOTAL_HEADER } from "../support/fixtures";
+import { captureLogs } from "../support/logs";
+import { baseSchedule, settingsGrid, TOTAL_HEADER } from "../support/fixtures";
 
 // Prepare my Sheet: the one thing the Set up page can change. It creates the tabs the app needs and writes their headers
 // (and the first Settings rows), exactly as the app does on its first page view, and never touches what is there.
@@ -41,7 +42,7 @@ describe("prepareSheet", () => {
   it("creates and fills the three tabs on a Sheet that has only the Schedule, and says which", async () => {
     const fake = fresh();
     const result = await prepareSheet(ctxFor(fake));
-    expect(result).toEqual({ created: ["Settings", "Payments Log", "Tenants"] });
+    expect(result).toEqual({ created: ["Settings", "Payments Log", "Tenants"], filled: [] });
     expect([...fake.tabs.keys()]).toEqual(["Schedule", "Settings", "Payments Log", "Tenants"]);
     expect(fake.tabs.get(LOG_TAB)).toEqual([LOG_HEADERS]);
     expect(fake.tabs.get(TENANTS_TAB)).toEqual([TENANT_HEADERS]);
@@ -55,7 +56,7 @@ describe("prepareSheet", () => {
     const settings = [[...SETTINGS_HEADERS], ["p1", "Ground", "Tenant", "Count", "Amount", 6, 8]];
     const fake = fresh({ [SETTINGS_TAB]: settings, [LOG_TAB]: [[...LOG_HEADERS], ["2026-10-05T04:30:00.000Z", "2026-10", "p1", "Asha", 5450, 3, "2026-10-05", "owner@example.com", "Logged"]] });
     const before = structuredClone([...fake.tabs.entries()]);
-    expect(await prepareSheet(ctxFor(fake))).toEqual({ created: ["Tenants"] });
+    expect(await prepareSheet(ctxFor(fake))).toEqual({ created: ["Tenants"], filled: [] });
     expect(fake.tabs.get(SETTINGS_TAB)).toEqual(before.find(([name]) => name === SETTINGS_TAB)![1]);
     expect(fake.tabs.get(LOG_TAB)).toEqual(before.find(([name]) => name === LOG_TAB)![1]);
     expect(fake.tabs.get("Schedule")).toEqual(before.find(([name]) => name === "Schedule")![1]);
@@ -67,7 +68,7 @@ describe("prepareSheet", () => {
     await ensureTabs(fake, "Schedule");
     const before = structuredClone([...fake.tabs.entries()]);
     fake.calls = [];
-    expect(await prepareSheet(ctxFor(fake))).toEqual({ created: [] });
+    expect(await prepareSheet(ctxFor(fake))).toEqual({ created: [], filled: [] });
     expect([...fake.tabs.entries()]).toEqual(before);
     for (const write of ["addTab", "updateValues", "appendRow", "cloneRow"]) expect(fake.calls).not.toContain(write);
   });
@@ -99,7 +100,7 @@ describe("prepareSheet", () => {
     const ctx = ctxFor(fake);
     await ensureTabs(fake, "Schedule");
     fake.tabs.delete(LOG_TAB);
-    expect(await prepareSheet(ctx)).toEqual({ created: ["Payments Log"] });
+    expect(await prepareSheet(ctx)).toEqual({ created: ["Payments Log"], filled: [] });
     expect(fake.tabs.get(LOG_TAB)).toEqual([LOG_HEADERS]);
   });
 
@@ -107,16 +108,81 @@ describe("prepareSheet", () => {
     const inner = fresh();
     const wrapper = new NamedTabsGateway(inner, { ...DEFAULT_NAMES, settings: "My Settings", tenants: "RentBook Tenants" });
     const result = await prepareSheet(ctxFor(wrapper));
-    expect(result).toEqual({ created: ["My Settings", "Payments Log", "RentBook Tenants"] });
+    expect(result).toEqual({ created: ["My Settings", "Payments Log", "RentBook Tenants"], filled: [] });
     expect([...inner.tabs.keys()]).toEqual(["Schedule", "My Settings", "Payments Log", "RentBook Tenants"]);
+  });
+
+  describe("a tab that is there but empty", () => {
+    const logRow = ["2026-10-05T04:30:00.000Z", "2026-10", "p1", "Asha", 5450, 3, "2026-10-05", "owner@example.com", "Logged"];
+    const tenant = ["t-1", "p1", "Asha", "98765 43210", "2026-01-15", "2027-01-14", 20000, "2026-01-10", "Held", "", "", "", "", "owner@example.com", "2026-01-15T05:00:00.000Z"];
+    const settings = () => settingsGrid();
+
+    it("is filled, not created: it says it filled a Settings tab with nothing in it but its header, and seeds the portions", async () => {
+      const fake = fresh({ [SETTINGS_TAB]: [[...SETTINGS_HEADERS]], [LOG_TAB]: [[...LOG_HEADERS], logRow], [TENANTS_TAB]: [[...TENANT_HEADERS], tenant] });
+      const others = structuredClone([LOG_TAB, TENANTS_TAB, "Schedule"].map((tab) => [tab, fake.tabs.get(tab)]));
+      expect(await prepareSheet(ctxFor(fake))).toEqual({ created: [], filled: ["Settings"] });
+      expect((await readSettings(fake)).map((p) => p.id)).toEqual(["p1", "p2", "p3", "p4", "p5"]);
+      // the tabs that had data are exactly as they were
+      expect([LOG_TAB, TENANTS_TAB, "Schedule"].map((tab) => [tab, fake.tabs.get(tab)])).toEqual(others);
+    });
+
+    it("is filled when it is a Tenants tab with an empty row 1, and the Payments Log is left alone", async () => {
+      const fake = fresh({ [SETTINGS_TAB]: settings(), [LOG_TAB]: [[...LOG_HEADERS], logRow], [TENANTS_TAB]: [] });
+      expect(await prepareSheet(ctxFor(fake))).toEqual({ created: [], filled: ["Tenants"] });
+      expect(fake.tabs.get(TENANTS_TAB)).toEqual([TENANT_HEADERS]);
+      expect(fake.tabs.get(LOG_TAB)).toEqual([[...LOG_HEADERS], logRow]);
+    });
+
+    it("is filled when a Payments Log has blank newer headers, only in those cells, with its rows untouched", async () => {
+      const old = [LOG_HEADERS.slice(0, 7), logRow.slice(0, 7)];
+      const fake = fresh({ [SETTINGS_TAB]: settings(), [LOG_TAB]: old, [TENANTS_TAB]: [[...TENANT_HEADERS], tenant] });
+      expect(await prepareSheet(ctxFor(fake))).toEqual({ created: [], filled: ["Payments Log"] });
+      expect(fake.tabs.get(LOG_TAB)).toEqual([[...LOG_HEADERS], logRow.slice(0, 7)]);
+    });
+
+    it("is not filled over text: a Payments Log whose H1 holds another header keeps it, and only the blank I1 is filled", async () => {
+      const header = [...LOG_HEADERS.slice(0, 7), "Remarks"];
+      const fake = fresh({ [SETTINGS_TAB]: settings(), [LOG_TAB]: [header, logRow.slice(0, 8)], [TENANTS_TAB]: [[...TENANT_HEADERS]] });
+      captureLogs();
+      expect(await prepareSheet(ctxFor(fake))).toEqual({ created: [], filled: ["Payments Log"] });
+      expect(fake.tabs.get(LOG_TAB)![0]).toEqual([...LOG_HEADERS.slice(0, 7), "Remarks", "Action"]);
+    });
+
+    it("is reported with what was created beside it", async () => {
+      const fake = fresh({ [SETTINGS_TAB]: settings(), [TENANTS_TAB]: [] });
+      expect(await prepareSheet(ctxFor(fake))).toEqual({ created: ["Payments Log"], filled: ["Tenants"] });
+    });
+
+    it("is named as the owner names it, in the filled list too", async () => {
+      const inner = fresh({ "my settings": [], [LOG_TAB]: [[...LOG_HEADERS]], "RentBook Tenants": [[...TENANT_HEADERS]] });
+      const wrapper = new NamedTabsGateway(inner, { ...DEFAULT_NAMES, settings: "My Settings", tenants: "RentBook Tenants" });
+      expect(await prepareSheet(ctxFor(wrapper))).toEqual({ created: [], filled: ["My Settings"] });
+    });
+
+    it("is left exactly as it is when row 1 holds only spaces: nothing is written over it, and it is not called filled", async () => {
+      const spaces = Array.from({ length: TENANT_HEADERS.length }, () => " ");
+      const fake = fresh({ [SETTINGS_TAB]: settings(), [LOG_TAB]: [[...LOG_HEADERS]], [TENANTS_TAB]: [spaces, tenant] });
+      const before = structuredClone(fake.tabs.get(TENANTS_TAB));
+      expect(await prepareSheet(ctxFor(fake))).toEqual({ created: [], filled: [] });
+      expect(fake.tabs.get(TENANTS_TAB)).toEqual(before);
+      expect(fake.calls).not.toContain("updateValues");
+    });
+
+    it("leaves the data of every tab that has some untouched, whatever it fills", async () => {
+      const data = [...settings(), ["p9", "Attic", "Tenant9", "Count9", "Amount9", 4, 7]];
+      const fake = fresh({ [SETTINGS_TAB]: data, [LOG_TAB]: [LOG_HEADERS.slice(0, 7), logRow.slice(0, 7)], [TENANTS_TAB]: [[...TENANT_HEADERS], tenant] });
+      const before = structuredClone([SETTINGS_TAB, TENANTS_TAB, "Schedule"].map((tab) => fake.tabs.get(tab)));
+      await prepareSheet(ctxFor(fake));
+      expect([SETTINGS_TAB, TENANTS_TAB, "Schedule"].map((tab) => fake.tabs.get(tab))).toEqual(before);
+    });
   });
 
   it("takes its turn among the writes: two at once create each tab once", async () => {
     const fake = new FakeGateway({ Schedule: baseSchedule() }, { delayMs: 2 });
     const ctx = ctxFor(fake);
     const [first, second] = await Promise.all([prepareSheet(ctx), prepareSheet(ctx)]);
-    expect(first).toEqual({ created: ["Settings", "Payments Log", "Tenants"] });
-    expect(second).toEqual({ created: [] });
+    expect(first).toEqual({ created: ["Settings", "Payments Log", "Tenants"], filled: [] });
+    expect(second).toEqual({ created: [], filled: [] });
     expect(fake.calls.filter((call) => call === "addTab")).toHaveLength(3);
   });
 
@@ -139,7 +205,8 @@ describe("prepareSheet", () => {
       lists = 0;
       async listTabs() {
         const tabs = await super.listTabs();
-        return ++this.lists >= 3 ? tabs.filter((tab) => tab !== TENANTS_TAB) : tabs;
+        // the first listing is ensureTabs's own, the second is the read-back
+        return ++this.lists >= 2 ? tabs.filter((tab) => tab !== TENANTS_TAB) : tabs;
       }
     }
     const fake = new Forgetful({ Schedule: baseSchedule() });
@@ -151,8 +218,10 @@ describe("prepareSheet", () => {
   });
 });
 
+const NOTHING_CHANGED = "Nothing already in your Sheet is changed: it only adds tabs and fills in tabs and header cells that are empty.";
+
 const COPY = {
-  adds: "Adds the missing tabs (Settings, Payments Log and Tenants) with their headers. Nothing already in your Sheet is changed.",
+  adds: "Adds the missing tabs (Settings, Payments Log and Tenants) with their headers. Nothing already in your Sheet is changed: it only adds tabs and fills in tabs and header cells that are empty.",
   settings:
     "Settings starts with 5 portions from your Schedule header, each with 11 payments per cycle and a 5% hike. Check them in Portion settings before the first payment.",
 };
@@ -177,8 +246,29 @@ describe("prepareOffer", () => {
     const { checks, facts } = await checksFor(full);
     expect(prepareOffer(checks, facts)).toEqual({
       tabs: ["Payments Log"],
-      lines: ["Adds the missing tab (Payments Log) with its headers. Nothing already in your Sheet is changed."],
+      lines: ["Adds the missing tab (Payments Log) with its headers. Nothing already in your Sheet is changed: it only adds tabs and fills in tabs and header cells that are empty."],
     });
+  });
+
+  it("says it fills a tab that is there but empty, not that it adds it", async () => {
+    const full = fresh();
+    await ensureTabs(full, "Schedule");
+    full.tabs.set(TENANTS_TAB, []);
+    const { checks, facts } = await checksFor(full);
+    expect(prepareOffer(checks, facts)).toEqual({
+      tabs: ["Tenants"],
+      lines: ["Fills the empty tab (Tenants) with its headers. " + NOTHING_CHANGED],
+    });
+  });
+
+  it("says both, in one sentence, when one tab is missing and another is empty, and what Settings starts with", async () => {
+    const { checks, facts } = await checksFor(fresh({ [SETTINGS_TAB]: [], [TENANTS_TAB]: [[]] }));
+    const offer = prepareOffer(checks, facts)!;
+    expect(offer.tabs).toEqual(["Settings", "Payments Log", "Tenants"]);
+    expect(offer.lines[0]).toBe(
+      "Adds the missing tab (Payments Log) and fills the empty tabs (Settings and Tenants) with their headers. " + NOTHING_CHANGED,
+    );
+    expect(offer.lines[1]).toBe(COPY.settings);
   });
 
   it("says a Settings tab with one portion starts with one portion", async () => {
@@ -235,11 +325,21 @@ describe("prepareOffer", () => {
     const offer = prepareOffer(checks, facts, names)!;
     expect(offer.tabs).toEqual(["My Settings", "Payments Log", "RentBook Tenants"]);
     expect(offer.lines[0]).toBe(
-      "Adds the missing tabs (My Settings, Payments Log and RentBook Tenants) with their headers. Nothing already in your Sheet is changed.",
+      "Adds the missing tabs (My Settings, Payments Log and RentBook Tenants) with their headers. Nothing already in your Sheet is changed: it only adds tabs and fills in tabs and header cells that are empty.",
     );
     expect(offer.lines[2]).toBe(
       "SETTINGS_TAB and TENANTS_TAB name tabs that are not in your Sheet yet. If you already have them under other names, rename them in your Sheet first, then use Check again: Prepare my Sheet would start new, empty ones and leave your old tabs alone.",
     );
+  });
+
+  it("gives no rename warning for a tab with a name of the owner's own that is there but empty: it is not a new one", async () => {
+    const inner = fresh({ "my settings": [], [LOG_TAB]: [[...LOG_HEADERS]], [TENANTS_TAB]: [[...TENANT_HEADERS]] });
+    const names = { settings: "My Settings", log: "Payments Log", tenants: "Tenants" };
+    const wrapper = new NamedTabsGateway(inner, { ...DEFAULT_NAMES, settings: "My Settings" });
+    const { checks, facts } = await checkSheet(wrapper, { scheduleTab: "Schedule", totalHeader: TOTAL_HEADER, appTabNames: names }, () => 0);
+    const offer = prepareOffer(checks, facts, names)!;
+    expect(offer.lines[0]).toBe("Fills the empty tab (My Settings) with its headers. " + NOTHING_CHANGED);
+    expect(offer.lines).toHaveLength(2);
   });
 
   it("gives the rename warning in the singular for one tab, and none for tabs with their usual names", async () => {

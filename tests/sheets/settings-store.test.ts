@@ -164,6 +164,69 @@ describe("ensureTabs", () => {
   });
 });
 
+describe("ensureTabs: what it reports", () => {
+  const settings = () => settingsGrid();
+  const logOf = (...rows: unknown[][]) => [[...LOG_HEADERS], ...rows];
+
+  it("says it created all three tabs on a Sheet that has only the Schedule, and filled none", async () => {
+    const fake = new FakeGateway({ Schedule: baseSchedule() });
+    expect(await ensureTabs(fake, "Schedule")).toEqual({ created: [SETTINGS_TAB, LOG_TAB, TENANTS_TAB], filled: [] });
+  });
+
+  it("says nothing when every tab is there and in order, and again on the call after (the check is remembered)", async () => {
+    const fake = new FakeGateway({ Schedule: baseSchedule(), [SETTINGS_TAB]: settings(), [LOG_TAB]: logOf(), [TENANTS_TAB]: [[...TENANT_HEADERS]] });
+    expect(await ensureTabs(fake, "Schedule")).toEqual({ created: [], filled: [] });
+    expect(await ensureTabs(fake, "Schedule")).toEqual({ created: [], filled: [] });
+  });
+
+  it("says it filled a Settings, a Payments Log and a Tenants tab that were there with nothing in them, and created none", async () => {
+    const fake = new FakeGateway({ Schedule: baseSchedule(), [SETTINGS_TAB]: [], [LOG_TAB]: [], [TENANTS_TAB]: [[]] });
+    expect(await ensureTabs(fake, "Schedule")).toEqual({ created: [], filled: [SETTINGS_TAB, LOG_TAB, TENANTS_TAB] });
+    expect(fake.tabs.get(TENANTS_TAB)![0]).toEqual(TENANT_HEADERS);
+  });
+
+  it("says it filled a Payments Log whose newer headers were blank, and one tab it created beside it", async () => {
+    const old = [LOG_HEADERS.slice(0, 7), ["2026-08-05T04:30:00.000Z", "2026-08", "p1", "Asha", 5450, 2, "2026-08-05"]];
+    const fake = new FakeGateway({ Schedule: baseSchedule(), [SETTINGS_TAB]: settings(), [LOG_TAB]: old });
+    expect(await ensureTabs(fake, "Schedule")).toEqual({ created: [TENANTS_TAB], filled: [LOG_TAB] });
+    expect(fake.tabs.get(LOG_TAB)![1]).toEqual(old[1]);
+  });
+
+  it("does not call a Payments Log filled when its newer headers hold other text, which is left alone", async () => {
+    const header = [...LOG_HEADERS];
+    header[7] = "Remarks";
+    header[8] = "Status";
+    const fake = new FakeGateway({ Schedule: baseSchedule(), [SETTINGS_TAB]: settings(), [LOG_TAB]: [header], [TENANTS_TAB]: [[...TENANT_HEADERS]] });
+    captureLogs();
+    expect(await ensureTabs(fake, "Schedule")).toEqual({ created: [], filled: [] });
+    expect(fake.tabs.get(LOG_TAB)![0]).toEqual(header);
+  });
+
+  it("does not write over a Tenants row 1 that holds only spaces, and says nothing was done to it", async () => {
+    const spaces = Array.from({ length: TENANT_HEADERS.length }, () => " ");
+    const fake = new FakeGateway({ Schedule: baseSchedule(), [SETTINGS_TAB]: settings(), [LOG_TAB]: logOf(), [TENANTS_TAB]: [spaces] });
+    expect(await ensureTabs(fake, "Schedule")).toEqual({ created: [], filled: [] });
+    expect(fake.tabs.get(TENANTS_TAB)).toEqual([spaces]);
+    expect(fake.calls).not.toContain("updateValues");
+  });
+
+  it("does not claim a Settings tab that another instance filled first", async () => {
+    class Raced extends FakeGateway {
+      async addTab(title: string) {
+        await super.addTab(title);
+        if (title === SETTINGS_TAB) {
+          this.tabs.set(SETTINGS_TAB, settings());
+          throw new Error("already exists");
+        }
+      }
+    }
+    const fake = new Raced({ Schedule: baseSchedule() });
+    const report = await ensureTabs(fake, "Schedule");
+    expect(report.created).toEqual([LOG_TAB, TENANTS_TAB]);
+    expect(report.filled).toEqual([]);
+  });
+});
+
 describe("ensureTabs: Tenants tab", () => {
   it("creates the Tenants tab with its headers", async () => {
     const fake = new FakeGateway({ Schedule: baseSchedule() });
@@ -203,7 +266,8 @@ describe("ensureTabs: Tenants tab", () => {
       [SETTINGS_TAB]: settingsGrid(),
       [TENANTS_TAB]: [wrong],
     });
-    await expect(ensureTabs(fake, "Schedule")).resolves.toBeUndefined();
+    // (ensureTabs now says what it did; it still does not refuse)
+    await expect(ensureTabs(fake, "Schedule")).resolves.toEqual({ created: [LOG_TAB], filled: [] });
     // the Payments Log tab was still created, and the Tenants tab was left exactly as it was
     expect(fake.tabs.has(LOG_TAB)).toBe(true);
     expect(fake.tabs.get(TENANTS_TAB)).toEqual([wrong]);

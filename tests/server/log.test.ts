@@ -206,8 +206,12 @@ describe("errorLogFields", () => {
 });
 
 describe("problemCounts", () => {
-  /** A copy of the log module with nothing counted yet: the counts live in the module, and start when it loads. */
+  /** Where the counts are kept: on the process, not in the module (see the test of two copies below). */
+  const COUNTS_KEY = Symbol.for("rentbook.problem-counts");
+
+  /** A copy of the log module with nothing counted yet: the counts start when the first copy loads, so they are cleared first. */
   async function freshLog() {
+    delete (globalThis as Record<symbol, unknown>)[COUNTS_KEY];
     vi.resetModules();
     return import("@/lib/server/log");
   }
@@ -288,6 +292,22 @@ describe("problemCounts", () => {
     expect(Object.keys(counts.warn).sort()).toEqual(["__proto__", "constructor"]);
     expect(Object.getOwnPropertyDescriptor(counts.warn, "__proto__")?.value).toBe(1);
     expect(counts.warn.constructor).toBe(1);
+  });
+
+  it("is shared by every copy of the module in the process: a server bundles its route handlers and its pages apart, each with a copy", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-10-16T05:30:00.000Z"));
+    const page = await freshLog();
+    vi.setSystemTime(new Date("2026-10-16T09:00:00.000Z"));
+    vi.resetModules();
+    const route = await import("@/lib/server/log");
+    expect(route).not.toBe(page);
+    route.logEvent("error", "api-error", { code: "config" });
+    page.logEvent("warn", "api-error", { code: "rate-limited" });
+    route.logEvent("error", "api-error", { code: "config" });
+    for (const copy of [page, route]) {
+      expect(copy.problemCounts()).toEqual({ since: "2026-10-16T05:30:00.000Z", warn: { "rate-limited": 1 }, error: { config: 2 } });
+    }
   });
 
   it("counts lines from every caller of logEvent, since they all go through it", async () => {

@@ -93,9 +93,9 @@ const DEFINITIONS = [
 
 type CheckId = (typeof DEFINITIONS)[number]["id"];
 
-function make(id: CheckId, status: CheckStatus, detail: string, fix?: string): Check {
+function make(id: CheckId, status: CheckStatus, detail: string, fix?: string, prepare?: Check["prepare"]): Check {
   const { step, title } = DEFINITIONS.find((definition) => definition.id === id)!;
-  return { id, step, title, status, detail, ...(fix === undefined ? {} : { fix }) };
+  return { id, step, title, status, detail, ...(fix === undefined ? {} : { fix }), ...(prepare === undefined ? {} : { prepare }) };
 }
 
 /** Every check of the Sheet, waiting, with `detail` to say what for (the page uses it when the settings are wrong). */
@@ -128,13 +128,20 @@ function message(error: unknown): string | null {
   return error instanceof AppError ? error.message : null;
 }
 
-/** The connection failed: the reason in the gateway's own words, and every other check waits. */
+/**
+ * The connection failed: the reason in the gateway's own words, and every other check waits. Google being busy or not
+ * responding is a warning, not a failure: nothing is wrong with the setup, and trying again usually works.
+ */
 function connectionFailed(error: unknown, facts: SheetFacts): SheetCheckResult {
   const reason = message(error);
   if (reason === null) {
     logEvent("error", "setup-check-failed", errorLogFields(error, "The Set up check could not read the Sheet"));
   }
-  return { checks: [make("connection", "fail", reason ?? GENERAL_FAILURE), ...waitingChecks(WAITING).slice(1)], facts };
+  const transient = error instanceof AppError && (error.code === "rate-limited" || error.code === "unavailable");
+  return {
+    checks: [make("connection", transient ? "warn" : "fail", reason ?? GENERAL_FAILURE), ...waitingChecks(WAITING).slice(1)],
+    facts,
+  };
 }
 
 /** The result of a parse that may refuse with a sheet-structure message. */
@@ -166,7 +173,7 @@ function latestTime(cells: unknown[]): string | null {
 
 /** "Tab 1", "Tab 2" and so on, quoted, with how many more there are when the list is long. */
 function tabList(tabs: string[]): string {
-  const shown = tabs.slice(0, MAX_LISTED_TABS).map((tab) => `"${tab}"`);
+  const shown = tabs.slice(0, MAX_LISTED_TABS).map((tab) => `"${shorten(tab)}"`);
   const more = tabs.length - shown.length;
   return more > 0 ? `${shown.join(", ")} and ${more} more` : shown.join(", ");
 }
@@ -346,6 +353,8 @@ export async function checkSheet(
           "settings",
           "todo",
           `Not created yet. Prepare my Sheet creates it with ${plural(seed.value, "portion", "portions")} found in your header.${name === null ? "" : renameFirst("settings", name)}`,
+          undefined,
+          "create",
         );
       }
     }
@@ -365,6 +374,8 @@ export async function checkSheet(
         "settings",
         "todo",
         foundAs("settings", `Nothing in it yet. Prepare my Sheet fills it with ${plural(seed.value, "portion", "portions")} found in your header.`),
+        undefined,
+        "fill",
       );
     }
   } else {
@@ -431,14 +442,15 @@ export async function checkSheet(
   checks.push(totalCheck(options, view, layout, tail, portionColumns, brand));
   checks.push(settingsCheck);
 
-  // The Payments Log.
+  // The Payments Log. Row 1 counts as empty only where the app's own tab check does (nothing in it at all): a row of spaces
+  // is not written over, so it is not to do but to clear.
   if (logGrid === undefined) {
     const name = customName("log");
-    checks.push(make("log", "todo", `Not created yet.${name === null ? "" : renameFirst("log", name)}`));
+    checks.push(make("log", "todo", `Not created yet.${name === null ? "" : renameFirst("log", name)}`, undefined, "create"));
   } else {
     const header = logGrid[0] ?? [];
-    if (header.every(isBlankCell)) {
-      checks.push(make("log", "todo", foundAs("log", "Empty. Prepare my Sheet writes its headers.")));
+    if (header.length === 0) {
+      checks.push(make("log", "todo", foundAs("log", "Empty. Prepare my Sheet writes its headers."), undefined, "fill"));
     } else {
       const entries = logGrid.slice(1).filter((row) => !row.every(isBlankCell));
       facts.logRows = entries.length;
@@ -448,7 +460,16 @@ export async function checkSheet(
         7: "who logged each payment",
         8: "what was done (Logged, Edited or Undone)",
       };
-      if (taken.length > 0) {
+      if (header.every(isBlankCell)) {
+        checks.push(
+          make(
+            "log",
+            "warn",
+            foundAs("log", "Row 1 holds only spaces, so the Payments Log has no headers. Entries are still saved by column position."),
+            "Clear row 1 of that tab, then use Prepare my Sheet.",
+          ),
+        );
+      } else if (taken.length > 0) {
         const detail = taken
           .map(
             (column) =>
@@ -477,16 +498,25 @@ export async function checkSheet(
     }
   }
 
-  // The Tenants tab.
+  // The Tenants tab. Row 1 counts as empty only where ensureTenantsTab says so (nothing in it at all); a row of spaces is read
+  // as a header that is not there, and never written over.
   if (tenantsGrid === undefined) {
     const name = customName("tenants");
-    checks.push(make("tenants", "todo", `Not created yet.${name === null ? "" : renameFirst("tenants", name)}`));
-  } else if ((tenantsGrid[0] ?? []).every(isBlankCell)) {
-    checks.push(make("tenants", "todo", foundAs("tenants", "Empty. Prepare my Sheet writes its headers.")));
+    checks.push(make("tenants", "todo", `Not created yet.${name === null ? "" : renameFirst("tenants", name)}`, undefined, "create"));
+  } else if ((tenantsGrid[0] ?? []).length === 0) {
+    checks.push(make("tenants", "todo", foundAs("tenants", "Empty. Prepare my Sheet writes its headers."), undefined, "fill"));
   } else {
     const read = attempt(() => parseTenancies(tenantsGrid));
     if (!isOk(read)) {
-      checks.push(make("tenants", "fail", foundAs("tenants", `${read.problem} Logging rent still works.`)));
+      const blank = tenantsGrid[0].every(isBlankCell);
+      checks.push(
+        make(
+          "tenants",
+          "fail",
+          foundAs("tenants", `${read.problem} Logging rent still works.`),
+          blank ? "Clear row 1 of that tab, which holds only spaces, then use Prepare my Sheet." : undefined,
+        ),
+      );
     } else {
       const tenancies = read.value;
       facts.tenantsRows = tenancies.length;

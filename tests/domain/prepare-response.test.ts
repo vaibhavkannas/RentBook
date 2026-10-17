@@ -14,9 +14,20 @@ describe("prepareOutcome", () => {
     });
   });
 
-  it("is the toast for nothing created when the server made no tab, or sent no list", () => {
-    expect(prepareOutcome(answer({ ok: true, created: [] }))).toEqual({ ok: true, toast: "Nothing needed creating." });
-    expect(prepareOutcome(answer({ ok: true }))).toEqual({ ok: true, toast: "Nothing needed creating." });
+  it("names the tabs that were filled, with the ones that were created", () => {
+    expect(prepareOutcome(answer({ ok: true, created: [], filled: ["Tenants"] }))).toEqual({
+      ok: true,
+      toast: "Your Sheet is ready: filled Tenants.",
+    });
+    expect(prepareOutcome(answer({ ok: true, created: ["Settings"], filled: ["Payments Log"] }))).toEqual({
+      ok: true,
+      toast: "Your Sheet is ready: created Settings and filled Payments Log.",
+    });
+  });
+
+  it("is the toast for nothing done when the server made and filled no tab, or sent no list", () => {
+    expect(prepareOutcome(answer({ ok: true, created: [], filled: [] }))).toEqual({ ok: true, toast: "Nothing needed doing." });
+    expect(prepareOutcome(answer({ ok: true }))).toEqual({ ok: true, toast: "Nothing needed doing." });
   });
 
   it("shows the server's own words for an error, as the other forms do", () => {

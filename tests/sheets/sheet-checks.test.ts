@@ -1,9 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { configError, rateLimited } from "@/lib/errors";
+import { configError, rateLimited, unavailable } from "@/lib/errors";
 import type { Check, CheckStatus } from "@/lib/setup-checks";
 import { NamedTabsGateway } from "@/lib/sheets/named-tabs";
 import { checkSheet, waitingChecks, type SheetFacts } from "@/lib/sheets/sheet-checks";
-import { LOG_HEADERS, LOG_TAB, SETTINGS_HEADERS, SETTINGS_RANGE, SETTINGS_TAB } from "@/lib/sheets/settings-store";
+import { ensureTabs, LOG_HEADERS, LOG_TAB, SETTINGS_HEADERS, SETTINGS_RANGE, SETTINGS_TAB } from "@/lib/sheets/settings-store";
 import { TENANT_HEADERS, TENANTS_RANGE, TENANTS_TAB } from "@/lib/sheets/tenants-store";
 import { captureLogs, loggedLines, type LogSpies } from "../support/logs";
 import { FakeGateway } from "../support/fake-gateway";
@@ -269,15 +269,33 @@ describe("the connection", () => {
     });
   });
 
-  it("fails the same way when the read of the data is refused (Google busy), and carries on to no more calls", async () => {
+  it("is a warning, not a failure, when Google is only busy (limiting requests): nothing is wrong with the setup, and every later check waits", async () => {
     const fake = sheet();
     vi.spyOn(fake, "getManyValues").mockRejectedValue(rateLimited());
     const { checks, facts } = await run(fake);
-    expect(byId(checks, "connection")).toMatchObject({ status: "fail", detail: rateLimited().message });
+    expect(byId(checks, "connection")).toMatchObject({ status: "warn", detail: rateLimited().message });
     expect(checks.slice(1).every((check) => check.status === "skip")).toBe(true);
     expect(fake.calls).toEqual(["listTabs"]);
     expect(facts.listMs).toBe(12);
     expect(facts.monthRows).toBeNull();
+  });
+
+  it("is a warning too when Google is not responding, at the tab list or at the last read", async () => {
+    const first = sheet();
+    vi.spyOn(first, "listTabs").mockRejectedValue(unavailable());
+    expect(byId((await run(first)).checks, "connection")).toMatchObject({ status: "warn", detail: unavailable().message });
+    const last = sheet();
+    vi.spyOn(last, "getValues").mockRejectedValue(unavailable());
+    expect(byId((await run(last)).checks, "connection")).toMatchObject({ status: "warn", detail: unavailable().message });
+  });
+
+  it("stays a failure when the key, the sharing or the Sheet's address is what is wrong, or the failure is not ours", async () => {
+    const config = sheet();
+    vi.spyOn(config, "listTabs").mockRejectedValue(configError("Google rejected the service account key."));
+    expect(byId((await run(config)).checks, "connection").status).toBe("fail");
+    const unknown = sheet();
+    vi.spyOn(unknown, "listTabs").mockRejectedValue(new Error("boom"));
+    expect(byId((await run(unknown)).checks, "connection").status).toBe("fail");
   });
 
   it("fails the same way when the last read is refused", async () => {
@@ -345,6 +363,14 @@ describe("the Schedule tab (step 4)", () => {
     expect(detail).toContain('"Tab 8"');
     expect(detail).not.toContain('"Tab 9"');
     expect(detail).toContain("and 3 more");
+  });
+
+  it("shows no more of a tab's title than a short stretch of plain text in the list of tabs", async () => {
+    const long = `Notes\n${"x".repeat(100)}`;
+    const { checks } = await run(new FakeGateway({ [long]: [["x"]] }));
+    const detail = byId(checks, "schedule-tab").detail;
+    expect(detail).toBe(`No tab named "Schedule". Your tabs: "Notes ${"x".repeat(34)}...".`);
+    expect(detail).not.toContain("\n");
   });
 
   it("has no row with Month in the first 25 rows", async () => {
@@ -821,6 +847,77 @@ describe("the Tenants tab (step 5)", () => {
     const rows = [[...TENANT_HEADERS], tenantRow({ 14: "last Tuesday CANARY" }), tenantRow({ 0: "t-2", 14: UPDATED_1 })];
     const { facts } = await run(sheet({ [TENANTS_TAB]: rows }));
     expect(facts.lastUpdatedAt).toBe(UPDATED_1);
+  });
+});
+
+describe("what Prepare my Sheet would do about a to-do check", () => {
+  it("is create for a tab that is not there", async () => {
+    const { checks } = await run(fresh());
+    for (const id of ["settings", "log", "tenants"]) expect(byId(checks, id), id).toMatchObject({ status: "todo", prepare: "create" });
+  });
+
+  it("is fill for a tab that is there with nothing in it, a Settings with only its header, or a row 1 with nothing in it", async () => {
+    for (const changes of [
+      { [SETTINGS_TAB]: [] },
+      { [SETTINGS_TAB]: [[...SETTINGS_HEADERS]] },
+      { [LOG_TAB]: [] },
+      { [LOG_TAB]: [[]] },
+      { [TENANTS_TAB]: [] },
+      { [TENANTS_TAB]: [[], tenantRow()] },
+    ]) {
+      const { checks } = await run(sheet(changes));
+      const [tab] = Object.keys(changes);
+      const id = tab === SETTINGS_TAB ? "settings" : tab === LOG_TAB ? "log" : "tenants";
+      expect(byId(checks, id), JSON.stringify(changes)).toMatchObject({ status: "todo", prepare: "fill" });
+    }
+  });
+
+  it("is not named for a check that is not to do", async () => {
+    for (const check of (await run(sheet())).checks) expect(check.prepare, check.id).toBeUndefined();
+  });
+});
+
+describe("a header row of only spaces", () => {
+  const spaces = (count: number) => Array.from({ length: count }, () => " ");
+
+  it("is not an empty Tenants tab, because Prepare does not write over it: it cannot be read, and the fix is to clear the row", async () => {
+    const fake = sheet({ [TENANTS_TAB]: [spaces(TENANT_HEADERS.length), tenantRow()] });
+    const { checks, facts } = await run(fake);
+    const found = byId(checks, "tenants");
+    expect(found.status).toBe("fail");
+    expect(found.prepare).toBeUndefined();
+    expect(found.detail).toBe(
+      'The Tenants tab must have "Tenancy ID" in column A (found nothing). Columns A to O must keep the 15 Tenants headers in their original order; extra columns may go to the right. Logging rent still works.',
+    );
+    expect(found.fix).toBe("Clear row 1 of that tab, which holds only spaces, then use Prepare my Sheet.");
+    expect(facts.tenantsRows).toBeNull();
+  });
+
+  it("says the same of a Payments Log: not empty, no readable headers, entries still saved by position", async () => {
+    const fake = sheet({ [LOG_TAB]: [spaces(9), logRow(SAVED_1)] });
+    const found = byId((await run(fake)).checks, "log");
+    expect(found.status).toBe("warn");
+    expect(found.prepare).toBeUndefined();
+    expect(found.detail).toBe("Row 1 holds only spaces, so the Payments Log has no headers. Entries are still saved by column position.");
+    expect(found.fix).toBe("Clear row 1 of that tab, then use Prepare my Sheet.");
+  });
+
+  it("agrees with ensureTabs: where the check says to do, it writes, and where the check says to clear the row, it writes nothing", async () => {
+    const blank = sheet({ [TENANTS_TAB]: [[], tenantRow()] });
+    expect(byId((await run(blank)).checks, "tenants").status).toBe("todo");
+    await ensureTabs(blank, "Schedule");
+    expect(blank.tabs.get(TENANTS_TAB)![0]).toEqual(TENANT_HEADERS);
+
+    const full = sheet({ [TENANTS_TAB]: [spaces(TENANT_HEADERS.length), tenantRow()] });
+    const before = structuredClone(full.tabs.get(TENANTS_TAB));
+    await ensureTabs(full, "Schedule");
+    expect(full.tabs.get(TENANTS_TAB)).toEqual(before);
+  });
+
+  it("is cleared by clearing the row: the check then says to do, and Prepare fills it", async () => {
+    const fake = sheet({ [TENANTS_TAB]: [spaces(TENANT_HEADERS.length)] });
+    fake.tabs.get(TENANTS_TAB)![0] = [];
+    expect(byId((await run(fake)).checks, "tenants")).toMatchObject({ status: "todo", prepare: "fill" });
   });
 });
 

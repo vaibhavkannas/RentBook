@@ -15,7 +15,7 @@ const markWritten = vi.hoisted(() => vi.fn(async () => undefined));
 const saveTenancy = vi.hoisted(() => vi.fn());
 const moveOutTenancy = vi.hoisted(() => vi.fn());
 const moveOutWithoutDetails = vi.hoisted(() => vi.fn());
-const prepareSheet = vi.hoisted(() => vi.fn<(...args: unknown[]) => Promise<{ created: string[] }>>(async () => ({ created: ["Tenants"] })));
+const prepareSheet = vi.hoisted(() => vi.fn<(...args: unknown[]) => Promise<{ created: string[]; filled: string[] }>>(async () => ({ created: ["Tenants"], filled: [] })));
 
 vi.mock("@/auth", () => ({ auth }));
 // getViewer waits for a request with connection(), which Next refuses outside a request: the routes run here without one.
@@ -156,12 +156,12 @@ describe("POST /api/setup/prepare", () => {
     expect(markWritten).not.toHaveBeenCalled();
   });
 
-  it("lets the owner prepare the Sheet, and answers with the tabs it made", async () => {
+  it("lets the owner prepare the Sheet, and answers with the tabs it made and the tabs it filled", async () => {
     signedInAs("Owner@Example.com");
-    prepareSheet.mockResolvedValueOnce({ created: ["Settings", "Tenants"] });
+    prepareSheet.mockResolvedValueOnce({ created: ["Settings"], filled: ["Tenants"] });
     const res = await postPrepare(prepareRequest());
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ ok: true, created: ["Settings", "Tenants"] });
+    expect(await res.json()).toEqual({ ok: true, created: ["Settings"], filled: ["Tenants"] });
     expect(prepareSheet).toHaveBeenCalledOnce();
   });
 

@@ -83,7 +83,7 @@ export function diagnosticsRows(input: DiagnosticsInput): DiagnosticsSection[] {
     rows: [
       { text: `Version ${input.version}` },
       { text: `This server started ${when(problems.since)}` },
-      { text: `Settings: ${okCount} of ${checks.length} OK`, link: { href: input.setupHref, label: "Open Set up" } },
+      { text: `Checks: ${okCount} of ${checks.length} OK`, link: { href: input.setupHref, label: "Open Set up" } },
     ],
   };
 
@@ -97,8 +97,8 @@ export function diagnosticsRows(input: DiagnosticsInput): DiagnosticsSection[] {
               : `Answered in ${facts.listMs} ms (tab list) and ${facts.readMs} ms (data).`,
           pill: { tone: "success", label: "Reachable" },
         }
-      : connection?.status === "fail"
-        ? { text: connection.detail, pill: { tone: "danger", label: "Not reachable" } }
+      : connection?.status === "fail" || connection?.status === "warn"
+        ? { text: connection.detail, pill: { tone: connection.status === "warn" ? "warn" : "danger", label: "Not reachable" } }
         : {
             text: "The settings need fixing before the Sheet can be tried.",
             pill: { tone: "danger", label: "Not reachable" },

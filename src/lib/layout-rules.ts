@@ -16,7 +16,7 @@ export const LAYOUT_RULES: readonly { topic: string; text: string }[] = [
   },
   {
     topic: "Portion columns",
-    text: "Each of those headers must appear once in the header row. Other columns may sit between a portion's three, and a portion's columns can be anywhere in the row.",
+    text: `Each of those headers must appear once in the header row. Other columns may sit between a portion's three, and a portion's columns can be anywhere in the row. To start Settings for you, Prepare my Sheet needs each portion's three headers to read Tenant, Count and Amount in that order, with the same number after them for the later portions (Tenant2, Count2, Amount2). Once Settings exists, the names in it decide, and they can be anything.`,
   },
   {
     topic: "Total column",

@@ -133,7 +133,8 @@ describe("ensureTenantsTab", () => {
     const wrong = [...TENANT_HEADERS];
     wrong[4] = "Moved in";
     const fake = new FakeGateway({ Schedule: baseSchedule(), [TENANTS_TAB]: [wrong, stored(row())] });
-    await expect(ensureTenantsTab(fake, await fake.listTabs())).resolves.toBeUndefined();
+    // (it now says what it did: nothing, for a tab with a header row; it still does not throw)
+    await expect(ensureTenantsTab(fake, await fake.listTabs())).resolves.toBe("none");
     expect(fake.calls).not.toContain("updateValues");
     expect(fake.calls).not.toContain("addTab");
     expect(fake.tabs.get(TENANTS_TAB)).toEqual([wrong, stored(row())]);
@@ -144,7 +145,7 @@ describe("ensureTenantsTab", () => {
     [swapped[1], swapped[2]] = [swapped[2], swapped[1]];
     for (const header of [TENANT_HEADERS.slice(0, 3), swapped]) {
       const fake = new FakeGateway({ Schedule: baseSchedule(), [TENANTS_TAB]: [header] });
-      await expect(ensureTenantsTab(fake, await fake.listTabs())).resolves.toBeUndefined();
+      await expect(ensureTenantsTab(fake, await fake.listTabs())).resolves.toBe("none");
       expect(fake.tabs.get(TENANTS_TAB)).toEqual([header]);
     }
   });

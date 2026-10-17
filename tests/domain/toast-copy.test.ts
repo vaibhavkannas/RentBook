@@ -167,13 +167,25 @@ describe("logEntryState", () => {
 
 describe("the toast after Prepare my Sheet", () => {
   it("names the tabs it created, as the owner names them", () => {
-    expect(prepareToastText(["Tenants"])).toBe("Your Sheet is ready: created Tenants.");
-    expect(prepareToastText(["Settings", "Payments Log", "Tenants"])).toBe(
+    expect(prepareToastText(["Tenants"], [])).toBe("Your Sheet is ready: created Tenants.");
+    expect(prepareToastText(["Settings", "Payments Log", "Tenants"], [])).toBe(
       "Your Sheet is ready: created Settings, Payments Log and Tenants.",
     );
   });
 
-  it("says nothing needed creating when it made no tab", () => {
-    expect(prepareToastText([])).toBe("Nothing needed creating.");
+  it("names the tabs it filled, when it only filled", () => {
+    expect(prepareToastText([], ["Settings"])).toBe("Your Sheet is ready: filled Settings.");
+    expect(prepareToastText([], ["Settings", "Tenants"])).toBe("Your Sheet is ready: filled Settings and Tenants.");
+  });
+
+  it("says both, created first, when it did both", () => {
+    expect(prepareToastText(["Payments Log"], ["Tenants"])).toBe("Your Sheet is ready: created Payments Log and filled Tenants.");
+    expect(prepareToastText(["Settings", "Tenants"], ["Payments Log"])).toBe(
+      "Your Sheet is ready: created Settings and Tenants and filled Payments Log.",
+    );
+  });
+
+  it("says nothing needed doing when it made and filled nothing", () => {
+    expect(prepareToastText([], [])).toBe("Nothing needed doing.");
   });
 });

@@ -151,13 +151,13 @@ describe("the owner's Diagnostics", () => {
     expect([...html.matchAll(/<h2 [^>]*>([^<]*)<\/h2>/g)].map((match) => match[1])).toEqual(["App", "Google Sheet", "Tabs", "Problems"]);
   });
 
-  it("says the version, when the server started, and how many settings checks are OK, with a way to Set up", async () => {
+  it("says the version, when the server started, and how many checks are OK, with a way to Set up", async () => {
     const html = await render();
     const text = visibleText(html);
     expect(text).toContain(`Version ${pkg.version}`);
     expect(text).toContain("This server started 16 Oct, 11:00 am");
-    expect(text).toMatch(/Settings: \d+ of \d+ OK/);
-    const checks = /Settings: (\d+) of (\d+) OK/.exec(text)!;
+    expect(text).toMatch(/Checks: \d+ of \d+ OK/);
+    const checks = /Checks: (\d+) of (\d+) OK/.exec(text)!;
     expect(checks[1]).toBe(checks[2]);
     expect(html).toMatch(/<a [^>]*href="\/setup"[^>]*>Open Set up<\/a>/);
   });
@@ -235,7 +235,7 @@ describe("Diagnostics when the Sheet is not as it should be", () => {
     expect(html).toMatch(/>Not reachable<\/span>/);
     expect(visibleText(html)).toContain("The settings need fixing before the Sheet can be tried.");
     expect(html.match(/>Open Set up<\/a>/g)).toHaveLength(2);
-    expect(visibleText(html)).toMatch(/Settings: \d+ of \d+ OK/);
+    expect(visibleText(html)).toMatch(/Checks: \d+ of \d+ OK/);
   });
 
   it("says Not created yet for the tabs a new Sheet does not have", async () => {
@@ -297,6 +297,9 @@ describe("what Diagnostics never shows", () => {
     });
   }
 
+  // The tab settings (SCHEDULE_TAB, SETTINGS_TAB, LOG_TAB, TENANTS_TAB) are left out of these canaries on purpose: the Sheet checks
+  // show the name of a tab and "Found as ..." by design (tab titles are allowed on this page), so a canary there would be seen.
+  // The environment checks never print them, which tests/server/setup-env.test.ts pins with a canary in every tab setting.
   const env = {
     AUTH_SECRET: secret,
     AUTH_GOOGLE_ID: googleId,

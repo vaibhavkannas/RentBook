@@ -50,6 +50,14 @@ describe("LAYOUT_RULES", () => {
     expect(rule("Portion columns")).toMatch(/other columns/i);
   });
 
+  it("says what Prepare my Sheet needs to start Settings the first time: Tenant, Count and Amount in order, numbered for the later portions", () => {
+    const text = rule("Portion columns");
+    expect(text).toContain("Prepare my Sheet");
+    expect(text).toContain("Tenant, Count and Amount in that order");
+    expect(text).toContain("Tenant2, Count2, Amount2");
+    expect(text).toMatch(/Once Settings exists/);
+  });
+
   it("says the total column is optional, and what happens without it", () => {
     const text = rule("Total column");
     expect(text).toContain("TOTAL_HEADER");

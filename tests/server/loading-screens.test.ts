@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
@@ -12,7 +13,9 @@ vi.mock("next/navigation", () => ({
 }));
 
 import ActivityLoading from "@/app/activity/loading";
+import DiagnosticsLoading from "@/app/diagnostics/loading";
 import SettingsLoading from "@/app/settings/loading";
+import SetupLoading from "@/app/setup/loading";
 import TenantsLoading from "@/app/tenants/[portionId]/loading";
 import { CARD, CHIP_ROW } from "@/lib/ui-classes";
 
@@ -21,6 +24,8 @@ const html = (element: Parameters<typeof renderToStaticMarkup>[0]) => renderToSt
 describe.each([
   ["activity", ActivityLoading, "Loading activity"],
   ["settings", SettingsLoading, "Loading portion settings"],
+  ["set up", SetupLoading, "Loading set up"],
+  ["diagnostics", DiagnosticsLoading, "Loading diagnostics"],
   ["tenant details", TenantsLoading, "Loading tenant details"],
 ] as const)("the %s loading screen", (_name, Loading, loadingText) => {
   const out = html(createElement(Loading));
@@ -127,5 +132,67 @@ describe("the tenant details loading screen", () => {
     expect(out).toMatch(/<a [^>]*href="\/"[^>]*>‹<\/a>/);
     expect(out).toContain('aria-label="Back to month"');
     expect(out.match(new RegExp(`class="${CARD}`, "g"))).toHaveLength(2);
+  });
+});
+
+describe("the Set up loading screen", () => {
+  const out = html(createElement(SetupLoading));
+
+  it("has the header Set up, with an arrow back to More, as the page has", () => {
+    expect(out).toContain('<h1 class="text-lg font-semibold">Set up</h1>');
+    expect(out).toMatch(/<a [^>]*href="\/more"[^>]*>‹<\/a>/);
+    expect(out).toContain('aria-label="Back to More"');
+  });
+
+  it("shows the intro, the headline and one card for each of the six steps, each with a title row and its checks", () => {
+    expect(out.match(new RegExp(`class="${CARD}`, "g"))).toHaveLength(6);
+    const cards = out.split(`class="${CARD}`).slice(1);
+    for (const card of cards) {
+      // a 24 px title bar and a status pill, then at least one check of two lines
+      expect(card).toMatch(/\bh-6\b/);
+      expect(card).toMatch(/\bh-5\b/);
+      expect(card.match(/\bh-4\b/g)!.length).toBeGreaterThanOrEqual(2);
+    }
+    // the first card (sign-in) has the most checks, the last (portion settings) one
+    expect(cards[0].match(/\bh-4\b/g)!.length).toBeGreaterThan(cards[5].match(/\bh-4\b/g)!.length);
+  });
+
+  it("has no button or link of its own besides the arrow back: nothing can be done on it", () => {
+    expect(out.match(/<a /g)).toHaveLength(1);
+    expect(out).not.toContain("<button");
+  });
+});
+
+describe("the Diagnostics loading screen", () => {
+  const out = html(createElement(DiagnosticsLoading));
+
+  it("has the header Diagnostics, with an arrow back to More, as the page has", () => {
+    expect(out).toContain('<h1 class="text-lg font-semibold">Diagnostics</h1>');
+    expect(out).toMatch(/<a [^>]*href="\/more"[^>]*>‹<\/a>/);
+    expect(out).toContain('aria-label="Back to More"');
+  });
+
+  it("shows one card for each of the four sections: App, Google Sheet, Tabs and Problems", () => {
+    expect(out.match(new RegExp(`class="${CARD}`, "g"))).toHaveLength(4);
+    const cards = out.split(`class="${CARD}`).slice(1);
+    for (const card of cards) {
+      expect(card).toMatch(/\bh-6\b/);
+      expect(card).toMatch(/\bh-4\b/);
+    }
+    // the Tabs card has four rows, the Google Sheet card one
+    expect(cards[2].match(/\bh-4\b/g)!.length).toBeGreaterThan(cards[1].match(/\bh-4\b/g)!.length);
+  });
+
+  it("has no button or link of its own besides the arrow back", () => {
+    expect(out.match(/<a /g)).toHaveLength(1);
+    expect(out).not.toContain("<button");
+  });
+});
+
+describe("the pages that read the Sheet up to three times in a row", () => {
+  it("each have a loading screen beside them, so a tap is answered at once", () => {
+    for (const page of ["setup", "diagnostics"]) {
+      expect(existsSync(new URL(`../../src/app/${page}/loading.tsx`, import.meta.url)), page).toBe(true);
+    }
   });
 });

@@ -68,12 +68,12 @@ describe("diagnosticsRows", () => {
 });
 
 describe("the App section", () => {
-  it("says the version, when this server started (India time) and how many settings checks are OK, with a link to Set up", () => {
+  it("says the version, when this server started (India time) and how many checks are OK, with a link to Set up", () => {
     const app = section("app");
     expect(app.rows.map((row) => row.text)).toEqual([
       "Version 0.1.0",
       "This server started 16 Oct, 11:00 am",
-      "Settings: 9 of 9 OK",
+      "Checks: 9 of 9 OK",
     ]);
     expect(app.rows[2].link).toEqual({ href: "/setup", label: "Open Set up" });
     expect(app.rows[0].link).toBeUndefined();
@@ -81,7 +81,7 @@ describe("the App section", () => {
 
   it("counts the checks that are not OK as the difference, whatever they are", () => {
     const checks = [...OK_CHECKS, check("a", "warn"), check("b", "fail"), check("c", "todo", 5), check("d", "skip", 4)];
-    expect(texts("app", { checks })[2]).toBe("Settings: 9 of 13 OK");
+    expect(texts("app", { checks })[2]).toBe("Checks: 9 of 13 OK");
   });
 
   it("keeps the link to Set up that the page gives it, which carries the month", () => {
@@ -111,6 +111,15 @@ describe("the Google Sheet section", () => {
     );
     expect(section("sheet", { checks }).rows).toEqual([
       { text: "Share the Sheet with robot@example.com, as an Editor.", pill: { tone: "danger", label: "Not reachable" } },
+    ]);
+  });
+
+  it("is not reachable, in the warning colour, when the connection check is only a warning: Google busy or not responding", () => {
+    const checks = OK_CHECKS.map((entry) =>
+      entry.id === "connection" ? { ...entry, status: "warn" as const, detail: "Google is limiting requests right now. Wait a minute and try again." } : entry,
+    );
+    expect(section("sheet", { checks, facts: { ...FACTS, readMs: null } }).rows).toEqual([
+      { text: "Google is limiting requests right now. Wait a minute and try again.", pill: { tone: "warn", label: "Not reachable" } },
     ]);
   });
 

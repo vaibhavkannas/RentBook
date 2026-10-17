@@ -23,6 +23,8 @@ export type Check = {
   detail: string;
   /** What to do about it. Only for a warn or a fail. */
   fix?: string;
+  /** Only for a to-do check of one of the app's tabs: what Prepare my Sheet does about it, add the tab or fill in a tab that is there but empty. */
+  prepare?: "create" | "fill";
 };
 
 export const SETUP_STEPS: readonly { step: SetupStep; title: string }[] = [

@@ -37,23 +37,26 @@ export const TENANTS_RANGE = `A1:${LAST_COLUMN}`;
 
 
 /**
- * Creates the Tenants tab with its headers when it is missing, and writes the headers into a tab that is empty.
- * It never refuses a tab for what its headers say: a wrong header must not stop the rest of the app. That is
+ * Creates the Tenants tab with its headers when it is missing, and writes the headers into a tab that is empty. Says
+ * which it did ("created", "filled", or "none"). It never refuses a tab for what its headers say: a wrong header must not stop the rest of the app. That is
  * checked on every read (see readTenancies). `existingTabs` is the tab list the caller already read.
  */
 export async function ensureTenantsTab(
   gateway: SheetsGateway,
   existingTabs: string[],
-): Promise<void> {
+): Promise<"created" | "filled" | "none"> {
   // A tab another instance added a moment ago is treated as an existing one: its header is checked below.
   if (!existingTabs.includes(TENANTS_TAB) && (await addTabIfMissing(gateway, TENANTS_TAB))) {
     await gateway.updateValues([{ tab: TENANTS_TAB, a1: "A1", values: [TENANT_HEADERS] }]);
-    return;
+    return "created";
   }
+  // A row 1 that holds anything, even a space, is not empty: it is checked on every read (readTenancies), never written over.
   const header = (await gateway.getValues(TENANTS_TAB, `A1:${LAST_COLUMN}1`, "FORMATTED_VALUE"))[0] ?? [];
   if (header.length === 0) {
     await gateway.updateValues([{ tab: TENANTS_TAB, a1: "A1", values: [TENANT_HEADERS] }]);
+    return "filled";
   }
+  return "none";
 }
 
 /**

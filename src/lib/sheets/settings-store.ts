@@ -192,16 +192,20 @@ async function seedSettings(
   gateway: SheetsGateway,
   scheduleTab: string,
   exists: boolean,
-): Promise<void> {
+): Promise<"created" | "filled" | "none"> {
   const top = await gateway.getValues(scheduleTab, "A1:ZZ25", "FORMATTED_VALUE");
   const headerIndex = findHeaderRowIndex(top);
   if (headerIndex === -1) {
     throw sheetStructure('No header row containing "Month" was found in the Schedule tab.');
   }
   const portions = inferPortions(top[headerIndex]);
-  if (!exists && !(await addTabIfMissing(gateway, SETTINGS_TAB))) {
-    const theirs = await gateway.getValues(SETTINGS_TAB, SETTINGS_RANGE, "UNFORMATTED_VALUE");
-    if (!settingsIsEmpty(theirs)) return;
+  let added = false;
+  if (!exists) {
+    added = await addTabIfMissing(gateway, SETTINGS_TAB);
+    if (!added) {
+      const theirs = await gateway.getValues(SETTINGS_TAB, SETTINGS_RANGE, "UNFORMATTED_VALUE");
+      if (!settingsIsEmpty(theirs)) return "none";
+    }
   }
   await gateway.updateValues([
     {
@@ -210,6 +214,7 @@ async function seedSettings(
       values: [SETTINGS_HEADERS, ...portions.map(toSettingsRow)],
     },
   ]);
+  return added ? "created" : "filled";
 }
 
 /** The Payments Log columns that were added after the first seven (0-based): Logged by (H) and Action (I). */
@@ -238,14 +243,21 @@ function logHeaderWrites(fill: number[]): CellWrite[] {
 }
 
 /**
+ * What `ensureTabs` did, by the app's name for each tab: the tabs it added (with their headers, and Settings with its first
+ * rows) and the tabs that were there but empty, or had blank header cells, that it filled in. Nothing else is ever written.
+ */
+export type EnsureReport = { created: string[]; filled: string[] };
+
+/**
  * Creates the Settings, Payments Log and Tenants tabs when they are missing, once per gateway instance
  * (until resetBootstrap). Settings is seeded from the Schedule header row, and only on a Sheet that has none
  * of the three app tabs yet, or whose Settings tab holds no portions: a Settings tab that went missing while
  * the others are still there is refused, never recreated, because the defaults would silently replace the
  * owner's cycle lengths and hike percentages.
  */
-export async function ensureTabs(gateway: SheetsGateway, scheduleTab: string): Promise<void> {
-  if (bootstrapped.has(gateway)) return;
+export async function ensureTabs(gateway: SheetsGateway, scheduleTab: string): Promise<EnsureReport> {
+  const report: EnsureReport = { created: [], filled: [] };
+  if (bootstrapped.has(gateway)) return report;
   const tabs = await gateway.listTabs();
   if (!tabs.includes(scheduleTab)) throw tabMissing(scheduleTab);
 
@@ -260,22 +272,27 @@ export async function ensureTabs(gateway: SheetsGateway, scheduleTab: string): P
     if (settingsIsEmpty(settings)) {
       settings = await gateway.getValues(SETTINGS_TAB, SETTINGS_RANGE, "UNFORMATTED_VALUE");
     }
-    if (settingsIsEmpty(settings)) await seedSettings(gateway, scheduleTab, true);
+    if (settingsIsEmpty(settings)) note(report, SETTINGS_TAB, await seedSettings(gateway, scheduleTab, true));
   } else {
-    await seedSettings(gateway, scheduleTab, false);
+    note(report, SETTINGS_TAB, await seedSettings(gateway, scheduleTab, false));
   }
 
   // A Payments Log tab that another instance added a moment ago is treated as an existing one.
   if (!tabs.includes(LOG_TAB) && (await addTabIfMissing(gateway, LOG_TAB))) {
     await gateway.updateValues([{ tab: LOG_TAB, a1: "A1", values: [LOG_HEADERS] }]);
+    note(report, LOG_TAB, "created");
   } else {
     const header = (await gateway.getValues(LOG_TAB, "A1:I1", "FORMATTED_VALUE"))[0] ?? [];
     if (header.length === 0) {
       await gateway.updateValues([{ tab: LOG_TAB, a1: "A1", values: [LOG_HEADERS] }]);
+      note(report, LOG_TAB, "filled");
     } else {
       // An older Payments Log has only the first seven columns. Add the two new headers once, into blank cells only.
       const { fill, taken } = logHeaderUpgrade(header);
-      if (fill.length > 0) await gateway.updateValues(logHeaderWrites(fill));
+      if (fill.length > 0) {
+        await gateway.updateValues(logHeaderWrites(fill));
+        note(report, LOG_TAB, "filled");
+      }
       if (taken.length > 0) {
         const cells = taken.map((column) => `${colLetter(column)}1`).join(" and ");
         logEvent("warn", "payments-log-header-taken", {
@@ -284,8 +301,14 @@ export async function ensureTabs(gateway: SheetsGateway, scheduleTab: string): P
       }
     }
   }
-  await ensureTenantsTab(gateway, tabs);
+  note(report, TENANTS_TAB, await ensureTenantsTab(gateway, tabs));
   bootstrapped.add(gateway);
+  return report;
+}
+
+/** Puts what was done to a tab in the report. */
+function note(report: EnsureReport, tab: string, done: "created" | "filled" | "none"): void {
+  if (done !== "none") report[done].push(tab);
 }
 
 type SettingsRow = { portion: PortionConfig; sheetRow: number };

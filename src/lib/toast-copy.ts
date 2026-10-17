@@ -27,9 +27,16 @@ export function newTenantToastText(portion: string, tenant: string, amount: numb
 
 export const SETTINGS_SAVED_TOAST = "Settings saved";
 
-/** After Prepare my Sheet: the tabs it made, as the owner names them, or that none was needed. */
-export function prepareToastText(created: readonly string[]): string {
-  return created.length === 0 ? "Nothing needed creating." : `Your Sheet is ready: created ${listWords(created)}.`;
+/**
+ * After Prepare my Sheet: the tabs it made and the tabs that were there but empty that it filled in, as the owner names
+ * them, or that nothing needed doing.
+ */
+export function prepareToastText(created: readonly string[], filled: readonly string[]): string {
+  const did = [
+    created.length > 0 ? `created ${listWords(created)}` : null,
+    filled.length > 0 ? `filled ${listWords(filled)}` : null,
+  ].filter((part) => part !== null);
+  return did.length === 0 ? "Nothing needed doing." : `Your Sheet is ready: ${did.join(" and ")}.`;
 }
 
 /** After tenancy details were added or edited. */
