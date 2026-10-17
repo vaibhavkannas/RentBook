@@ -15,6 +15,7 @@ import PaymentSheet from "@/components/PaymentSheet";
 import PortionBoard from "@/components/PortionBoard";
 import TenancyForm from "@/components/TenancyForm";
 import { emptyMoveOutForm, emptyTenancyForm } from "@/lib/tenancy-input";
+import { buttonClasses, CARD, pillClasses } from "@/lib/ui-classes";
 
 function card(overrides: Partial<PortionCard> = {}): PortionCard {
   return {
@@ -97,6 +98,38 @@ describe("PortionBoard", () => {
 
   it("gives the link a tap target of at least 44 px", () => {
     expect(board([card()])).toMatch(/<a [^>]*class="[^"]*min-h-11[^"]*"/);
+  });
+});
+
+describe("PortionBoard on the shared pieces", () => {
+  const paid = card({ status: "paid", entry: { tenant: "Asha", count: 3, amount: 10000 }, next: null, tenancy: SUMMARY });
+
+  it("draws each card as a Card, and the status as a Pill in the tone of its colour", () => {
+    expect(board([card()])).toContain(`<article class="${CARD}">`);
+    expect(board([card()])).toContain(`<span class="${pillClasses("warn")}">Pending</span>`);
+    expect(board([paid])).toContain(`<span class="${pillClasses("success")}">Paid</span>`);
+    expect(board([card({ status: "needs-tenant", next: null })])).toContain(`<span class="${pillClasses("neutral")}">No tenant</span>`);
+  });
+
+  it("draws the tenancy chips as neutral Pills", () => {
+    const out = board([card({ tenancy: SUMMARY })]);
+    expect(out).toContain(`<span class="${pillClasses("neutral")}">Advance ₹ 20,000 held</span>`);
+    expect(out).toContain(`<span class="${pillClasses("neutral")}">Agreement ends 15 Mar 2027</span>`);
+  });
+
+  it("draws the buttons with Button: Log payment primary, Edit amount secondary, Undo as red text, New tenant secondary and wide", () => {
+    expect(board([card()])).toContain(`class="${buttonClasses("primary", "md")} flex-1">Log payment</button>`);
+    const out = board([paid]);
+    expect(out).toContain(`class="${buttonClasses("secondary", "md")} flex-1">Edit amount</button>`);
+    expect(out).toContain(`class="${buttonClasses("dangerText", "md")}">Undo</button>`);
+    expect(board([card()])).toContain(`class="${buttonClasses("secondary", "md")} w-full">New tenant</button>`);
+    expect(board([card({ status: "needs-tenant", next: null })])).toContain(
+      `class="${buttonClasses("primary", "md")} flex-1">Add tenant</button>`,
+    );
+  });
+
+  it("none of its buttons submits a form", () => {
+    expect(board([card()])).not.toContain('type="submit"');
   });
 });
 
@@ -300,7 +333,7 @@ describe("the tenant details loading screen", () => {
   });
 
   it("shows a title bar and two cards, with the existing colour tokens", () => {
-    expect(out.match(/rounded-2xl border border-line bg-surface/g)).toHaveLength(2);
+    expect(out.match(/rounded-card border border-line bg-surface/g)).toHaveLength(2);
     expect(out).toContain("bg-line");
   });
 

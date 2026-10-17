@@ -6,6 +6,7 @@ import { Button, ButtonLink } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Checkbox, Field, Input, Select, TextArea } from "@/components/ui/Field";
+import { IconButton } from "@/components/ui/IconButton";
 import { LiveNotice, Notice } from "@/components/ui/Notice";
 import { Page } from "@/components/ui/Page";
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -13,7 +14,15 @@ import { Pill } from "@/components/ui/Pill";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Spinner } from "@/components/ui/Spinner";
 import { SubmitButton } from "@/components/ui/SubmitButton";
-import { buttonClasses, CARD, FIELD_CONTROL, noticeClasses, pillClasses, SKELETON_BAR } from "@/lib/ui-classes";
+import {
+  buttonClasses,
+  CARD,
+  FIELD_CONTROL,
+  iconButtonClasses,
+  noticeClasses,
+  pillClasses,
+  SKELETON_BAR,
+} from "@/lib/ui-classes";
 
 // The shared pieces, rendered the way the server renders them: what a person (or a screen reader) finds before
 // anything is tapped. The class strings themselves are tested in tests/domain/ui-classes.test.ts.
@@ -67,12 +76,34 @@ describe("Button", () => {
   });
 
   it("is never shorter than 44 px, in any variant or size", () => {
-    for (const variant of ["primary", "secondary", "danger", "dangerText", "quiet"] as const) {
+    for (const variant of ["primary", "secondary", "outline", "danger", "dangerText", "quiet"] as const) {
       for (const size of ["lg", "md"] as const) {
         expect(html(createElement(Button, { variant, size }, "x"))).toMatch(/class="[^"]*\bmin-h-1[12]\b/);
         expect(html(createElement(ButtonLink, { href: "/x", variant, size }, "x"))).toMatch(/class="[^"]*\bmin-h-1[12]\b/);
       }
     }
+  });
+});
+
+describe("IconButton", () => {
+  it("is a button that does not submit a form, named by its label, with the glyph as its only content", () => {
+    const out = html(createElement(IconButton, { label: "Next month" }, "›"));
+    expect(out).toBe(`<button type="button" aria-label="Next month" class="${iconButtonClasses()}">›</button>`);
+  });
+
+  it("is at least 44 px square and gives press feedback", () => {
+    const classes = attr(html(createElement(IconButton, { label: "Close" }, "×")), "class")!.split(" ");
+    expect(classes).toEqual(expect.arrayContaining(["min-h-11", "min-w-11", "press"]));
+  });
+
+  it("can be muted, and keeps its onClick, disabled and ref-free props", () => {
+    const out = html(createElement(IconButton, { label: "Close", tone: "muted", disabled: true }, "×"));
+    expect(attr(out, "class")).toBe(iconButtonClasses("muted"));
+    expect(out).toMatch(/<button [^>]*\bdisabled=""/);
+  });
+
+  it("puts the label before the class, where the smoke tests look for it", () => {
+    expect(html(createElement(IconButton, { label: "Close" }, "×"))).toMatch(/aria-label="Close" class="/);
   });
 });
 
@@ -238,6 +269,9 @@ describe("Card", () => {
   it("is a div with the card look, or whichever element it is asked to be", () => {
     expect(html(createElement(Card, null, "x"))).toBe(`<div class="${CARD}">x</div>`);
     expect(html(createElement(Card, { as: "article" }, "x"))).toBe(`<article class="${CARD}">x</article>`);
+    // a settings group is a fieldset, an entry of a list is an li
+    expect(html(createElement(Card, { as: "fieldset" }, "x"))).toBe(`<fieldset class="${CARD}">x</fieldset>`);
+    expect(html(createElement(Card, { as: "li" }, "x"))).toBe(`<li class="${CARD}">x</li>`);
     expect(html(createElement(Card, { as: "section", "aria-label": "Month summary", className: "mt-4" }, "x"))).toBe(
       `<section aria-label="Month summary" class="${CARD} mt-4">x</section>`,
     );
@@ -286,8 +320,9 @@ describe("Page", () => {
 
   it("can centre its content, for the sign-in and error pages", () => {
     const out = html(createElement(Page, { center: true }, "x"));
-    expect(out).toContain("flex flex-col justify-center");
-    expect(out).toContain("pb-10");
+    expect(out).toContain("flex min-h-dvh max-w-md flex-col justify-center");
+    expect(out).not.toContain("pb-10");
+    expect(out).not.toContain("pt-4");
   });
 
   it("passes other attributes on, such as aria-busy", () => {
@@ -301,7 +336,14 @@ describe("PageHeader", () => {
     expect(out).toContain('<h1 class="text-lg font-semibold">Activity</h1>');
     expect(out).toMatch(/<a [^>]*href="\/"[^>]*>‹<\/a>/);
     expect(out).toContain('aria-label="Back to month"');
-    expect(out).toContain("grid min-h-11 min-w-11 place-items-center rounded-lg text-xl");
+    expect(out).toContain(`class="${iconButtonClasses()}"`);
+  });
+
+  it("shows a placeholder bar where the title will be, for a loading screen", () => {
+    const out = html(createElement(PageHeader, { title: null, back: { href: "/", label: "Back to month" } }));
+    expect(out).not.toContain("<h1");
+    expect(out).toContain(`<div aria-hidden="true" class="${SKELETON_BAR} h-6 w-40"></div>`);
+    expect(out).toContain('aria-label="Back to month"');
   });
 
   it("is only the title when there is nowhere to go back to", () => {

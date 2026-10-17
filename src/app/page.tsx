@@ -5,6 +5,7 @@ import ExitGuard from "@/components/ExitGuard";
 import LoadProblem from "@/components/LoadProblem";
 import MonthFrame from "@/components/MonthFrame";
 import PortionBoard from "@/components/PortionBoard";
+import { Page } from "@/components/ui/Page";
 import type { MonthView } from "@/lib/domain/types";
 import { currentYm, parseYmKey, todayIso, ymKey } from "@/lib/domain/year-month";
 import { formatMonthTitle, formatRupees } from "@/lib/format";
@@ -45,13 +46,13 @@ export default async function Home({
     : null;
 
   return (
-    <main className="mx-auto min-h-dvh max-w-md px-4 pb-10 pt-4">
+    <Page>
       <MonthFrame monthKey={ymKey(month)} currentKey={ymKey(currentYm(now))}>
         {problem && <LoadProblem message={problem} retryHref={`/?month=${ymKey(month)}`} />}
 
         {view && (
           <>
-            <section className="mt-3 rounded-2xl bg-surface p-4 ring-1 ring-line" aria-label="Month summary">
+            <section className="mt-3 rounded-card bg-surface p-4 ring-1 ring-line" aria-label="Month summary">
               <div className="flex items-baseline justify-between text-sm text-muted">
                 <span>Received</span>
                 <span>
@@ -113,6 +114,6 @@ export default async function Home({
           </form>
         </div>
       </footer>
-    </main>
+    </Page>
   );
 }

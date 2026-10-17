@@ -2,6 +2,9 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useId, useRef, useState } from "react";
+import { Button } from "@/components/ui/Button";
+import { Field, Input, Select, TextArea } from "@/components/ui/Field";
+import { Notice } from "@/components/ui/Notice";
 import type { AdvanceStatus } from "@/lib/domain/tenancy";
 import { postJson } from "@/lib/post-json";
 import {
@@ -33,8 +36,6 @@ type Props = {
   noticeShown?: boolean;
 };
 
-const FIELD = "mt-1 min-h-12 w-full rounded-xl border border-control bg-surface px-3 text-base";
-
 const OUTCOMES: Array<{ value: AdvanceStatus; label: string }> = [
   { value: "Refunded", label: "Refunded" },
   { value: "Adjusted", label: "Adjusted" },
@@ -55,7 +56,6 @@ export default function MoveOutForm({ target, initial, tenant, portionId, notice
   const [draft, setDraft] = useState(() => startDraft(target, initial));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const outcomeHint = useId();
   const rupeesHint = useId();
   const openButton = useRef<HTMLButtonElement>(null);
   const wasOpen = useRef(open);
@@ -103,19 +103,19 @@ export default function MoveOutForm({ target, initial, tenant, portionId, notice
   return (
     <>
       {!open ? (
-        <button
+        <Button
           ref={openButton}
-          type="button"
+          variant="secondary"
+          className="mt-3"
           onClick={() => {
             setDraft(startDraft(target, initial));
             setError(null);
             setOpen(true);
           }}
           aria-label={`Move out ${tenant}`}
-          className="mt-3 min-h-11 rounded-xl border border-control px-4 font-medium"
         >
           Move out
-        </button>
+        </Button>
       ) : (
         <form
           aria-label={`Move out ${tenant}`}
@@ -125,105 +125,87 @@ export default function MoveOutForm({ target, initial, tenant, portionId, notice
             void save();
           }}
         >
-          <label className="block text-sm">
-            <span className="text-muted">Move-out date</span>
-            <input
+          <Field label="Move-out date">
+            <Input
               type="date"
               value={form.moveOut}
               onChange={(event) => set({ moveOut: event.target.value })}
               required
               autoFocus
-              className={FIELD}
             />
-          </label>
+          </Field>
 
           {draft.seen.hasAdvance && (
-            <div>
-              <label className="block text-sm">
-                <span className="text-muted">What happened to the advance?</span>
-                <select
-                  value={form.advanceStatus}
-                  onChange={(event) => set({ advanceStatus: event.target.value as AdvanceStatus })}
-                  aria-describedby={outcomeHint}
-                  className={FIELD}
-                >
-                  {OUTCOMES.map((outcome) => (
-                    <option key={outcome.value} value={outcome.value}>
-                      {outcome.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <p id={outcomeHint} className="mt-1 text-sm text-muted">
-                {MOVE_OUT_OUTCOME_HINT}
-              </p>
-            </div>
+            <Field label="What happened to the advance?" hint={MOVE_OUT_OUTCOME_HINT}>
+              <Select
+                value={form.advanceStatus}
+                onChange={(event) => set({ advanceStatus: event.target.value as AdvanceStatus })}
+              >
+                {OUTCOMES.map((outcome) => (
+                  <option key={outcome.value} value={outcome.value}>
+                    {outcome.label}
+                  </option>
+                ))}
+              </Select>
+            </Field>
           )}
 
+          {/* One hint covers both amounts, so each field points at it. */}
           <div>
-            <label className="block text-sm">
-              <span className="text-muted">Refund (₹)</span>
-              <input
+            <Field label="Refund (₹)">
+              <Input
                 value={form.refund}
                 onChange={(event) => set({ refund: event.target.value })}
                 inputMode="numeric"
                 autoComplete="off"
                 aria-describedby={rupeesHint}
-                className={FIELD}
               />
-            </label>
-
-            <label className="mt-3 block text-sm">
-              <span className="text-muted">Deductions (₹)</span>
-              <input
-                value={form.deductions}
-                onChange={(event) => set({ deductions: event.target.value })}
-                inputMode="numeric"
-                autoComplete="off"
-                aria-describedby={rupeesHint}
-                className={FIELD}
-              />
-            </label>
+            </Field>
+            <div className="mt-3">
+              <Field label="Deductions (₹)">
+                <Input
+                  value={form.deductions}
+                  onChange={(event) => set({ deductions: event.target.value })}
+                  inputMode="numeric"
+                  autoComplete="off"
+                  aria-describedby={rupeesHint}
+                />
+              </Field>
+            </div>
             <p id={rupeesHint} className="mt-1 text-sm text-muted">
               {MOVE_OUT_RUPEES_HINT}
             </p>
           </div>
 
-          <label className="block text-sm">
-            <span className="text-muted">Notes</span>
-            <textarea
+          <Field label="Notes">
+            <TextArea
               value={form.notes}
               onChange={(event) => set({ notes: event.target.value })}
               rows={3}
               maxLength={500}
-              className="mt-1 w-full rounded-xl border border-control bg-surface px-3 py-2 text-base"
             />
-          </label>
+          </Field>
 
           {error && (
-            <p role="alert" className="rounded-lg bg-danger-bg px-3 py-2 text-sm text-danger-ink">
+            <Notice tone="danger" role="alert">
               {error}
-            </p>
+            </Notice>
           )}
 
-          <button
-            type="submit"
-            disabled={busy}
-            className="min-h-12 w-full rounded-xl bg-accent px-4 font-medium text-accent-ink disabled:opacity-60"
-          >
-            {busy ? "Saving…" : "Record move-out"}
-          </button>
-          <button
-            type="button"
+          <Button type="submit" size="lg" className="w-full" pending={busy} pendingLabel="Saving…">
+            Record move-out
+          </Button>
+          <Button
+            variant="quiet"
+            className="w-full"
             onClick={() => {
               setOpen(false);
               setError(null);
             }}
             disabled={busy}
-            className="min-h-11 w-full text-muted"
           >
             Cancel
-          </button>
+          </Button>
         </form>
       )}
     </>

@@ -5,6 +5,7 @@ import {
   cx,
   FIELD_CONTROL,
   fieldControlClasses,
+  iconButtonClasses,
   noticeClasses,
   pageClasses,
   pillClasses,
@@ -22,7 +23,7 @@ describe("buttonClasses", () => {
   const BASE = ["press", "inline-flex", "items-center", "justify-center", "gap-2", "rounded-control", "px-4", "font-medium", "disabled:opacity-60"];
 
   it("gives every button the same base: press feedback, centred content, the usual shape", () => {
-    for (const variant of ["primary", "secondary", "danger", "dangerText", "quiet"] as const) {
+    for (const variant of ["primary", "secondary", "outline", "danger", "dangerText", "quiet"] as const) {
       for (const size of ["lg", "md"] as const) {
         expect(tokens(buttonClasses(variant, size))).toEqual(expect.arrayContaining(BASE));
       }
@@ -32,6 +33,7 @@ describe("buttonClasses", () => {
   it.each([
     ["primary", ["bg-accent", "text-accent-ink"]],
     ["secondary", ["border", "border-control"]],
+    ["outline", ["border", "border-current"]],
     ["danger", ["bg-danger-bg", "text-danger-ink"]],
     ["dangerText", ["text-danger-ink", "underline"]],
     ["quiet", ["text-muted"]],
@@ -42,6 +44,9 @@ describe("buttonClasses", () => {
   it("keeps the variants apart", () => {
     expect(buttonClasses("primary", "md")).not.toContain("border-control");
     expect(buttonClasses("secondary", "md")).not.toContain("bg-accent");
+    // the outline takes the colour of the text around it, for a button inside a tinted box
+    expect(buttonClasses("outline", "md")).not.toContain("border-control");
+    expect(buttonClasses("secondary", "md")).not.toContain("border-current");
     expect(buttonClasses("danger", "md")).not.toContain("underline");
     expect(buttonClasses("quiet", "md")).not.toContain("text-danger-ink");
   });
@@ -57,6 +62,17 @@ describe("buttonClasses", () => {
     for (const size of ["lg", "md"] as ButtonSize[]) {
       expect(buttonClasses("quiet", size)).toMatch(/\bmin-h-1[12]\b/);
     }
+  });
+});
+
+describe("iconButtonClasses", () => {
+  it("is a square at least 44 px each way, with the glyph centred, press feedback and the chip corner", () => {
+    expect(iconButtonClasses()).toBe("press grid min-h-11 min-w-11 place-items-center rounded-chip text-xl disabled:opacity-60");
+  });
+
+  it("can be muted, for a close button that should not shout", () => {
+    expect(iconButtonClasses("muted")).toBe(`${iconButtonClasses()} text-muted`);
+    expect(iconButtonClasses("default")).toBe(iconButtonClasses());
   });
 });
 
@@ -124,8 +140,8 @@ describe("the card, the skeleton bar and the page", () => {
     expect(pageClasses(false)).toBe("mx-auto min-h-dvh max-w-md px-4 pb-10 pt-4");
   });
 
-  it("centres the content of a sign-in or error page, and keeps the bottom padding", () => {
-    expect(pageClasses(true)).toBe("mx-auto min-h-dvh max-w-md px-4 pb-10 pt-4 flex flex-col justify-center");
+  it("centres the content of a sign-in or error page in the whole screen, with no vertical padding to push it off centre", () => {
+    expect(pageClasses(true)).toBe("mx-auto flex min-h-dvh max-w-md flex-col justify-center px-4");
   });
 });
 
@@ -138,9 +154,10 @@ describe("cx", () => {
 
 describe("the corners", () => {
   const all = [
-    ...(["primary", "secondary", "danger", "dangerText", "quiet"] as const).flatMap((variant) =>
+    ...(["primary", "secondary", "outline", "danger", "dangerText", "quiet"] as const).flatMap((variant) =>
       (["lg", "md"] as const).map((size) => buttonClasses(variant, size)),
     ),
+    iconButtonClasses(),
     fieldControlClasses(),
     fieldControlClasses("input", true),
     fieldControlClasses("textarea"),

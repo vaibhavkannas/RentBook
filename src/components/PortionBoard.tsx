@@ -2,11 +2,15 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
+import { Button } from "@/components/ui/Button";
+import { Card } from "@/components/ui/Card";
+import { Pill } from "@/components/ui/Pill";
 import type { PortionCard } from "@/lib/domain/types";
 import { formatRupees } from "@/lib/format";
 import { sheetKey } from "@/lib/month-nav";
 import { cardDifferenceText } from "@/lib/rent-difference";
 import { tenancyChips } from "@/lib/tenancy-chips";
+import type { PillTone } from "@/lib/ui-classes";
 import PaymentSheet, { type SheetMode } from "./PaymentSheet";
 import UndoSheet from "./UndoSheet";
 
@@ -30,11 +34,11 @@ type Active =
 /** The toast carries an id so a second one, even with the same text, restarts the timer. */
 type Toast = { id: number; text: string };
 
-const PILL = {
-  paid: "bg-success-bg text-success-ink",
-  pending: "bg-warn-bg text-warn-ink",
-  "needs-tenant": "bg-line text-foreground",
-} as const;
+const PILL_TONE: Record<PortionCard["status"], PillTone> = {
+  paid: "success",
+  pending: "warn",
+  "needs-tenant": "neutral",
+};
 
 const PILL_LABEL = {
   paid: "Paid",
@@ -66,14 +70,10 @@ export default function PortionBoard({ monthKey, monthLabel, cards, defaultDate 
             card.status === "paid" ? cardDifferenceText(card.rentDifference, card.rentReference) : null;
           return (
             <li key={card.portionId}>
-              <article className="rounded-2xl border border-line bg-surface p-4">
+              <Card as="article">
                 <div className="flex items-start justify-between gap-3">
                   <h2 className="font-medium">{card.name}</h2>
-                  <span
-                    className={`shrink-0 rounded-lg px-2.5 py-0.5 text-xs font-medium ${PILL[card.status]}`}
-                  >
-                    {PILL_LABEL[card.status]}
-                  </span>
+                  <Pill tone={PILL_TONE[card.status]}>{PILL_LABEL[card.status]}</Pill>
                 </div>
 
                 {card.status === "needs-tenant" ? (
@@ -90,12 +90,9 @@ export default function PortionBoard({ monthKey, monthLabel, cards, defaultDate 
                     <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
                       {card.tenancy &&
                         tenancyChips(card.tenancy).map((chip) => (
-                          <span
-                            key={chip}
-                            className="rounded-lg bg-line px-2.5 py-0.5 text-xs font-medium text-foreground"
-                          >
+                          <Pill key={chip} tone="neutral">
                             {chip}
-                          </span>
+                          </Pill>
                         ))}
                       <Link
                         href={`/tenants/${encodeURIComponent(card.portionId)}`}
@@ -124,26 +121,25 @@ export default function PortionBoard({ monthKey, monthLabel, cards, defaultDate 
 
                 <div className="mt-3 flex gap-2">
                   {card.status === "pending" && (
-                    <button
-                      type="button"
+                    <Button
+                      className="flex-1"
                       onClick={() => setActive({ mode: "log", portionId: card.portionId })}
-                      className="min-h-11 flex-1 rounded-xl bg-accent px-4 font-medium text-accent-ink"
                     >
                       Log payment
-                    </button>
+                    </Button>
                   )}
                   {card.status === "paid" && (
                     <>
-                      <button
-                        type="button"
+                      <Button
+                        variant="secondary"
+                        className="flex-1"
                         onClick={() => setActive({ mode: "edit", portionId: card.portionId })}
-                        className="min-h-11 flex-1 rounded-xl border border-control px-4 font-medium"
                       >
                         Edit amount
-                      </button>
+                      </Button>
                       {card.undoBlockedReason === null && (
-                        <button
-                          type="button"
+                        <Button
+                          variant="dangerText"
                           onClick={() =>
                             setActive({
                               mode: "undo",
@@ -153,41 +149,39 @@ export default function PortionBoard({ monthKey, monthLabel, cards, defaultDate 
                               monthLabel,
                             })
                           }
-                          className="min-h-11 rounded-xl px-4 font-medium text-danger-ink underline"
                         >
                           Undo
-                        </button>
+                        </Button>
                       )}
                     </>
                   )}
                   {card.status === "needs-tenant" && (
-                    <button
-                      type="button"
+                    <Button
+                      className="flex-1"
                       onClick={() => setActive({ mode: "new-tenant", portionId: card.portionId })}
-                      className="min-h-11 flex-1 rounded-xl bg-accent px-4 font-medium text-accent-ink"
                     >
                       Add tenant
-                    </button>
+                    </Button>
                   )}
                 </div>
 
                 {card.status === "paid" && card.undoBlockedReason && (
                   <p className="mt-2 text-sm text-muted">{card.undoBlockedReason}</p>
                 )}
-              </article>
+              </Card>
             </li>
           );
         })}
       </ul>
 
       <div className="mt-4">
-        <button
-          type="button"
+        <Button
+          variant="secondary"
+          className="w-full"
           onClick={() => setActive({ mode: "new-tenant", portionId: null })}
-          className="min-h-11 w-full rounded-xl border border-control px-4 font-medium"
         >
           New tenant
-        </button>
+        </Button>
       </div>
 
       {active &&

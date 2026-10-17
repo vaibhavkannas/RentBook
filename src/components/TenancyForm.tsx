@@ -1,7 +1,10 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { Button } from "@/components/ui/Button";
+import { Field, Input, TextArea } from "@/components/ui/Field";
+import { LiveNotice, Notice } from "@/components/ui/Notice";
 import { postJson } from "@/lib/post-json";
 import {
   buildTenancyDraftRequest,
@@ -27,8 +30,6 @@ type Props = {
   noticeShown?: boolean;
 };
 
-const FIELD = "mt-1 min-h-12 w-full rounded-xl border border-control bg-surface px-3 text-base";
-
 /**
  * Add details (create) or Edit (a button that opens the form) for a tenancy. It only gathers text and
  * posts it: what is sent and what is wrong is decided by tenancy-input.ts and tenancy-response.ts.
@@ -45,7 +46,6 @@ export default function TenancyForm({ target, initial, noticeShown = false }: Pr
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
-  const moveInHint = useId();
   const editButton = useRef<HTMLButtonElement>(null);
   const wasOpen = useRef(open);
 
@@ -99,23 +99,20 @@ export default function TenancyForm({ target, initial, noticeShown = false }: Pr
   return (
     <>
       {/* Live regions stay on the page, so screen readers announce the text that appears in them. */}
-      <div
-        role="status"
-        className={
-          statusText
-            ? editing
-              ? "mt-3 rounded-lg bg-success-bg px-3 py-2 text-sm text-success-ink"
-              : "mt-3 text-sm text-muted"
-            : undefined
-        }
-      >
-        {statusText}
-      </div>
+      {editing ? (
+        <LiveNotice tone="success" className="mt-3">
+          {statusText}
+        </LiveNotice>
+      ) : (
+        <div role="status" className={statusText ? "mt-3 text-sm text-muted" : undefined}>
+          {statusText}
+        </div>
+      )}
       {!open ? (
         <div className="mt-3">
-          <button
+          <Button
             ref={editButton}
-            type="button"
+            variant="secondary"
             aria-label="Edit tenancy details"
             onClick={() => {
               setDraft(startDraft(target, initial));
@@ -123,10 +120,9 @@ export default function TenancyForm({ target, initial, noticeShown = false }: Pr
               setSaved(false);
               setOpen(true);
             }}
-            className="min-h-11 rounded-xl border border-control px-4 font-medium"
           >
             Edit
-          </button>
+          </Button>
         </div>
       ) : (
         <form
@@ -137,105 +133,81 @@ export default function TenancyForm({ target, initial, noticeShown = false }: Pr
             void save();
           }}
         >
-          <label className="block text-sm">
-            <span className="text-muted">Phone</span>
-            <input
+          <Field label="Phone">
+            <Input
               type="tel"
               value={form.phone}
               onChange={(event) => set({ phone: event.target.value })}
               autoComplete="off"
               autoFocus={editing}
               maxLength={30}
-              className={FIELD}
             />
-          </label>
+          </Field>
 
-          <div>
-            <label className="block text-sm">
-              <span className="text-muted">Move-in date</span>
-              <input
-                type="date"
-                value={form.moveIn}
-                onChange={(event) => set({ moveIn: event.target.value })}
-                required
-                aria-describedby={editing ? undefined : moveInHint}
-                className={FIELD}
-              />
-            </label>
-            {!editing && (
-              <p id={moveInHint} className="mt-1 text-sm text-muted">
-                Change this if the tenant moved in earlier.
-              </p>
-            )}
-          </div>
+          <Field label="Move-in date" hint={editing ? undefined : "Change this if the tenant moved in earlier."}>
+            <Input
+              type="date"
+              value={form.moveIn}
+              onChange={(event) => set({ moveIn: event.target.value })}
+              required
+            />
+          </Field>
 
-          <label className="block text-sm">
-            <span className="text-muted">Agreement end</span>
-            <input
+          <Field label="Agreement end">
+            <Input
               type="date"
               value={form.agreementEnd}
               onChange={(event) => set({ agreementEnd: event.target.value })}
-              className={FIELD}
             />
-          </label>
+          </Field>
 
-          <label className="block text-sm">
-            <span className="text-muted">Advance (₹)</span>
-            <input
+          <Field label="Advance (₹)">
+            <Input
               value={form.advance}
               onChange={(event) => set({ advance: event.target.value })}
               inputMode="numeric"
               autoComplete="off"
-              className={FIELD}
             />
-          </label>
+          </Field>
 
-          <label className="block text-sm">
-            <span className="text-muted">Advance date</span>
-            <input
+          <Field label="Advance date">
+            <Input
               type="date"
               value={form.advanceDate}
               onChange={(event) => set({ advanceDate: event.target.value })}
-              className={FIELD}
             />
-          </label>
+          </Field>
 
-          <label className="block text-sm">
-            <span className="text-muted">Notes</span>
-            <textarea
+          <Field label="Notes">
+            <TextArea
               value={form.notes}
               onChange={(event) => set({ notes: event.target.value })}
               rows={3}
               maxLength={500}
-              className="mt-1 w-full rounded-xl border border-control bg-surface px-3 py-2 text-base"
             />
-          </label>
+          </Field>
 
           {error && (
-            <p role="alert" className="rounded-lg bg-danger-bg px-3 py-2 text-sm text-danger-ink">
+            <Notice tone="danger" role="alert">
               {error}
-            </p>
+            </Notice>
           )}
 
-          <button
-            type="submit"
-            disabled={busy}
-            className="min-h-12 w-full rounded-xl bg-accent px-4 font-medium text-accent-ink disabled:opacity-60"
-          >
-            {busy ? "Saving…" : "Save details"}
-          </button>
+          <Button type="submit" size="lg" className="w-full" pending={busy} pendingLabel="Saving…">
+            Save details
+          </Button>
           {editing && (
-            <button
-              type="button"
+            <Button
+              variant="quiet"
+              className="w-full"
               onClick={() => {
                 setOpen(false);
                 setError(null);
               }}
               disabled={busy}
-              className="min-h-11 w-full text-muted"
             >
               Cancel
-            </button>
+            </Button>
           )}
         </form>
       )}

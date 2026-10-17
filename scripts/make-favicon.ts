@@ -6,7 +6,9 @@
  *
  * It is not an npm script: it is needed once in a long while. The favicon is an ICO file that holds one image, the
  * 32 pixel PNG of the icon (every modern browser reads PNG inside ICO). A test (tests/server/brand-icons.test.ts)
- * fails when the committed file no longer matches the icon.
+ * decodes the committed picture and fails when it is not 32 by 32, has no transparent corner, lacks the accent colour
+ * at its edge or the white roof apex of the mark: it checks the picture, not the exact bytes, so a different PNG
+ * encoder gives the same result.
  *
  * `next/og`, which draws the icon, runs outside Next, so the PNG comes from calling the icon's own function.
  */

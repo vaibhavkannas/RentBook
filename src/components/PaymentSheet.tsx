@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { Field, Input, Select } from "@/components/ui/Field";
+import { IconButton } from "@/components/ui/IconButton";
 import { LiveNotice, Notice } from "@/components/ui/Notice";
 import { Sheet } from "@/components/ui/Sheet";
 import { HIKE_ROUNDING_ALLOWANCE, roundedChoices } from "@/lib/domain/rent-rules";
@@ -167,15 +168,9 @@ export default function PaymentSheet({
             {mode !== "new-tenant" && card ? ` · ${card.name}` : ""}
           </p>
         </div>
-        <button
-          type="button"
-          onClick={onClose}
-          disabled={busy}
-          aria-label="Close"
-          className="min-h-11 min-w-11 rounded-lg text-xl text-muted"
-        >
+        <IconButton label="Close" tone="muted" onClick={onClose} disabled={busy}>
           ×
-        </button>
+        </IconButton>
       </div>
 
       {/* On the page from the start, so screen readers announce the warning when its text appears. */}
@@ -292,24 +287,20 @@ export default function PaymentSheet({
               {roundedChoices(card.next.suggestedAmount).length > 0 && (
                 <div className="flex gap-2">
                   {roundedChoices(card.next.suggestedAmount).map((value) => (
-                    <button
+                    <Button
                       key={value}
-                      type="button"
+                      variant="outline"
+                      className="flex-1"
                       onClick={() => setAmount(String(value))}
-                      className="press min-h-11 flex-1 rounded-lg border border-current px-3 font-medium"
                     >
                       Round to {formatRupees(value)}
-                    </button>
+                    </Button>
                   ))}
                 </div>
               )}
-              <button
-                type="button"
-                onClick={() => setAmount(String(card.next!.previousAmount))}
-                className="press min-h-11 w-full rounded-lg border border-current px-3 font-medium"
-              >
+              <Button variant="outline" className="w-full" onClick={() => setAmount(String(card.next!.previousAmount))}>
                 Keep {formatRupees(card.next.previousAmount)}
-              </button>
+              </Button>
             </Notice>
           )}
 

@@ -1,9 +1,12 @@
-import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import type { ReactNode } from "react";
 import LoadProblem from "@/components/LoadProblem";
 import MoveOutForm from "@/components/MoveOutForm";
 import TenancyForm from "@/components/TenancyForm";
+import { Card } from "@/components/ui/Card";
+import { Notice } from "@/components/ui/Notice";
+import { Page } from "@/components/ui/Page";
+import { PageHeader } from "@/components/ui/PageHeader";
 import { todayIso } from "@/lib/domain/year-month";
 import { AppError } from "@/lib/errors";
 import { formatDay } from "@/lib/format";
@@ -26,8 +29,6 @@ import {
 
 // A Google call gives up after 10 seconds; the whole request is cut off after 15.
 export const maxDuration = 15;
-
-const CARD = "rounded-2xl border border-line bg-surface p-4";
 
 /** One label and value of the current tenancy. An empty value reads "Not added". */
 function Detail({ label, children }: { label: string; children?: ReactNode }) {
@@ -53,15 +54,9 @@ function LongDetail({ label, children }: { label: string; children?: ReactNode }
   );
 }
 
+/** The title of the page, with its way back to the month screen. */
 function Header({ title }: { title: string }) {
-  return (
-    <nav className="flex items-center gap-2">
-      <Link href="/" aria-label="Back to month" className="grid min-h-11 min-w-11 place-items-center rounded-lg text-xl">
-        ‹
-      </Link>
-      <h1 className="text-lg font-semibold">{title}</h1>
-    </nav>
-  );
+  return <PageHeader title={title} back={{ href: "/", label: "Back to month" }} />;
 }
 
 export default async function TenantsPage({
@@ -98,10 +93,10 @@ export default async function TenantsPage({
 
   if (!data) {
     return (
-      <main className="mx-auto min-h-dvh max-w-md px-4 pb-10 pt-4">
+      <Page>
         <Header title="Tenant details" />
         <LoadProblem message={problem ?? "Couldn't reach Google Sheets. Try again."} retryHref={`/tenants/${encodeURIComponent(portionId)}`} />
-      </main>
+      </Page>
     );
   }
 
@@ -110,14 +105,14 @@ export default async function TenantsPage({
   // The Tenants tab cannot be used (a header was changed): say what is wrong. Rent logging does not need it.
   if (tenantsProblem !== undefined) {
     return (
-      <main className="mx-auto min-h-dvh max-w-md px-4 pb-10 pt-4">
+      <Page>
         <Header title={portion.name} />
         <LoadProblem
           title="Can't show the tenant details"
           message={`${tenantsProblem} Put the header back, then try again. Logging rent and the other pages still work.`}
           retryHref={`/tenants/${encodeURIComponent(portion.id)}`}
         />
-      </main>
+      </Page>
     );
   }
   const today = todayIso(new Date());
@@ -126,18 +121,18 @@ export default async function TenantsPage({
   const note = current ? null : noCurrentTenancyNote({ scheduleTenant, mismatched, lastPast: past[0] });
 
   return (
-    <main className="mx-auto min-h-dvh max-w-md px-4 pb-10 pt-4">
+    <Page>
       <Header title={portion.name} />
       {changed && (
-        <p role="alert" className="mt-3 mb-2 rounded-lg bg-warn-bg px-3 py-2 text-sm text-warn-ink">
+        <Notice tone="warn" role="alert" className="mt-3 mb-2">
           {TENANCY_CONFLICT_MESSAGE}
-        </p>
+        </Notice>
       )}
       <p className="mt-1 text-sm text-muted">
         {scheduleTenant === null ? "No tenant recorded yet." : `Tenant in the Schedule: ${scheduleTenant}`}
       </p>
 
-      <section aria-labelledby="current-heading" className={`mt-4 ${CARD}`}>
+      <Card as="section" aria-labelledby="current-heading" className="mt-4">
         <h2 id="current-heading" className="font-medium">
           Current tenancy
         </h2>
@@ -191,10 +186,10 @@ export default async function TenantsPage({
             />
           </>
         )}
-      </section>
+      </Card>
 
       {current && (
-        <section aria-labelledby="move-out-heading" className={`mt-4 ${CARD}`}>
+        <Card as="section" aria-labelledby="move-out-heading" className="mt-4">
           <h2 id="move-out-heading" className="font-medium">
             Move out
           </h2>
@@ -214,7 +209,7 @@ export default async function TenantsPage({
             }}
             initial={emptyMoveOutForm(today, current)}
           />
-        </section>
+        </Card>
       )}
 
       <section aria-labelledby="past-heading" className="mt-4">
@@ -228,16 +223,16 @@ export default async function TenantsPage({
             {past.map((tenancy) => {
               const outcome = advanceOutcome(tenancy);
               return (
-                <li key={tenancy.rowNumber} className={CARD}>
+                <Card as="li" key={tenancy.rowNumber}>
                   <p className="font-medium">{tenancy.tenant}</p>
                   <p className="mt-1 text-sm text-muted">{tenancyPeriod(tenancy.moveIn, tenancy.moveOut)}</p>
                   {outcome && <p className="mt-1 text-sm">{outcome}</p>}
-                </li>
+                </Card>
               );
             })}
           </ul>
         )}
       </section>
-    </main>
+    </Page>
   );
 }

@@ -2,7 +2,7 @@ import { createElement, type ComponentProps } from "react";
 import { CARD, cx } from "@/lib/ui-classes";
 
 type Props = Omit<ComponentProps<"div">, "className"> & {
-  as?: "div" | "article" | "section";
+  as?: "div" | "article" | "section" | "fieldset" | "li";
   /** Layout only: a margin. */
   className?: string;
 };

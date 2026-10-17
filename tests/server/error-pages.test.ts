@@ -45,12 +45,12 @@ describe("error.tsx, the page for an error inside the app", () => {
   });
 
   it("has a Try again button that asks Next to try again, and a link home", () => {
-    const button = elements(page()).find((element) => element.type === "button");
+    // The button is the shared Button, so the tree holds a Button element, not a "button" tag: it is the one with a click handler.
+    const button = elements(page()).find((element) => typeof element.props.onClick === "function");
     expect(button).toBeDefined();
-    expect(button!.props.type).toBe("button");
     (button!.props.onClick as () => void)();
     expect(retry).toHaveBeenCalledTimes(1);
-    expect(html()).toMatch(/<button [^>]*>Try again<\/button>/);
+    expect(html()).toMatch(/<button type="button" [^>]*>Try again<\/button>/);
     expect(html()).toMatch(/<a [^>]*href="\/"[^>]*>[^<]*Back to RentBook/);
   });
 

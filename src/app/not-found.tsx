@@ -1,19 +1,17 @@
-import Link from "next/link";
 import { connection } from "next/server";
+import { ButtonLink } from "@/components/ui/Button";
+import { Page } from "@/components/ui/Page";
 import { BRAND } from "@/lib/brand";
 
 export default async function NotFound() {
   // Render for each request, not ahead of time: only then does the page receive the request's nonce (see proxy.ts).
   await connection();
   return (
-    <main className="mx-auto flex min-h-dvh max-w-md flex-col justify-center px-4">
+    <Page center>
       <h1 className="text-2xl font-semibold">That page was not found.</h1>
-      <Link
-        href="/"
-        className="mt-6 inline-flex min-h-11 items-center justify-center rounded-xl bg-accent px-4 font-medium text-accent-ink"
-      >
+      <ButtonLink href="/" className="mt-6">
         {`Back to ${BRAND.name}`}
-      </Link>
-    </main>
+      </ButtonLink>
+    </Page>
   );
 }

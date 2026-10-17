@@ -123,3 +123,15 @@ describe("the settings page, which only the owner sees", () => {
     expect(mocks.getSettings).not.toHaveBeenCalled();
   });
 });
+
+describe("the settings page, when the Sheet cannot be read", () => {
+  it("shows the problem as the same block the other pages show, with a way to try again", async () => {
+    asOwner();
+    mocks.getSettings.mockRejectedValue(rateLimited());
+    const out = await html(SettingsPage());
+    expect(out).toContain("Google is limiting requests right now. Wait a minute and try again.");
+    expect(out).toContain("Can&#x27;t load your Sheet");
+    expect(out).toMatch(/<a [^>]*href="\/settings"[^>]*>Try again<\/a>/);
+    expect(out).toContain('role="alert"');
+  });
+});

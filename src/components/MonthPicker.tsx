@@ -2,6 +2,7 @@
 
 import { useId, useState } from "react";
 import { Button } from "@/components/ui/Button";
+import { IconButton } from "@/components/ui/IconButton";
 import { Sheet } from "@/components/ui/Sheet";
 import { parseYmKey } from "@/lib/domain/year-month";
 import { monthPickerCells } from "@/lib/month-nav";
@@ -23,23 +24,13 @@ export default function MonthPicker({ shownKey, currentKey, onPick, onClose }: P
         Choose month
       </h2>
       <div className="flex items-center justify-between">
-        <button
-          type="button"
-          aria-label="Previous year"
-          onClick={() => setYear((y) => y - 1)}
-          className="grid min-h-11 min-w-11 place-items-center rounded-lg text-xl"
-        >
+        <IconButton label="Previous year" onClick={() => setYear((y) => y - 1)}>
           ‹
-        </button>
+        </IconButton>
         <p className="text-lg font-semibold">{year}</p>
-        <button
-          type="button"
-          aria-label="Next year"
-          onClick={() => setYear((y) => y + 1)}
-          className="grid min-h-11 min-w-11 place-items-center rounded-lg text-xl"
-        >
+        <IconButton label="Next year" onClick={() => setYear((y) => y + 1)}>
           ›
-        </button>
+        </IconButton>
       </div>
 
       <div className="mt-3 grid grid-cols-3 gap-2">
@@ -52,7 +43,7 @@ export default function MonthPicker({ shownKey, currentKey, onPick, onClose }: P
               type="button"
               aria-pressed={shown}
               onClick={() => onPick(cell.key)}
-              className={`min-h-12 rounded-xl border px-3 font-medium ${
+              className={`press min-h-12 rounded-control border px-3 font-medium ${
                 shown
                   ? "border-accent bg-accent text-accent-ink"
                   : current

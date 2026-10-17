@@ -2,6 +2,10 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { Button } from "@/components/ui/Button";
+import { Card } from "@/components/ui/Card";
+import { Checkbox, Field, Input } from "@/components/ui/Field";
+import { Notice } from "@/components/ui/Notice";
 import type { PortionConfig } from "@/lib/domain/types";
 import { postJson, POST_TIMEOUT_MS } from "@/lib/post-json";
 import { parseSettingsRows, type SettingsRowInput } from "@/lib/settings-input";
@@ -58,71 +62,52 @@ export default function SettingsForm({ portions }: { portions: PortionConfig[] }
       }}
     >
       {rows.map((row) => (
-        <fieldset key={row.id} className="space-y-2 rounded-2xl border border-line bg-surface p-4">
+        <Card as="fieldset" key={row.id} className="space-y-2">
           <legend className="sr-only">Settings for {row.name || row.id}</legend>
-          <label className="block text-sm">
-            <span className="text-muted">Name</span>
-            <input
+          <Field label="Name">
+            <Input
               value={row.name}
               onChange={(event) => update(row.id, { name: event.target.value })}
               required
               maxLength={60}
-              className="mt-1 min-h-12 w-full rounded-xl border border-control bg-surface px-3 text-base"
             />
-          </label>
+          </Field>
 
           <div className="grid grid-cols-2 gap-3">
-            <label className="block text-sm">
-              <span className="text-muted">Cycle length</span>
-              <input
+            <Field label="Cycle length">
+              <Input
                 value={row.cycle}
                 onChange={(event) => update(row.id, { cycle: event.target.value })}
                 inputMode="numeric"
                 disabled={row.never}
-                className="mt-1 min-h-12 w-full rounded-xl border border-control bg-surface px-3 text-base disabled:opacity-50"
               />
-            </label>
-            <label className="block text-sm">
-              <span className="text-muted">Hike %</span>
-              <input
+            </Field>
+            <Field label="Hike %">
+              <Input
                 value={row.hike}
                 onChange={(event) => update(row.id, { hike: event.target.value })}
                 inputMode="decimal"
-                className="mt-1 min-h-12 w-full rounded-xl border border-control bg-surface px-3 text-base"
               />
-            </label>
+            </Field>
           </div>
 
-          <label className="flex min-h-11 items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              checked={row.never}
-              onChange={(event) => update(row.id, { never: event.target.checked })}
-              className="size-5"
-            />
-            Count never resets
-          </label>
-        </fieldset>
+          <Checkbox
+            label="Count never resets"
+            checked={row.never}
+            onChange={(event) => update(row.id, { never: event.target.checked })}
+          />
+        </Card>
       ))}
 
       {message && (
-        <p
-          role={message.kind === "error" ? "alert" : "status"}
-          className={`rounded-lg px-3 py-2 text-sm ${
-            message.kind === "ok" ? "bg-success-bg text-success-ink" : "bg-danger-bg text-danger-ink"
-          }`}
-        >
+        <Notice tone={message.kind === "ok" ? "success" : "danger"} role={message.kind === "error" ? "alert" : "status"}>
           {message.text}
-        </p>
+        </Notice>
       )}
 
-      <button
-        type="submit"
-        disabled={busy}
-        className="min-h-12 w-full rounded-xl bg-accent px-4 font-medium text-accent-ink"
-      >
-        {busy ? "Saving…" : "Save settings"}
-      </button>
+      <Button type="submit" size="lg" className="w-full" pending={busy} pendingLabel="Saving…">
+        Save settings
+      </Button>
     </form>
   );
 }

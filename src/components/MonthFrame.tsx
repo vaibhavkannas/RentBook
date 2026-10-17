@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useRef, useState, useTransition, type ReactNode, type TouchEvent } from "react";
+import { IconButton } from "@/components/ui/IconButton";
 import { addMonths, parseYmKey, ymKey } from "@/lib/domain/year-month";
 import { formatMonthTitle } from "@/lib/format";
 import { openMonth, shouldStartSwipe, swipeDirection } from "@/lib/month-nav";
@@ -65,14 +66,9 @@ export default function MonthFrame({ monthKey, currentKey, children }: Props) {
     <div onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
       {/* The arrows stay level with the title row; the nav grows only while the Today pill is shown. */}
       <nav aria-label="Month" className="flex items-start justify-between">
-        <button
-          type="button"
-          aria-label="Previous month"
-          onClick={() => go(ymKey(addMonths(shown, -1)))}
-          className="grid min-h-11 min-w-11 place-items-center rounded-lg text-xl"
-        >
+        <IconButton label="Previous month" onClick={() => go(ymKey(addMonths(shown, -1)))}>
           ‹
-        </button>
+        </IconButton>
         <div className="flex flex-col items-center">
           <h1 className="flex text-lg font-semibold">
             <button
@@ -80,7 +76,7 @@ export default function MonthFrame({ monthKey, currentKey, children }: Props) {
               type="button"
               aria-haspopup="dialog"
               onClick={() => setPickerOpen(true)}
-              className="min-h-11 rounded-lg px-3"
+              className="press min-h-11 rounded-chip px-3"
             >
               {title} <span aria-hidden="true">▾</span>
             </button>
@@ -93,20 +89,15 @@ export default function MonthFrame({ monthKey, currentKey, children }: Props) {
                 // The pill disappears on the current month, so keep focus somewhere that stays.
                 titleRef.current?.focus();
               }}
-              className="-mt-1 min-h-11 rounded-full px-3 text-sm font-medium text-accent underline"
+              className="press -mt-1 min-h-11 rounded-full px-3 text-sm font-medium text-accent underline"
             >
               Today
             </button>
           )}
         </div>
-        <button
-          type="button"
-          aria-label="Next month"
-          onClick={() => go(ymKey(addMonths(shown, 1)))}
-          className="grid min-h-11 min-w-11 place-items-center rounded-lg text-xl"
-        >
+        <IconButton label="Next month" onClick={() => go(ymKey(addMonths(shown, 1)))}>
           ›
-        </button>
+        </IconButton>
       </nav>
 
       <p role="status" className="sr-only">

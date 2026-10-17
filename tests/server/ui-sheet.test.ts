@@ -15,6 +15,7 @@ import MonthPicker from "@/components/MonthPicker";
 import PaymentSheet from "@/components/PaymentSheet";
 import UndoSheet from "@/components/UndoSheet";
 import { Sheet } from "@/components/ui/Sheet";
+import { buttonClasses, iconButtonClasses } from "@/lib/ui-classes";
 
 const html = (element: Parameters<typeof renderToStaticMarkup>[0]) => renderToStaticMarkup(element);
 const source = (path: string) => readFileSync(new URL(`../../${path}`, import.meta.url), "utf8");
@@ -98,6 +99,8 @@ describe("the Sheet source", () => {
     expect(code).toMatch(/sheetKeyAction\(/);
     expect(code).toMatch(/sheetLock\.acquire\(\)/);
     expect(code).toMatch(/sheetLock\.release\(\)/);
+    // the backdrop still closes the sheet only while it may be closed, and only for a press that began and ended on it
+    expect(code).toMatch(/canClose && shouldCloseOnBackdrop\(/);
     expect(code).not.toContain("classList");
     expect(code).not.toContain('"Escape"');
   });
@@ -169,9 +172,22 @@ describe("PaymentSheet on Sheet", () => {
     expect(out).toMatch(/<button type="submit"[^>]*class="[^"]*\bmin-h-12\b[^"]*"[^>]*>Save to sheet<\/button>/);
   });
 
-  it("keeps the Close button at least 44 px square", () => {
+  it("keeps the Close button at least 44 px square, as a muted IconButton that gives press feedback", () => {
     const out = html(createElement(PaymentSheet, { ...props, mode: "log" }));
     expect(out).toMatch(/<button [^>]*aria-label="Close"[^>]*class="[^"]*\bmin-h-11\b[^"]*\bmin-w-11\b/);
+    expect(out).toContain(`aria-label="Close" class="${iconButtonClasses("muted")}">×</button>`);
+    expect(iconButtonClasses("muted")).toContain("press");
+  });
+
+  it("offers the new-cycle choices as outline Buttons inside the green notice, one wide and one of the rounded amounts", () => {
+    const hike = card({
+      status: "pending",
+      entry: null,
+      next: { tenant: "Asha", count: 1, suggestedAmount: 10503, previousAmount: 10000, startsNewCycle: true },
+    });
+    const out = html(createElement(PaymentSheet, { ...props, cards: [hike], mode: "log" }));
+    expect(out).toContain(`class="${buttonClasses("outline", "md")} flex-1">Round to ₹ 10,500</button>`);
+    expect(out).toContain(`class="${buttonClasses("outline", "md")} w-full">Keep ₹ 10,000</button>`);
   });
 });
 
@@ -204,6 +220,15 @@ describe("MonthPicker on Sheet", () => {
     expect(out).toContain(`<h2 id="${labelledBy}" class="sr-only">Choose month</h2>`);
   });
 
+  it("gives each month, as well as the arrows, press feedback, and keeps the cells at least 48 px tall", () => {
+    const cells = out.match(/<button [^>]*aria-pressed=[^>]*>/g) ?? [];
+    expect(cells).toHaveLength(12);
+    for (const cell of cells) {
+      expect(cell).toMatch(/class="[^"]*\bpress\b/);
+      expect(cell).toMatch(/class="[^"]*\bmin-h-12\b/);
+    }
+  });
+
   it("dims the page with the overlay token", () => {
     expect(out).toContain("bg-overlay");
     expect(out).not.toContain("bg-black");
@@ -212,6 +237,8 @@ describe("MonthPicker on Sheet", () => {
   it("still has the year arrows, twelve months and a Close button", () => {
     expect(out).toContain('aria-label="Previous year"');
     expect(out).toContain('aria-label="Next year"');
+    expect(out).toContain(`aria-label="Previous year" class="${iconButtonClasses()}">‹</button>`);
+    expect(out).toContain(`aria-label="Next year" class="${iconButtonClasses()}">›</button>`);
     expect(out.match(/aria-pressed=/g)).toHaveLength(12);
     expect(out).toMatch(/>Close<\/button>/);
   });

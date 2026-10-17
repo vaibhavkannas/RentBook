@@ -1,4 +1,4 @@
-import Link from "next/link";
+import { ButtonLink } from "@/components/ui/Button";
 
 type Props = {
   /** What went wrong, in words the person can act on. */
@@ -12,15 +12,12 @@ type Props = {
 /** The error block shown when a page cannot read the Sheet. */
 export default function LoadProblem({ message, retryHref, title = "Can't load your Sheet" }: Props) {
   return (
-    <div role="alert" className="mt-4 rounded-2xl bg-danger-bg p-4 text-danger-ink">
+    <div role="alert" className="mt-4 rounded-card bg-danger-bg p-4 text-danger-ink">
       <p className="font-medium">{title}</p>
       <p className="mt-1 text-sm">{message}</p>
-      <Link
-        href={retryHref}
-        className="mt-3 inline-block min-h-11 rounded-xl border border-current px-4 py-2.5 text-sm font-medium"
-      >
+      <ButtonLink href={retryHref} variant="outline" className="mt-3">
         Try again
-      </Link>
+      </ButtonLink>
     </div>
   );
 }
