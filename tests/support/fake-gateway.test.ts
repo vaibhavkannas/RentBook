@@ -194,3 +194,64 @@ describe("FakeGateway.failOn", () => {
     expect(fake.tabs.get("T")).toHaveLength(2);
   });
 });
+
+describe("FakeGateway with a grid that has a limit on its columns (gridColumns)", () => {
+  const limited = () => new FakeGateway({ T: [["a", "b", "c"]], U: [["x"]] }, { gridColumns: { T: 3 } });
+
+  it("takes a write inside the limit", async () => {
+    const fake = limited();
+    await fake.updateValues([{ tab: "T", a1: "C2", values: [["z"]] }]);
+    expect(cell(fake, "T", "C", 2)).toBe("z");
+  });
+
+  it("refuses a write beyond it the way Google does, naming the range and the limit, and changes nothing", async () => {
+    const fake = limited();
+    const error = await fake
+      .updateValues([
+        { tab: "T", a1: "A2", values: [["first"]] },
+        { tab: "T", a1: "D1", values: [["beyond"]] },
+      ])
+      .then(
+        () => null,
+        (e: unknown) => e as Error,
+      );
+    expect(error?.message).toMatch(/exceeds grid limits/);
+    expect(error?.message).toContain("T!D1");
+    expect(error?.message).toContain("max columns: 3");
+    expect(fake.tabs.get("T")).toEqual([["a", "b", "c"]]);
+  });
+
+  it("measures a write by its last cell: three cells from B reach column D", async () => {
+    const fake = limited();
+    await expect(fake.updateValues([{ tab: "T", a1: "B1:D1", values: [["x", "y", "z"]] }])).rejects.toThrow(/exceeds grid limits/);
+    await fake.updateValues([{ tab: "T", a1: "A1:C1", values: [["x", "y", "z"]] }]);
+    expect(fake.tabs.get("T")).toEqual([["x", "y", "z"]]);
+  });
+
+  it("leaves a tab with no limit unlimited, and reads past the limit as empty", async () => {
+    const fake = limited();
+    await fake.updateValues([{ tab: "U", a1: "ZZ1", values: [["far"]] }]);
+    expect(cell(fake, "U", "ZZ", 1)).toBe("far");
+    expect(await fake.getValues("T", "D1:F1", "UNFORMATTED_VALUE")).toEqual([]);
+  });
+
+  it("is widened by ensureColumnCount, which never narrows, and is recorded as a call", async () => {
+    const fake = limited();
+    await fake.ensureColumnCount("T", 6);
+    expect(fake.gridColumns.get("T")).toBe(6);
+    await fake.updateValues([{ tab: "T", a1: "D1:F1", values: [["d", "e", "f"]] }]);
+    await fake.ensureColumnCount("T", 2);
+    expect(fake.gridColumns.get("T")).toBe(6);
+    await fake.ensureColumnCount("U", 40);
+    expect(fake.gridColumns.has("U")).toBe(false);
+    expect(fake.calls).toEqual(["ensureColumnCount", "updateValues", "ensureColumnCount", "ensureColumnCount"]);
+  });
+
+  it("refuses ensureColumnCount for a tab that is not there, and can be made to fail", async () => {
+    const fake = limited();
+    await expect(fake.ensureColumnCount("Nope", 5)).rejects.toThrow(/No tab named Nope/);
+    fake.failOn.add("ensureColumnCount");
+    await expect(fake.ensureColumnCount("T", 5)).rejects.toThrow(/ensureColumnCount failed/);
+    expect(fake.gridColumns.get("T")).toBe(3);
+  });
+});

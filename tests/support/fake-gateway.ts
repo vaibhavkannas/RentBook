@@ -23,6 +23,9 @@ type Grid = unknown[][];
  *   OVERWRITES the target row, whatever that row holds.
  * - cloneRow shifts relative row references (A5 -> A6) the way a plain copy
  *   and paste does; absolute rows ($5) are left alone.
+ * - A tab named in `gridColumns` has only that many columns, like a Google tab that has not been widened: a write that
+ *   reaches past them fails with Google's "exceeds grid limits" and changes nothing, and `ensureColumnCount` widens the
+ *   tab. A tab not named there has as many as it needs. Reads are never refused (the Google gateway reads past the grid as empty).
  * Methods listed in `failOn` throw on every call while they stay listed.
  * `delayMs` makes every call take that long before it reads or changes anything,
  * like network latency, so two requests that overlap in time really interleave.
@@ -32,9 +35,12 @@ export class FakeGateway implements SheetsGateway {
   failOn = new Set<keyof SheetsGateway>();
   calls: string[] = [];
   delayMs: number;
+  /** The number of columns of each tab that has a limit (see above). */
+  readonly gridColumns = new Map<string, number>();
 
-  constructor(initial: Record<string, Grid> = {}, options: { delayMs?: number } = {}) {
+  constructor(initial: Record<string, Grid> = {}, options: { delayMs?: number; gridColumns?: Record<string, number> } = {}) {
     this.delayMs = options.delayMs ?? 0;
+    for (const [title, columns] of Object.entries(options.gridColumns ?? {})) this.gridColumns.set(title, columns);
     for (const [title, grid] of Object.entries(initial)) {
       this.tabs.set(title, grid.map((row) => [...row]));
     }
@@ -93,8 +99,21 @@ export class FakeGateway implements SheetsGateway {
     return out;
   }
 
+  /** Google refuses the whole request when a range reaches past the last column of its tab. */
+  private requireRoom(write: CellWrite) {
+    const limit = this.gridColumns.get(write.tab);
+    if (limit === undefined) return;
+    const range = parseA1(write.a1);
+    const width = Math.max(1, ...write.values.map((values) => values.length));
+    const last = Math.max(range.endCol ?? range.startCol, range.startCol + width - 1);
+    if (last >= limit) {
+      throw new Error(`Range (${write.tab}!${write.a1}) exceeds grid limits. Max rows: 1000, max columns: ${limit}`);
+    }
+  }
+
   async updateValues(writes: CellWrite[]) {
     await this.enter("updateValues");
+    for (const write of writes) this.requireRoom(write);
     for (const write of writes) {
       const range = parseA1(write.a1);
       const grid = this.grid(write.tab);
@@ -111,6 +130,13 @@ export class FakeGateway implements SheetsGateway {
   async appendRow(tab: string, row: unknown[]) {
     await this.enter("appendRow");
     this.grid(tab).push([...row]);
+  }
+
+  async ensureColumnCount(tab: string, columns: number) {
+    await this.enter("ensureColumnCount");
+    this.grid(tab);
+    const limit = this.gridColumns.get(tab);
+    if (limit !== undefined && limit < columns) this.gridColumns.set(tab, columns);
   }
 
   async cloneRow(

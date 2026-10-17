@@ -5,15 +5,21 @@ import { GoogleSheetsGateway } from "@/lib/sheets/google-gateway";
 
 /** A stand-in for the Google client that records the requests it receives. */
 function mockApi(
-  overrides: { rowCount?: number; failWith?: unknown; valuesGetFailWith?: unknown } = {},
+  overrides: { rowCount?: number; columnCount?: number; failWith?: unknown; valuesGetFailWith?: unknown } = {},
 ) {
-  const get = vi.fn(async (): Promise<{ data: sheets_v4.Schema$Spreadsheet }> => {
+  const get = vi.fn<(request?: unknown) => Promise<{ data: sheets_v4.Schema$Spreadsheet }>>(async () => {
     if (overrides.failWith) throw overrides.failWith;
     return {
       data: {
         sheets: [
-          { properties: { sheetId: 11, title: "Schedule", gridProperties: { rowCount: overrides.rowCount ?? 1000 } } },
-          { properties: { sheetId: 22, title: "Payments Log", gridProperties: { rowCount: 1000 } } },
+          {
+            properties: {
+              sheetId: 11,
+              title: "Schedule",
+              gridProperties: { rowCount: overrides.rowCount ?? 1000, columnCount: overrides.columnCount ?? 26 },
+            },
+          },
+          { properties: { sheetId: 22, title: "Payments Log", gridProperties: { rowCount: 1000, columnCount: 9 } } },
         ],
       },
     };
@@ -396,5 +402,89 @@ describe("GoogleSheetsGateway", () => {
       private_key: "-----BEGIN PRIVATE KEY-----\nabc\n-----END PRIVATE KEY-----\n",
     });
     expect(GoogleSheetsGateway.fromServiceAccount(key, "id")).toBeInstanceOf(GoogleSheetsGateway);
+  });
+});
+
+describe("GoogleSheetsGateway.ensureColumnCount", () => {
+  const sent = (batchUpdate: ReturnType<typeof mockApi>["batchUpdate"], index = 0) =>
+    (batchUpdate.mock.calls[index] as unknown as SentBatch)[0].requestBody.requests!;
+
+  it("asks Google for the rows and columns of every tab, with the fields it needs and no more", async () => {
+    const { api, get } = mockApi();
+    await new GoogleSheetsGateway(api, "sheet-id").listTabs();
+    expect(get).toHaveBeenCalledWith({
+      spreadsheetId: "sheet-id",
+      fields: "sheets.properties(sheetId,title,gridProperties(rowCount,columnCount))",
+    });
+  });
+
+  it("adds exactly the missing columns to the end of the tab, in one structural request", async () => {
+    const { api, batchUpdate } = mockApi({ columnCount: 26 });
+    await new GoogleSheetsGateway(api, "sheet-id").ensureColumnCount("Schedule", 29);
+    expect(batchUpdate).toHaveBeenCalledTimes(1);
+    expect(sent(batchUpdate)).toEqual([{ appendDimension: { sheetId: 11, dimension: "COLUMNS", length: 3 } }]);
+  });
+
+  it("adds nothing when the tab is already wide enough, whether it is exactly or more than enough", async () => {
+    const { api, batchUpdate } = mockApi({ columnCount: 26 });
+    const gateway = new GoogleSheetsGateway(api, "sheet-id");
+    await gateway.ensureColumnCount("Schedule", 26);
+    await gateway.ensureColumnCount("Schedule", 10);
+    expect(batchUpdate).not.toHaveBeenCalled();
+  });
+
+  it("asks Google for the size now, not the size remembered from an earlier call, before it decides", async () => {
+    const { api, get, batchUpdate } = mockApi({ columnCount: 26 });
+    const gateway = new GoogleSheetsGateway(api, "sheet-id");
+    await gateway.cloneRow("Schedule", 5, 6, [], []); // remembers the sizes
+    get.mockClear();
+    batchUpdate.mockClear();
+    await gateway.ensureColumnCount("Schedule", 27);
+    expect(get).toHaveBeenCalledTimes(1);
+    expect(sent(batchUpdate)).toEqual([{ appendDimension: { sheetId: 11, dimension: "COLUMNS", length: 1 } }]);
+  });
+
+  it("remembers the width it made, so a second call for the same width adds nothing and asks Google only for the size", async () => {
+    const { api, get, batchUpdate } = mockApi({ columnCount: 26 });
+    const gateway = new GoogleSheetsGateway(api, "sheet-id");
+    await gateway.ensureColumnCount("Schedule", 28);
+    get.mockResolvedValueOnce({
+      data: { sheets: [{ properties: { sheetId: 11, title: "Schedule", gridProperties: { rowCount: 1000, columnCount: 28 } } }] },
+    });
+    await gateway.ensureColumnCount("Schedule", 28);
+    expect(batchUpdate).toHaveBeenCalledTimes(1);
+  });
+
+  it("is never tried again when Google answers with a server error: a second try could add the columns twice", async () => {
+    const { api, batchUpdate } = mockApi();
+    batchUpdate.mockRejectedValueOnce(Object.assign(new Error("Backend Error"), { status: 503, code: 503 }));
+    const gateway = new GoogleSheetsGateway(api, "sheet-id", undefined, { retries: 3, backoffMs: () => 0 });
+    await expect(gateway.ensureColumnCount("Schedule", 30)).rejects.toThrow(/isn't responding/);
+    expect(batchUpdate).toHaveBeenCalledTimes(1);
+  });
+
+  it("forgets the remembered sizes when the request fails, so the next call looks again", async () => {
+    const { api, get, batchUpdate } = mockApi();
+    const gateway = new GoogleSheetsGateway(api, "sheet-id");
+    await gateway.listTabs();
+    batchUpdate.mockRejectedValueOnce(Object.assign(new Error("Backend Error"), { status: 500, code: 500 }));
+    await expect(gateway.ensureColumnCount("Schedule", 30)).rejects.toBeInstanceOf(AppError);
+    get.mockClear();
+    await gateway.cloneRow("Schedule", 5, 6, [], []);
+    expect(get).toHaveBeenCalledTimes(1);
+  });
+
+  it("reports a tab that is not there as missing, after one more look", async () => {
+    const { api, get, batchUpdate } = mockApi();
+    await expect(new GoogleSheetsGateway(api, "sheet-id").ensureColumnCount("Nope", 30)).rejects.toThrow(/tab "Nope" was not found/);
+    expect(get).toHaveBeenCalledTimes(1);
+    expect(batchUpdate).not.toHaveBeenCalled();
+  });
+
+  it("is a no-op when Google does not say how wide the tab is, rather than guessing a number of columns to add", async () => {
+    const { api, get, batchUpdate } = mockApi();
+    get.mockResolvedValueOnce({ data: { sheets: [{ properties: { sheetId: 11, title: "Schedule" } }] } });
+    await new GoogleSheetsGateway(api, "sheet-id").ensureColumnCount("Schedule", 30);
+    expect(batchUpdate).not.toHaveBeenCalled();
   });
 });

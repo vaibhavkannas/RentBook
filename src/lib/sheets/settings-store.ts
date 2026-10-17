@@ -414,6 +414,21 @@ export async function readSettings(gateway: SheetsGateway): Promise<PortionConfi
   return (await readSettingsRows(gateway)).map((entry) => entry.portion);
 }
 
+/** Payments per cycle: a whole number from 1 to 120, or null for a count that never resets. `field` is the request's own path of the value. */
+export function requireCycleLength(value: number | null, field: string): number | null {
+  // The words and the field are the screen's (Payments per cycle, Hike), and the field is the request's own path.
+  if (value !== null && !(Number.isInteger(value) && value >= 1 && value <= 120)) {
+    throw validation("Payments per cycle must be a whole number from 1 to 120.", field);
+  }
+  return value;
+}
+
+/** The hike at each new cycle: a number from 0 to 100. */
+export function requireHikePercent(value: number, field: string): number {
+  if (!(Number.isFinite(value) && value >= 0 && value <= 100)) throw validation("Hike must be a number from 0 to 100.", field);
+  return value;
+}
+
 export type SettingsUpdate = {
   id: string;
   name: string;
@@ -431,16 +446,8 @@ export async function updateSettings(
     const found = current.find((entry) => entry.portion.id === update.id);
     if (!found) throw unknownPortion();
     const name = cleanText(update.name, "Portion name", { max: MAX_NAME_LENGTH, required: true });
-    if (
-      update.cycleLength !== null &&
-      !(Number.isInteger(update.cycleLength) && update.cycleLength >= 1 && update.cycleLength <= 120)
-    ) {
-      // The words and the field are the screen's (Payments per cycle, Hike), and the field is the request's own path.
-      throw validation("Payments per cycle must be a whole number from 1 to 120.", `portions.${index}.cycleLength`);
-    }
-    if (!(Number.isFinite(update.hikePercent) && update.hikePercent >= 0 && update.hikePercent <= 100)) {
-      throw validation("Hike must be a number from 0 to 100.", `portions.${index}.hikePercent`);
-    }
+    requireCycleLength(update.cycleLength, `portions.${index}.cycleLength`);
+    requireHikePercent(update.hikePercent, `portions.${index}.hikePercent`);
     const row = found.sheetRow;
     return [
       { tab: SETTINGS_TAB, a1: `B${row}`, values: [[name]] },

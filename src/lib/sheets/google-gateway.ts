@@ -9,7 +9,8 @@ const SCOPE = "https://www.googleapis.com/auth/spreadsheets";
 
 const quote = (tab: string) => `'${tab.replace(/'/g, "''")}'`;
 
-type SheetProps = { sheetId: number; title: string; rowCount: number };
+/** `columnCount` is null when Google did not say (a tab with no grid): then the width is not known and no column is ever added. */
+type SheetProps = { sheetId: number; title: string; rowCount: number; columnCount: number | null };
 
 /**
  * How the Google client is made. A request that has not been answered after 10 seconds is given up on (a Vercel
@@ -48,9 +49,9 @@ export class GoogleSheetsGateway implements SheetsGateway {
   private readonly retries: number;
   private readonly backoffMs: (retry: number) => number;
   /**
-   * The id, title and row count of every tab, as of the last time Google was asked. Cloning a row needs a tab's
+   * The id, title, row count and column count of every tab, as of the last time Google was asked. Cloning a row needs a tab's
    * sheetId and row count, and asking for them is a call of its own. Forgotten when a tab is added, when Google
-   * says a tab is gone, and when a clone fails, so a Sheet that changed behind our back costs one failed try
+   * says a tab is gone, and when a clone or a widening fails, so a Sheet that changed behind our back costs one failed try
    * at the most.
    */
   private props: SheetProps[] | null = null;
@@ -126,13 +127,13 @@ export class GoogleSheetsGateway implements SheetsGateway {
     return translateGoogleError(error, this.serviceAccountEmail, tab ?? undefined);
   }
 
-  /** Asks Google for every tab's id, title and row count, and remembers the answer. */
+  /** Asks Google for every tab's id, title, row count and column count, and remembers the answer. */
   private async sheetProps(): Promise<SheetProps[]> {
     const { data } = await this.call(
       () =>
         this.api.spreadsheets.get({
           spreadsheetId: this.spreadsheetId,
-          fields: "sheets.properties(sheetId,title,gridProperties.rowCount)",
+          fields: "sheets.properties(sheetId,title,gridProperties(rowCount,columnCount))",
         }),
       [],
       true,
@@ -141,6 +142,7 @@ export class GoogleSheetsGateway implements SheetsGateway {
       sheetId: sheet.properties?.sheetId ?? 0,
       title: sheet.properties?.title ?? "",
       rowCount: sheet.properties?.gridProperties?.rowCount ?? 0,
+      columnCount: sheet.properties?.gridProperties?.columnCount ?? null,
     }));
     return this.props;
   }
@@ -243,6 +245,39 @@ export class GoogleSheetsGateway implements SheetsGateway {
         }),
       [tab],
     );
+  }
+
+  /**
+   * Adds the columns a tab lacks to reach `columns`, at its right end. The tab's width is asked of Google now, never taken from
+   * what was remembered: a Sheet that someone widened or narrowed since must not make the request add the wrong number. The
+   * request is never repeated (see `call`), and a failure makes the remembered sizes forgotten, so the next caller looks again
+   * and, if the columns were added after all, adds none.
+   */
+  async ensureColumnCount(tab: string, columns: number) {
+    const props = (await this.sheetProps()).find((sheet) => sheet.title === tab);
+    if (!props) {
+      resetBootstrap(this);
+      throw tabMissing(tab);
+    }
+    if (props.columnCount === null || props.columnCount >= columns) return;
+    try {
+      await this.call(
+        () =>
+          this.api.spreadsheets.batchUpdate({
+            spreadsheetId: this.spreadsheetId,
+            requestBody: {
+              requests: [
+                { appendDimension: { sheetId: props.sheetId, dimension: "COLUMNS", length: columns - (props.columnCount ?? 0) } },
+              ],
+            },
+          }),
+        [tab],
+      );
+    } catch (error) {
+      this.props = null;
+      throw error;
+    }
+    props.columnCount = columns;
   }
 
   async cloneRow(

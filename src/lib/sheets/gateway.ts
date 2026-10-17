@@ -26,6 +26,15 @@ export interface SheetsGateway {
   /** Appends one row after the last row of the tab's table. */
   appendRow(tab: string, row: unknown[]): Promise<void>;
   /**
+   * Makes sure the tab's grid has at least `columns` columns (1-based count: 20 means column T is there), by adding empty columns at
+   * its right end when it has fewer. It never removes a column and never touches a cell. Google refuses a write beyond the grid
+   * ("exceeds grid limits"), so a caller that is about to write past the last column asks for the room first.
+   *
+   * A change to the Sheet's structure, like `addTab`: it is never repeated by the gateway, because a second try after a lost
+   * answer could add the columns twice.
+   */
+  ensureColumnCount(tab: string, columns: number): Promise<void>;
+  /**
    * Creates `toRow` as a copy of `fromRow` (values, formulas with relative
    * references adjusted, and formatting), then blanks `clearCols` and sets
    * `overrides`. Rows are 1-based, columns are 0-based.

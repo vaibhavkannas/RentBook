@@ -144,6 +144,11 @@ export class NamedTabsGateway implements SheetsGateway, TabNaming {
     await this.run(() => this.inner.appendRow(real(tab), row));
   }
 
+  async ensureColumnCount(tab: string, columns: number): Promise<void> {
+    const real = await this.translator([tab]);
+    await this.run(() => this.inner.ensureColumnCount(real(tab), columns));
+  }
+
   async cloneRow(
     tab: string,
     fromRow: number,

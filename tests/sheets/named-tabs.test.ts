@@ -43,6 +43,10 @@ class GoogleLikeFake extends FakeGateway {
     this.need(args[0]);
     return super.cloneRow(...args);
   }
+  async ensureColumnCount(tab: string, columns: number) {
+    this.need(tab);
+    return super.ensureColumnCount(tab, columns);
+  }
 }
 
 const appTabs = (extra: Record<string, unknown[][]> = {}) => ({
@@ -87,6 +91,10 @@ class RecordingGateway extends FakeGateway {
   async cloneRow(...args: Parameters<FakeGateway["cloneRow"]>) {
     this.note("cloneRow", args);
     return super.cloneRow(...args);
+  }
+  async ensureColumnCount(...args: Parameters<FakeGateway["ensureColumnCount"]>) {
+    this.note("ensureColumnCount", args);
+    return super.ensureColumnCount(...args);
   }
 }
 
@@ -364,6 +372,7 @@ describe("a tab that goes missing", () => {
     ["updateValues", (gateway: NamedTabsGateway) => gateway.updateValues([{ tab: LOG_TAB, a1: "A1", values: [["x"]] }])],
     ["getManyValues", (gateway: NamedTabsGateway) => gateway.getManyValues([{ tab: LOG_TAB, a1: "A1" }], "UNFORMATTED_VALUE")],
     ["cloneRow", (gateway: NamedTabsGateway) => gateway.cloneRow(LOG_TAB, 1, 2, [], [{ col: 0, value: "x" }])],
+    ["ensureColumnCount", (gateway: NamedTabsGateway) => gateway.ensureColumnCount(LOG_TAB, 12)],
   ])("is reset by the missing tab that %s names, and passes the error on unchanged", async (_method, call) => {
     const fake = new GoogleLikeFake(appTabs());
     const gateway = new NamedTabsGateway(fake, DEFAULTS);
@@ -497,5 +506,25 @@ describe("the constructor", () => {
     expect(() => new NamedTabsGateway(new FakeGateway(), { ...DEFAULTS, tenants: "schedule" })).toThrow(
       "SCHEDULE_TAB, SETTINGS_TAB, LOG_TAB and TENANTS_TAB must each name a different tab.",
     );
+  });
+});
+
+describe("ensureColumnCount through the wrapper", () => {
+  it("asks for the tab by its real title, whatever the owner called it", async () => {
+    const fake = new RecordingGateway({ "rent schedule": [["Month"]], Settings: [] });
+    fake.gridColumns.set("rent schedule", 5);
+    const gateway = new NamedTabsGateway(fake, { ...DEFAULTS, schedule: "Rent Schedule" });
+    await gateway.ensureColumnCount("Rent Schedule", 9);
+    expect(fake.log.filter((entry) => entry.method === "ensureColumnCount")).toEqual([
+      { method: "ensureColumnCount", args: ["rent schedule", 9] },
+    ]);
+    expect(fake.gridColumns.get("rent schedule")).toBe(9);
+  });
+
+  it("passes the tab through unchanged with the default names", async () => {
+    const fake = new RecordingGateway({ Schedule: [["Month"]] });
+    fake.gridColumns.set("Schedule", 5);
+    await new NamedTabsGateway(fake, DEFAULTS).ensureColumnCount("Schedule", 7);
+    expect(fake.log.at(-1)).toEqual({ method: "ensureColumnCount", args: ["Schedule", 7] });
   });
 });
