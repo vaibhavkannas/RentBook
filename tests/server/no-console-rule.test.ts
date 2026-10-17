@@ -1,7 +1,7 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { ESLint } from "eslint";
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 
 /**
  * The server writes to its log only through logEvent (src/lib/server/log.ts), which builds one JSON line from a fixed
@@ -39,7 +39,18 @@ const BYPASSES: Array<[string, string]> = [
   ["an import of the console module", 'import { Console } from "node:console";\nnew Console(process.stdout);'],
 ];
 
-describe("the console rule", () => {
+/**
+ * ESLint loads its configuration and the TypeScript parser the first time it lints, which on a cold start (a first run
+ * after an install, a busy machine) can take longer than a test's default 5 seconds. That load is done once, here, with
+ * room to spare, so the tests below only measure linting a snippet.
+ */
+const WARM_UP_MS = 60_000;
+
+describe("the console rule", { timeout: 30_000 }, () => {
+  beforeAll(async () => {
+    await problems("export const warmUp = 1;");
+  }, WARM_UP_MS);
+
   it.each(BYPASSES)("refuses %s in src", async (_name, code) => {
     expect((await problems(code)).length).toBeGreaterThan(0);
   });

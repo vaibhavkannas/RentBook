@@ -2,7 +2,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { AppError } from "@/lib/errors";
 import type { Check } from "@/lib/setup-checks";
 import { prepareOffer } from "@/lib/setup-prepare";
-import { NamedTabsGateway, type TabNames } from "@/lib/sheets/named-tabs";
+import { NamedTabsGateway } from "@/lib/sheets/named-tabs";
+import type { TabNames } from "@/lib/sheets/tab-names";
 import { prepareSheet } from "@/lib/sheets/prepare";
 import type { SheetsContext } from "@/lib/sheets/service";
 import { checkSheet } from "@/lib/sheets/sheet-checks";
@@ -237,7 +238,7 @@ describe("prepareOffer", () => {
       "Adds the missing tabs (My Settings, Payments Log and RentBook Tenants) with their headers. Nothing already in your Sheet is changed.",
     );
     expect(offer.lines[2]).toBe(
-      "You gave SETTINGS_TAB and TENANTS_TAB a name that is not in your Sheet yet. If you already have those tabs under other names, rename them in your Sheet first, then use Check again: Prepare my Sheet would start new, empty ones and leave your old tabs alone.",
+      "SETTINGS_TAB and TENANTS_TAB name tabs that are not in your Sheet yet. If you already have them under other names, rename them in your Sheet first, then use Check again: Prepare my Sheet would start new, empty ones and leave your old tabs alone.",
     );
   });
 
@@ -246,7 +247,7 @@ describe("prepareOffer", () => {
     const wrapper = new NamedTabsGateway(fresh(), { ...DEFAULT_NAMES, log: "My Log" });
     const { checks, facts } = await checkSheet(wrapper, { scheduleTab: "Schedule", totalHeader: TOTAL_HEADER, appTabNames: names }, () => 0);
     expect(prepareOffer(checks, facts, names)!.lines[2]).toBe(
-      "You gave LOG_TAB a name that is not in your Sheet yet. If you already have that tab under another name, rename it in your Sheet first, then use Check again: Prepare my Sheet would start a new, empty one and leave your old tab alone.",
+      "LOG_TAB names a tab that is not in your Sheet yet. If you already have it under another name, rename it in your Sheet first, then use Check again: Prepare my Sheet would start a new, empty one and leave your old tab alone.",
     );
     const plain = await checksFor(fresh());
     expect(prepareOffer(plain.checks, plain.facts, { settings: "Settings", log: "Payments Log", tenants: "Tenants" })!.lines).toHaveLength(2);

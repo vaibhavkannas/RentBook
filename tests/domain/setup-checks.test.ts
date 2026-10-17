@@ -3,6 +3,7 @@ import { BRAND } from "@/lib/brand";
 import {
   headline,
   listWords,
+  renameFirstAdvice,
   SETUP_STEPS,
   statusPill,
   stepStatus,
@@ -112,5 +113,24 @@ describe("listWords", () => {
     expect(listWords(["Settings"])).toBe("Settings");
     expect(listWords(["Settings", "Tenants"])).toBe("Settings and Tenants");
     expect(listWords(["Settings", "Payments Log", "Tenants"])).toBe("Settings, Payments Log and Tenants");
+  });
+});
+
+describe("renameFirstAdvice", () => {
+  it("says a setting that names a tab that is not in the Sheet yet means renaming the owner's own tab first, for one setting", () => {
+    expect(renameFirstAdvice(["TENANTS_TAB"], " (see Set up).")).toBe(
+      "TENANTS_TAB names a tab that is not in your Sheet yet. If you already have it under another name, rename it in your Sheet first (see Set up).",
+    );
+  });
+
+  it("says it in the plural for several, naming each", () => {
+    expect(renameFirstAdvice(["SETTINGS_TAB", "TENANTS_TAB"], ".")).toBe(
+      "SETTINGS_TAB and TENANTS_TAB name tabs that are not in your Sheet yet. If you already have them under other names, rename them in your Sheet first.",
+    );
+    expect(renameFirstAdvice(["SETTINGS_TAB", "LOG_TAB", "TENANTS_TAB"], ".")).toContain("SETTINGS_TAB, LOG_TAB and TENANTS_TAB name tabs");
+  });
+
+  it("takes the setting as it is to be said, so a check can show the name that was given", () => {
+    expect(renameFirstAdvice(['LOG_TAB ("My Log")'], ".")).toMatch(/^LOG_TAB \("My Log"\) names a tab/);
   });
 });

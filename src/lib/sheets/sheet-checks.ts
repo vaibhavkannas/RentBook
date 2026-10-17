@@ -4,12 +4,12 @@ import { getBrand } from "@/lib/brand";
 import { AppError } from "@/lib/errors";
 import { formatMonthTitle, indiaDayKey } from "@/lib/format";
 import { errorLogFields, logEvent } from "@/lib/server/log";
-import type { Check, CheckStatus, SetupStep } from "@/lib/setup-checks";
+import { renameFirstAdvice, type Check, type CheckStatus, type SetupStep } from "@/lib/setup-checks";
 import { colLetter } from "./a1";
 import { isBlankCell } from "./cells";
 import type { SheetsGateway } from "./gateway";
 import { findHeader, headerKey } from "./headers";
-import { DEFAULT_TAB_NAMES, type TabKey } from "./named-tabs";
+import { DEFAULT_TAB_NAMES, TAB_VARIABLES, type AppTab, type TabKey } from "./tab-names";
 import { findHeaderRowIndex, parseSchedule, shorten, type ScheduleLayout } from "./schedule";
 import {
   inferPortions,
@@ -59,14 +59,12 @@ export type SheetFacts = {
 
 export type SheetCheckResult = { checks: Check[]; facts: SheetFacts };
 
-type AppTabKey = "settings" | "log" | "tenants";
-
 export type SheetCheckOptions = {
   scheduleTab: string;
   /** The header of the Schedule's total column, or null when TOTAL_HEADER is not set. */
   totalHeader: string | null;
   /** What the owner called the app's own tabs (SETTINGS_TAB, LOG_TAB, TENANTS_TAB). Left out, they have the usual names. */
-  appTabNames?: Partial<Record<AppTabKey, string>>;
+  appTabNames?: Partial<Record<AppTab, string>>;
   /**
    * The title each tab has in the Sheet, shown where it is not the app's usual name for it. Asked once, right after the tab
    * list is in (NamedTabsGateway.knownTitles answers from that list without a call of its own); null for none.
@@ -187,15 +185,13 @@ type ScheduleView = {
   parsed: Parsed<{ layout: ScheduleLayout; rows: ScheduleRow[] }> | null;
 };
 
-const VAR_NAME: Record<AppTabKey, string> = { settings: "SETTINGS_TAB", log: "LOG_TAB", tenants: "TENANTS_TAB" };
-
 /** What a missing app tab with a name of the owner's own may mean, and what to do first. */
-function renameFirst(key: AppTabKey, name: string): string {
+function renameFirst(key: AppTab, name: string): string {
   const fresh =
     key === "settings"
       ? "a new Settings tab with the default payments per cycle and hike"
       : `a new, empty ${DEFAULT_TAB_NAMES[key]} tab`;
-  return ` You set ${VAR_NAME[key]} to "${name}". If you already have this tab under another name, rename it to "${name}" in your Sheet first, then check again: Prepare my Sheet would start ${fresh} and leave the old one alone.`;
+  return ` ${renameFirstAdvice([`${TAB_VARIABLES[key]} ("${shorten(name)}")`], `, then use Check again: Prepare my Sheet would start ${fresh} and leave the old one alone.`)}`;
 }
 
 export async function checkSheet(
@@ -240,11 +236,11 @@ export async function checkSheet(
 
   const titleOf = (key: TabKey, fallback: string) => titles?.[key] ?? fallback;
   /** "Found as "x". " for an app tab whose real title is not the app's usual name for it. */
-  const foundAs = (key: AppTabKey, detail: string) => {
+  const foundAs = (key: AppTab, detail: string) => {
     const real = titles?.[key];
     return typeof real === "string" && real !== DEFAULT_TAB_NAMES[key] ? `Found as "${shorten(real)}". ${detail}` : detail;
   };
-  const customName = (key: AppTabKey): string | null => {
+  const customName = (key: AppTab): string | null => {
     const name = options.appTabNames?.[key];
     return name !== undefined && name !== DEFAULT_TAB_NAMES[key] ? name : null;
   };
@@ -550,9 +546,19 @@ function totalCheck(
           );
     }
     if (layout === null) return make("total", "skip", WAITING);
-    return isFormula(cellAt(found.index))
-      ? make("total", "ok", `Column "${shorten(totalHeader)}" adds itself up with a formula.`)
-      : make("total", "ok", `Column "${shorten(totalHeader)}" holds typed totals; ${brand} keeps them up to date.`);
+    const says = isFormula(cellAt(found.index))
+      ? `Column "${shorten(totalHeader)}" adds itself up with a formula.`
+      : `Column "${shorten(totalHeader)}" holds typed totals; ${brand} keeps them up to date.`;
+    // The app looks a header up by its exact text first and by a looser rule only when that finds none, so a twin that only
+    // reads the same is not in the way today; renaming this header would quietly make the twin the one that is found.
+    const twin = view.headers.findIndex((header, col) => col !== found.index && headerKey(header) === headerKey(totalHeader));
+    if (twin === -1) return make("total", "ok", says);
+    return make(
+      "total",
+      "warn",
+      `${says} Another column has a header that looks the same ("${shorten(String(view.headers[twin]))}"): if you rename this one, ${brand} would read that column instead.`,
+      `Rename the look-alike header, so that only one header reads as "${shorten(totalHeader)}".`,
+    );
   }
 
   if (layout === null) return make("total", "skip", WAITING);

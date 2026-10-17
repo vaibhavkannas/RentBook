@@ -4,7 +4,7 @@
  */
 
 /** Zero-width space, non-joiner, joiner and the byte order mark: invisible, and never part of a header's words. */
-const INVISIBLE = /[​-‍﻿]/g;
+const INVISIBLE = /[\u200b-\u200d\ufeff]/g;
 
 /**
  * A header cell's text in the form headers are compared in: NFKC-normalised (full-width and ligature characters

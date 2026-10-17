@@ -1,7 +1,7 @@
 import { parseYmKey } from "@/lib/domain/year-month";
 import { formatMonthTitle, formatSavedAt } from "@/lib/format";
-import type { Check } from "@/lib/setup-checks";
-import type { TabKey } from "@/lib/sheets/named-tabs";
+import { renameFirstAdvice, type Check } from "@/lib/setup-checks";
+import { APP_TABS, DEFAULT_TAB_NAMES, TAB_VARIABLES, type AppTab, type TabKey } from "@/lib/sheets/tab-names";
 import type { SheetFacts } from "@/lib/sheets/sheet-checks";
 import type { PillTone } from "@/lib/ui-classes";
 
@@ -35,7 +35,7 @@ export type DiagnosticsInput = {
   /** What this server has logged since it started (see problemCounts in server/log.ts). */
   problems: { since: string; warn: Record<string, number>; error: Record<string, number> };
   /** What the owner called the app's own tabs; null when the settings cannot be read. */
-  appTabNames: { settings: string; log: string; tenants: string } | null;
+  appTabNames: Record<AppTab, string> | null;
   /** The title each tab has in the Sheet, when it was listed. */
   realTitles: Partial<Record<TabKey, string | null>> | null;
   /** Where Set up is, with the month the person was looking at. */
@@ -152,15 +152,11 @@ export function diagnosticsRows(input: DiagnosticsInput): DiagnosticsSection[] {
     ],
   };
   // A tab named by the owner that is not in the Sheet yet: the same warning as Set up gives.
-  const VARIABLE = { settings: "SETTINGS_TAB", log: "LOG_TAB", tenants: "TENANTS_TAB" } as const;
-  const USUAL = { settings: "Settings", log: "Payments Log", tenants: "Tenants" } as const;
-  const missingNamed = (["settings", "log", "tenants"] as const).filter(
-    (key) => status(key) === "todo" && input.appTabNames !== null && input.appTabNames[key] !== USUAL[key],
+  const missingNamed = APP_TABS.filter(
+    (key) => status(key) === "todo" && input.appTabNames !== null && input.appTabNames[key] !== DEFAULT_TAB_NAMES[key],
   );
   if (reached && missingNamed.length > 0) {
-    const [first, ...rest] = missingNamed;
-    const names = rest.length === 0 ? VARIABLE[first] : [first, ...rest].map((key) => VARIABLE[key]).join(" and ");
-    tabs.note = `${names} ${rest.length === 0 ? "names a tab that is" : "name tabs that are"} not in your Sheet yet. If you already have ${rest.length === 0 ? "it" : "them"} under ${rest.length === 0 ? "another name" : "other names"}, rename ${rest.length === 0 ? "it" : "them"} in your Sheet first (see Set up).`;
+    tabs.note = renameFirstAdvice(missingNamed.map((key) => TAB_VARIABLES[key]), " (see Set up).");
   }
 
   const problemsSection: DiagnosticsSection = {

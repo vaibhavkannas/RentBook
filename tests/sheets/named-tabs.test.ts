@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { AppError, tabMissing } from "@/lib/errors";
 import type { SheetsGateway } from "@/lib/sheets/gateway";
-import { NamedTabsGateway, tabNamesProblem, type TabNames } from "@/lib/sheets/named-tabs";
+import { NamedTabsGateway } from "@/lib/sheets/named-tabs";
+import type { TabNames } from "@/lib/sheets/tab-names";
 import { getMonthView, logPayment, undoPayment, type SheetsContext } from "@/lib/sheets/service";
 import { ensureTabs, LOG_HEADERS, LOG_TAB, readSettings, SETTINGS_TAB } from "@/lib/sheets/settings-store";
 import { moveOutTenancy, saveTenancy } from "@/lib/sheets/tenancy-service";
@@ -38,6 +39,10 @@ class GoogleLikeFake extends FakeGateway {
     this.need(tab);
     return super.appendRow(tab, row);
   }
+  async cloneRow(...args: Parameters<FakeGateway["cloneRow"]>) {
+    this.need(args[0]);
+    return super.cloneRow(...args);
+  }
 }
 
 const appTabs = (extra: Record<string, unknown[][]> = {}) => ({
@@ -48,6 +53,43 @@ const appTabs = (extra: Record<string, unknown[][]> = {}) => ({
   ...extra,
 });
 
+/** A fake that remembers every call with its arguments (copied, so a later change cannot rewrite them), not only the method's name. */
+class RecordingGateway extends FakeGateway {
+  log: { method: string; args: unknown[] }[] = [];
+
+  private note(method: string, args: unknown[]) {
+    this.log.push({ method, args: structuredClone(args) });
+  }
+  async listTabs() {
+    this.note("listTabs", []);
+    return super.listTabs();
+  }
+  async addTab(title: string) {
+    this.note("addTab", [title]);
+    return super.addTab(title);
+  }
+  async getValues(...args: Parameters<FakeGateway["getValues"]>) {
+    this.note("getValues", args);
+    return super.getValues(...args);
+  }
+  async getManyValues(...args: Parameters<FakeGateway["getManyValues"]>) {
+    this.note("getManyValues", args);
+    return super.getManyValues(...args);
+  }
+  async updateValues(...args: Parameters<FakeGateway["updateValues"]>) {
+    this.note("updateValues", args);
+    return super.updateValues(...args);
+  }
+  async appendRow(...args: Parameters<FakeGateway["appendRow"]>) {
+    this.note("appendRow", args);
+    return super.appendRow(...args);
+  }
+  async cloneRow(...args: Parameters<FakeGateway["cloneRow"]>) {
+    this.note("cloneRow", args);
+    return super.cloneRow(...args);
+  }
+}
+
 describe("with the default names the wrapper is invisible", () => {
   /** The same work, through the wrapper or straight at the fake, and everything that happened to the fake. */
   async function session(wrapped: boolean, start: Record<string, unknown[][]>) {
@@ -55,7 +97,7 @@ describe("with the default names the wrapper is invisible", () => {
     vi.spyOn(globalThis.crypto, "randomUUID").mockImplementation(
       () => `00000000-0000-4000-8000-${String(++n).padStart(12, "0")}` as ReturnType<typeof crypto.randomUUID>,
     );
-    const fake = new FakeGateway(start);
+    const fake = new RecordingGateway(start);
     const gateway: SheetsGateway = wrapped ? new NamedTabsGateway(fake, DEFAULTS) : fake;
     const ctx: SheetsContext = { gateway, scheduleTab: "Schedule", totalHeader: TOTAL_HEADER };
 
@@ -126,6 +168,8 @@ describe("with the default names the wrapper is invisible", () => {
 
     return {
       calls: fake.calls,
+      // every call with its arguments: the tab, the range, the render, the cells and the values
+      log: fake.log,
       tabNames: [...fake.tabs.keys()],
       grids: structuredClone([...fake.tabs.entries()]),
     };
@@ -136,7 +180,10 @@ describe("with the default names the wrapper is invisible", () => {
     vi.restoreAllMocks();
     const wrapped = await session(true, appTabs());
     expect(bare.calls.length).toBeGreaterThan(40);
+    expect(bare.log.map((entry) => entry.method)).toEqual(bare.calls);
+    expect(bare.log.some((entry) => entry.method === "cloneRow" && entry.args.length === 5)).toBe(true);
     expect(wrapped.calls).toEqual(bare.calls);
+    expect(wrapped.log).toEqual(bare.log);
     expect(wrapped.tabNames).toEqual(bare.tabNames);
     expect(wrapped.grids).toEqual(bare.grids);
   });
@@ -147,6 +194,7 @@ describe("with the default names the wrapper is invisible", () => {
     const wrapped = await session(true, { Schedule: baseSchedule() });
     expect(bare.tabNames).toEqual(["Schedule", SETTINGS_TAB, LOG_TAB, TENANTS_TAB]);
     expect(wrapped.calls).toEqual(bare.calls);
+    expect(wrapped.log).toEqual(bare.log);
     expect(wrapped.tabNames).toEqual(bare.tabNames);
     expect(wrapped.grids).toEqual(bare.grids);
   });
@@ -175,7 +223,7 @@ describe("finding a real tab", () => {
   });
 
   it("finds a tab whose name differs by spaces, capitals or invisible characters", async () => {
-    const { gateway } = wrap({ "  PAYMENTS  log ": [["x"]] });
+    const { gateway } = wrap({ "  PAYMENTS\u00a0 log ": [["x"]] });
     expect(await gateway.listTabs()).toEqual(["Payments Log"]);
     expect(await gateway.getValues("Payments Log", "A1", "UNFORMATTED_VALUE")).toEqual([["x"]]);
   });
@@ -315,6 +363,7 @@ describe("a tab that goes missing", () => {
     ["appendRow", (gateway: NamedTabsGateway) => gateway.appendRow(LOG_TAB, ["x"])],
     ["updateValues", (gateway: NamedTabsGateway) => gateway.updateValues([{ tab: LOG_TAB, a1: "A1", values: [["x"]] }])],
     ["getManyValues", (gateway: NamedTabsGateway) => gateway.getManyValues([{ tab: LOG_TAB, a1: "A1" }], "UNFORMATTED_VALUE")],
+    ["cloneRow", (gateway: NamedTabsGateway) => gateway.cloneRow(LOG_TAB, 1, 2, [], [{ col: 0, value: "x" }])],
   ])("is reset by the missing tab that %s names, and passes the error on unchanged", async (_method, call) => {
     const fake = new GoogleLikeFake(appTabs());
     const gateway = new NamedTabsGateway(fake, DEFAULTS);
@@ -440,27 +489,6 @@ describe("a Settings tab that is not there, under a name of the owner's own", ()
       { Schedule: baseSchedule(), [SETTINGS_TAB]: [["the owner's own notes"]], [LOG_TAB]: [[...LOG_HEADERS]] },
     );
     expect(error.message).toContain('"My Settings"');
-  });
-});
-
-describe("tabNamesProblem", () => {
-  it("is null for the four default names and for four names that differ", () => {
-    expect(tabNamesProblem(DEFAULTS)).toBeNull();
-    expect(tabNamesProblem({ schedule: "Rent", settings: "Rent Settings", log: "Rent Log", tenants: "Rent Tenants" })).toBeNull();
-  });
-
-  it("says the four must each name a different tab when two match by headerKey", () => {
-    const said = "SCHEDULE_TAB, SETTINGS_TAB, LOG_TAB and TENANTS_TAB must each name a different tab.";
-    expect(tabNamesProblem({ ...DEFAULTS, tenants: "Schedule" })).toBe(said);
-    expect(tabNamesProblem({ ...DEFAULTS, tenants: " schedule " })).toBe(said);
-    expect(tabNamesProblem({ ...DEFAULTS, log: "settings" })).toBe(said);
-    expect(tabNamesProblem({ ...DEFAULTS, log: "Sett​ings" })).toBe(said);
-    expect(tabNamesProblem({ ...DEFAULTS, settings: "Payments  Log" })).toBe(said);
-  });
-
-  it("refuses a Schedule named like one of the app's own tabs when that app tab has been given another name", () => {
-    expect(tabNamesProblem({ ...DEFAULTS, schedule: "Tenants", tenants: "RentBook Tenants" })).toMatch(/SCHEDULE_TAB can't be "Tenants"/);
-    expect(tabNamesProblem({ ...DEFAULTS, schedule: "payments log", log: "Rent Log" })).toMatch(/SCHEDULE_TAB can't be/);
   });
 });
 

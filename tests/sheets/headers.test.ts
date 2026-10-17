@@ -28,23 +28,23 @@ describe("headerKey", () => {
   });
 
   it("counts a no-break space as whitespace", () => {
-    expect(headerKey("Count 2")).toBe("count 2");
-    expect(headerKey("Count   2")).toBe("count 2");
-    expect(headerKey(" Month ")).toBe("month");
+    expect(headerKey("Count\u00a02")).toBe("count 2");
+    expect(headerKey("Count\u00a0\u00a0 2")).toBe("count 2");
+    expect(headerKey("\u00a0Month\u00a0")).toBe("month");
   });
 
   it("drops zero-width spaces, joiners and the byte order mark", () => {
-    expect(headerKey("Ten​ant")).toBe("tenant");
-    expect(headerKey("Ten‌ant")).toBe("tenant");
-    expect(headerKey("Ten‍ant")).toBe("tenant");
-    expect(headerKey("﻿Month")).toBe("month");
-    expect(headerKey("Count ​ 2")).toBe("count 2");
+    expect(headerKey("Ten\u200bant")).toBe("tenant");
+    expect(headerKey("Ten\u200cant")).toBe("tenant");
+    expect(headerKey("Ten\u200dant")).toBe("tenant");
+    expect(headerKey("\ufeffMonth")).toBe("month");
+    expect(headerKey("Count \u200b 2")).toBe("count 2");
   });
 
   it("applies NFKC, so full-width and ligature characters read as plain ones", () => {
     expect(headerKey("Ｔｅｎａｎｔ２")).toBe("tenant2");
     expect(headerKey("oﬃce")).toBe("office");
-    expect(headerKey("Count　2")).toBe("count 2");
+    expect(headerKey("Count\u30002")).toBe("count 2");
   });
 
   it("keeps words that differ by more than spacing apart", () => {
@@ -68,9 +68,9 @@ describe("findHeader", () => {
   });
 
   it("falls back to the looser match only when the old rule finds nothing", () => {
-    expect(findHeader(["Month", "Count 2"], "Count 2")).toEqual({ index: 1 });
+    expect(findHeader(["Month", "Count\u00a02"], "Count 2")).toEqual({ index: 1 });
     expect(findHeader(["Month", "Count  2"], "Count 2")).toEqual({ index: 1 });
-    expect(findHeader(["Month", "Ten​ant"], "Tenant")).toEqual({ index: 1 });
+    expect(findHeader(["Month", "Ten\u200bant"], "Tenant")).toEqual({ index: 1 });
     expect(findHeader(["Month", "Count 2"], "Count  2")).toEqual({ index: 1 });
   });
 
@@ -81,11 +81,11 @@ describe("findHeader", () => {
   });
 
   it("says duplicate when the old rule finds nothing and the looser one finds two", () => {
-    expect(findHeader(["Count  2", "Count 2"], "Count 2")).toEqual({ problem: "duplicate" });
+    expect(findHeader(["Count  2", "Count\u00a02"], "Count 2")).toEqual({ problem: "duplicate" });
   });
 
   it("never reports a duplicate the old rule did not see when it found exactly one", () => {
-    expect(findHeader(["Count 2", "Count 2", "count   2"], "Count 2")).toEqual({ index: 0 });
+    expect(findHeader(["Count 2", "Count\u00a02", "count   2"], "Count 2")).toEqual({ index: 0 });
   });
 
   it("matches a header that matched before in the same column", () => {

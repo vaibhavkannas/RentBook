@@ -1,7 +1,8 @@
 import "server-only";
 import { AppError } from "@/lib/errors";
 import { waitingChecks, checkSheet, type SheetFacts } from "@/lib/sheets/sheet-checks";
-import { NamedTabsGateway, type TabKey } from "@/lib/sheets/named-tabs";
+import { NamedTabsGateway } from "@/lib/sheets/named-tabs";
+import type { TabKey } from "@/lib/sheets/tab-names";
 import type { SheetsContext } from "@/lib/sheets/service";
 import type { Check } from "@/lib/setup-checks";
 import { readEnv, type AppEnv } from "./env";

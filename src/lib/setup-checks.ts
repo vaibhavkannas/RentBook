@@ -75,3 +75,14 @@ export function listWords(items: readonly string[]): string {
   if (items.length <= 1) return items.join("");
   return `${items.slice(0, -1).join(", ")} and ${items[items.length - 1]}`;
 }
+
+/**
+ * The advice for a tab setting (SETTINGS_TAB, LOG_TAB, TENANTS_TAB) that names a tab that is not in the Sheet yet: the owner's
+ * own tab has to be renamed in the Sheet first, or the app starts a new one. `settings` are the settings as they are to be
+ * said ("TENANTS_TAB", or `LOG_TAB ("My Log")`), and `ending` is what follows "rename it in your Sheet first": punctuation, or
+ * what the page does about it. One wording for the Set up checks, the Prepare card and Diagnostics.
+ */
+export function renameFirstAdvice(settings: readonly string[], ending: string): string {
+  const one = settings.length === 1;
+  return `${listWords(settings)} ${one ? "names a tab that is" : "name tabs that are"} not in your Sheet yet. If you already have ${one ? "it" : "them"} under ${one ? "another name" : "other names"}, rename ${one ? "it" : "them"} in your Sheet first${ending}`;
+}

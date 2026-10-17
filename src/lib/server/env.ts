@@ -1,6 +1,6 @@
 import "server-only";
 import { configError } from "@/lib/errors";
-import { DEFAULT_TAB_NAMES, tabNamesProblem } from "@/lib/sheets/named-tabs";
+import { DEFAULT_TAB_NAMES, tabNamesProblem } from "@/lib/sheets/tab-names";
 
 export type AppEnv = {
   serviceAccountJson: string;

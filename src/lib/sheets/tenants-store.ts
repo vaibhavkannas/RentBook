@@ -5,9 +5,11 @@ import { colLetter } from "./a1";
 import { isBlankCell, text } from "./cells";
 import type { CellWrite, SheetsGateway } from "./gateway";
 import { headerKey } from "./headers";
+import { shorten } from "./schedule";
 import { addTabIfMissing } from "./tabs";
+import { DEFAULT_TAB_NAMES } from "./tab-names";
 
-export const TENANTS_TAB = "Tenants";
+export const TENANTS_TAB = DEFAULT_TAB_NAMES.tenants;
 
 /** Columns A to O, in this order. Columns to the right of O may be added by hand and are ignored. */
 export const TENANT_HEADERS = [
@@ -63,9 +65,11 @@ function headerProblem(header: unknown[]): string | null {
   for (let index = 0; index < TENANT_HEADERS.length; index++) {
     const found = String(header[index] ?? "").trim();
     if (headerKey(found) !== headerKey(TENANT_HEADERS[index])) {
+      // The header is typed by hand: only a short stretch of it is quoted.
+      const quoted = shorten(found);
       return (
         `The Tenants tab must have "${TENANT_HEADERS[index]}" in column ${colLetter(index)} ` +
-        `(found ${found === "" ? "nothing" : `"${found}"`}). Columns A to ${LAST_COLUMN} must keep the ` +
+        `(found ${quoted === "" ? "nothing" : `"${quoted}"`}). Columns A to ${LAST_COLUMN} must keep the ` +
         `${TENANT_HEADERS.length} Tenants headers in their original order; extra columns may go to the right.`
       );
     }

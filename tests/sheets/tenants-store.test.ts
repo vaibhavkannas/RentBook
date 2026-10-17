@@ -264,6 +264,18 @@ describe("readTenancies: the header is checked on every read", () => {
   });
 });
 
+describe("a wrong Tenants header, as the message quotes it", () => {
+  it("shows no more of it than a short stretch of plain text: a long or multi-line header cannot flood the message", async () => {
+    const wrong = [...TENANT_HEADERS];
+    wrong[4] = `Moved\nin ${"x".repeat(100)}`;
+    const fake = new FakeGateway({ Schedule: baseSchedule(), [TENANTS_TAB]: [wrong] });
+    const error = await structureError(() => readTenancies(fake));
+    expect(error.message).toContain('(found "Moved in xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx...")');
+    expect(error.message).not.toContain("\n");
+    expect(error.message.length).toBeLessThan(300);
+  });
+});
+
 describe("readTenancies", () => {
   it("returns nothing for a tab that has only the header row", async () => {
     const fake = await ensured();

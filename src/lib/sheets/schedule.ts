@@ -65,15 +65,27 @@ export function columnsOf(layout: ScheduleLayout, portionId: string) {
   return cols;
 }
 
-/** The column of a header, or an error in words. `headerRow` is the header row's 1-based number, for the message. */
-function findColumn(headers: unknown[], name: string, headerRow: number): number {
+/** What a header is looked for in, for the message that says it is missing: a portion's headers come from Settings, the total's from TOTAL_HEADER. */
+type HeaderSource = "month" | "settings" | "total";
+
+const WHERE_TO_LOOK: Record<HeaderSource, string> = {
+  month: ".",
+  settings: " and in the Settings tab.",
+  total: " and in TOTAL_HEADER.",
+};
+
+/**
+ * The column of a header, or an error in words. `headerRow` is the header row's 1-based number, for the message, and `source`
+ * says where else to check the spelling. The header's text is typed by hand, so it is shortened before it is quoted.
+ */
+function findColumn(headers: unknown[], name: string, headerRow: number, source: HeaderSource): number {
   const found = findHeader(headers, name);
   if ("index" in found) return found.index;
   if (found.problem === "duplicate") {
-    throw sheetStructure(`Header "${name}" appears more than once in the Schedule tab.`);
+    throw sheetStructure(`Header "${shorten(name)}" appears more than once in the Schedule tab.`);
   }
   throw sheetStructure(
-    `Header "${name}" was not found in the Schedule tab. Check the spelling in the Schedule header row (row ${headerRow}) and in the Settings tab.`,
+    `Header "${shorten(name)}" was not found in the Schedule tab. Check the spelling in the Schedule header row (row ${headerRow})${WHERE_TO_LOOK[source]}`,
   );
 }
 
@@ -100,15 +112,15 @@ export function parseSchedule(
   }
   const headers = values[headerIndex];
   const headerRow = headerIndex + 1;
-  const monthCol = findColumn(headers, "Month", headerRow);
-  const totalCol = totalHeader === null ? null : findColumn(headers, totalHeader, headerRow);
+  const monthCol = findColumn(headers, "Month", headerRow, "month");
+  const totalCol = totalHeader === null ? null : findColumn(headers, totalHeader, headerRow, "total");
 
   const portionCols: ScheduleLayout["portionCols"] = new Map();
   for (const portion of portions) {
     portionCols.set(portion.id, {
-      tenant: findColumn(headers, portion.tenantHeader, headerRow),
-      count: findColumn(headers, portion.countHeader, headerRow),
-      amount: findColumn(headers, portion.amountHeader, headerRow),
+      tenant: findColumn(headers, portion.tenantHeader, headerRow, "settings"),
+      count: findColumn(headers, portion.countHeader, headerRow, "settings"),
+      amount: findColumn(headers, portion.amountHeader, headerRow, "settings"),
     });
   }
   // Two Settings rows naming the same header would make two portions share cells.
@@ -119,7 +131,7 @@ export function parseSchedule(
       const other = owner.get(col);
       if (other !== undefined) {
         throw sheetStructure(
-          `Portion "${id}" and "${other}" both use the column headed "${String(headers[col])}". Fix the header names in the Settings tab.`,
+          `Portion "${id}" and "${shorten(other)}" both use the column headed "${shorten(String(headers[col]))}". Fix the header names in the Settings tab.`,
         );
       }
       owner.set(col, id);

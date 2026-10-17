@@ -360,7 +360,51 @@ describe("parseSchedule: header matching", () => {
     const lower = baseSchedule();
     lower.splice(0, 1);
     expect(() => parseSchedule(lower, PORTIONS, "Per Month")).toThrow(
-      'Header "Per Month" was not found in the Schedule tab. Check the spelling in the Schedule header row (row 2) and in the Settings tab.',
+      'Header "Per Month" was not found in the Schedule tab. Check the spelling in the Schedule header row (row 2) and in TOTAL_HEADER.',
+    );
+  });
+
+  it("points a missing portion header to the Settings tab, and a missing total header to TOTAL_HEADER, and nothing else to either", () => {
+    const text = (run: () => unknown) => {
+      try {
+        run();
+      } catch (error) {
+        return (error as Error).message;
+      }
+      throw new Error("expected a refusal");
+    };
+    const portion = text(() => parseSchedule(withHeader(4, "Tenant two"), PORTIONS, TOTAL_HEADER));
+    expect(portion).toContain("and in the Settings tab.");
+    expect(portion).not.toContain("TOTAL_HEADER");
+    const total = text(() => parseSchedule(baseSchedule(), PORTIONS, "Per Month"));
+    expect(total).toContain("and in TOTAL_HEADER.");
+    expect(total).not.toContain("Settings tab");
+  });
+
+  it("shows no more of a header than a short stretch of plain text, in the missing, duplicate and shared-column messages", () => {
+    const long = `Rent\n${"x".repeat(100)}`;
+    const missing = (() => {
+      try {
+        parseSchedule(baseSchedule(), PORTIONS, long);
+      } catch (error) {
+        return (error as Error).message;
+      }
+      return "";
+    })();
+    expect(missing).toContain('Header "Rent xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx..." was not found');
+    expect(missing).not.toContain("\n");
+    const twice = baseSchedule();
+    (twice[2] as string[]).push(long, long);
+    expect(() => parseSchedule(twice, PORTIONS, long)).toThrow('Header "Rent xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx..." appears more than once');
+    const shared = PORTIONS.map((p) => (p.id === "p2" ? { ...p, tenantHeader: "Tenant" } : p));
+    const sheet = baseSchedule();
+    (sheet[2] as string[])[1] = `Tenant`;
+    expect(() => parseSchedule(sheet, shared, TOTAL_HEADER)).toThrow(/both use the column headed "Tenant"/);
+    const longShared = baseSchedule();
+    (longShared[2] as string[])[1] = long;
+    const portions = PORTIONS.map((p) => (p.id === "p1" ? { ...p, tenantHeader: long } : p.id === "p2" ? { ...p, tenantHeader: long } : p));
+    expect(() => parseSchedule(longShared, portions, TOTAL_HEADER)).toThrow(
+      'both use the column headed "Rent xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx..."',
     );
   });
 

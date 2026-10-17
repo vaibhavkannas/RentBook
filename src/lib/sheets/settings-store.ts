@@ -9,10 +9,11 @@ import { namesTabs, type CellWrite, type SheetsGateway } from "./gateway";
 import { headerKey } from "./headers";
 import { findHeaderRowIndex, shorten } from "./schedule";
 import { addTabIfMissing } from "./tabs";
+import { DEFAULT_TAB_NAMES } from "./tab-names";
 import { ensureTenantsTab, TENANTS_TAB } from "./tenants-store";
 
-export const SETTINGS_TAB = "Settings";
-export const LOG_TAB = "Payments Log";
+export const SETTINGS_TAB = DEFAULT_TAB_NAMES.settings;
+export const LOG_TAB = DEFAULT_TAB_NAMES.log;
 
 export const SETTINGS_HEADERS = [
   "Portion",

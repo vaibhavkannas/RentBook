@@ -2,7 +2,7 @@ import "server-only";
 import { getBrand } from "@/lib/brand";
 import type { Check, CheckStatus, SetupStep } from "@/lib/setup-checks";
 import { headerKey } from "@/lib/sheets/headers";
-import { DEFAULT_TAB_NAMES } from "@/lib/sheets/named-tabs";
+import { DEFAULT_TAB_NAMES, TAB_VARIABLES } from "@/lib/sheets/tab-names";
 import { CSP_REPORT_ONLY_HEADER, cspHeaderName } from "./csp";
 import { DEFAULT_SCHEDULE_TAB, MAX_TAB_NAME_LENGTH, MIN_AUTH_SECRET_LENGTH, parseAllowedEmails } from "./env";
 
@@ -179,9 +179,9 @@ type TabSetting = { id: string; step: 4 | 5; name: string; fallback: string };
 
 const TAB_SETTINGS: TabSetting[] = [
   { id: "schedule-tab-name", step: 4, name: "SCHEDULE_TAB", fallback: DEFAULT_SCHEDULE_TAB },
-  { id: "settings-tab-name", step: 5, name: "SETTINGS_TAB", fallback: DEFAULT_TAB_NAMES.settings },
-  { id: "log-tab-name", step: 5, name: "LOG_TAB", fallback: DEFAULT_TAB_NAMES.log },
-  { id: "tenants-tab-name", step: 5, name: "TENANTS_TAB", fallback: DEFAULT_TAB_NAMES.tenants },
+  { id: "settings-tab-name", step: 5, name: TAB_VARIABLES.settings, fallback: DEFAULT_TAB_NAMES.settings },
+  { id: "log-tab-name", step: 5, name: TAB_VARIABLES.log, fallback: DEFAULT_TAB_NAMES.log },
+  { id: "tenants-tab-name", step: 5, name: TAB_VARIABLES.tenants, fallback: DEFAULT_TAB_NAMES.tenants },
 ];
 
 /** The name a tab setting gives its tab: what is set (trimmed), or the default. */

@@ -336,9 +336,9 @@ describe("a Sheet that is not set up yet", () => {
     const text = visibleText(await render());
     expect(text).toContain("Adds the missing tabs (My Settings, Payments Log and Tenants)");
     expect(text).toContain(
-      "You gave SETTINGS_TAB a name that is not in your Sheet yet. If you already have that tab under another name, rename it in your Sheet first, then use Check again",
+      "SETTINGS_TAB names a tab that is not in your Sheet yet. If you already have it under another name, rename it in your Sheet first, then use Check again",
     );
-    expect(text).toContain('You set SETTINGS_TAB to "My Settings". If you already have this tab under another name, rename it to "My Settings" in your Sheet first');
+    expect(text).toContain('SETTINGS_TAB ("My Settings") names a tab that is not in your Sheet yet. If you already have it under another name, rename it in your Sheet first');
   });
 });
 

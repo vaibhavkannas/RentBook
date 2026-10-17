@@ -496,6 +496,24 @@ describe("the total column (step 4)", () => {
     });
   });
 
+  it("warns, and says which header, when another column's header only looks the same as the total's: renaming the first would re-point it", async () => {
+    const grid = baseSchedule();
+    grid[2] = [...grid[2], "Total  Rent"];
+    const { checks } = await run(sheet({ Schedule: grid }));
+    expect(byId(checks, "total")).toMatchObject({
+      status: "warn",
+      detail:
+        'Column "Total Rent" adds itself up with a formula. Another column has a header that looks the same ("Total  Rent"): if you rename this one, RentBook would read that column instead.',
+      fix: 'Rename the look-alike header, so that only one header reads as "Total Rent".',
+    });
+  });
+
+  it("does not warn when the other header is plainly different", async () => {
+    const grid = baseSchedule();
+    grid[2] = [...grid[2], "Total Rent 2025", "Total"];
+    expect(byId((await run(sheet({ Schedule: grid }))).checks, "total").status).toBe("ok");
+  });
+
   it("finds the header in any case or spacing, as the app does", async () => {
     const { checks } = await run(sheet(), { totalHeader: "  total  rent " });
     expect(byId(checks, "total").status).toBe("ok");
@@ -917,25 +935,25 @@ describe("an app tab with a name of the owner's own that is not in the Sheet", (
     const { checks } = await checkSheet(fresh(), { ...OPTIONS, appTabNames: names });
     expect(byId(checks, "settings")).toMatchObject({ status: "todo" });
     expect(byId(checks, "settings").detail).toBe(
-      'Not created yet. Prepare my Sheet creates it with 5 portions found in your header. You set SETTINGS_TAB to "My Settings". If you already have this tab under another name, rename it to "My Settings" in your Sheet first, then check again: Prepare my Sheet would start a new Settings tab with the default payments per cycle and hike and leave the old one alone.',
+      'Not created yet. Prepare my Sheet creates it with 5 portions found in your header. SETTINGS_TAB ("My Settings") names a tab that is not in your Sheet yet. If you already have it under another name, rename it in your Sheet first, then use Check again: Prepare my Sheet would start a new Settings tab with the default payments per cycle and hike and leave the old one alone.',
     );
     expect(byId(checks, "log")).toMatchObject({ status: "todo" });
     expect(byId(checks, "log").detail).toBe(
-      'Not created yet. You set LOG_TAB to "My Log". If you already have this tab under another name, rename it to "My Log" in your Sheet first, then check again: Prepare my Sheet would start a new, empty Payments Log tab and leave the old one alone.',
+      'Not created yet. LOG_TAB ("My Log") names a tab that is not in your Sheet yet. If you already have it under another name, rename it in your Sheet first, then use Check again: Prepare my Sheet would start a new, empty Payments Log tab and leave the old one alone.',
     );
-    expect(byId(checks, "tenants").detail).toContain('You set TENANTS_TAB to "RentBook Tenants". If you already have this tab under another name, rename it to "RentBook Tenants" in your Sheet first');
+    expect(byId(checks, "tenants").detail).toContain('TENANTS_TAB ("RentBook Tenants") names a tab that is not in your Sheet yet. If you already have it under another name, rename it in your Sheet first');
   });
 
   it("says nothing of the kind for a tab with its usual name, or when no names are given", async () => {
     for (const options of [OPTIONS, { ...OPTIONS, appTabNames: { settings: "Settings", log: "Payments Log", tenants: "Tenants" } }]) {
       const { checks } = await checkSheet(fresh(), options);
-      for (const id of ["settings", "log", "tenants"]) expect(byId(checks, id).detail, id).not.toContain("rename it");
+      for (const id of ["settings", "log", "tenants"]) expect(byId(checks, id).detail, id).not.toContain("rename it in your Sheet");
     }
   });
 
   it("says nothing of it once the tab is there", async () => {
     const { checks } = await checkSheet(sheet(), { ...OPTIONS, appTabNames: names });
-    for (const id of ["settings", "log", "tenants"]) expect(byId(checks, id).detail, id).not.toContain("rename it");
+    for (const id of ["settings", "log", "tenants"]) expect(byId(checks, id).detail, id).not.toContain("rename it in your Sheet");
   });
 
   it("names the owner's tab when the Settings tab is missing beside the others, which are never recreated", async () => {
