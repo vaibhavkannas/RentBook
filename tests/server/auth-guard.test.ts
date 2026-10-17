@@ -14,6 +14,8 @@ const signedInAs = (email: string | null, issuedAt?: number) =>
   auth.mockResolvedValue(email ? { user: { email }, ...(issuedAt === undefined ? {} : { issuedAt }) } : null);
 
 beforeEach(() => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(NOW);
   vi.stubEnv("ALLOWED_EMAILS", "owner@example.com, member@example.com");
   vi.stubEnv("AUTH_SECRET", SECRET);
   vi.stubEnv("AUTH_GOOGLE_ID", "client-id");
@@ -22,7 +24,10 @@ beforeEach(() => {
   auth.mockReset();
   connection.mockClear();
 });
-afterEach(() => vi.unstubAllEnvs());
+afterEach(() => {
+  vi.unstubAllEnvs();
+  vi.useRealTimers();
+});
 
 describe("getViewer", () => {
   it("returns the signed-in person, lower-cased, and whether they are the owner", async () => {
@@ -37,6 +42,37 @@ describe("getViewer", () => {
     expect(await getViewer()).toBeNull();
     signedInAs("stranger@example.com");
     expect(await getViewer()).toBeNull();
+  });
+
+  describe("how long a session lasts", () => {
+    const DAY = 24 * 60 * 60 * 1000;
+
+    it("keeps a session signed in six days ago and signs out one signed in more than seven days ago", async () => {
+      signedInAs("member@example.com", NOW - 6 * DAY);
+      expect(await getViewer()).not.toBeNull();
+      signedInAs("member@example.com", NOW - 7 * DAY);
+      expect(await getViewer()).not.toBeNull();
+      signedInAs("member@example.com", NOW - 7 * DAY - 1);
+      expect(await getViewer()).toBeNull();
+    });
+
+    it("signs out an old session whose cookie Auth.js keeps renewing, whether or not SESSION_NOT_BEFORE is set", async () => {
+      signedInAs("owner@example.com", NOW - 30 * DAY);
+      expect(await getViewer()).toBeNull();
+      vi.stubEnv("SESSION_NOT_BEFORE", "2026-01-01T00:00:00Z");
+      expect(await getViewer()).toBeNull();
+    });
+
+    it("makes requireUser and requireOwner refuse it with 401", async () => {
+      signedInAs("owner@example.com", NOW - 8 * DAY);
+      await expect(requireUser()).rejects.toMatchObject({ code: "unauthorized" });
+      await expect(requireOwner()).rejects.toMatchObject({ code: "unauthorized" });
+    });
+
+    it("keeps a session with no sign-in time, which Auth.js expires itself, when no switch is set", async () => {
+      signedInAs("member@example.com");
+      expect(await getViewer()).not.toBeNull();
+    });
   });
 
   describe("the sign-everyone-out switch", () => {
@@ -64,7 +100,7 @@ describe("getViewer", () => {
       expect(await getViewer()).toBeNull();
       signedInAs("member@example.com", NOW);
       expect(await getViewer()).not.toBeNull();
-      signedInAs("owner@example.com", NOW + 60_000);
+      signedInAs("owner@example.com", NOW + 5_000); // a few seconds ahead of this server: clocks differ a little
       expect(await getViewer()).toMatchObject({ isOwner: true });
     });
 

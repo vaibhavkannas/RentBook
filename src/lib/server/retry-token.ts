@@ -3,13 +3,10 @@ import { z } from "zod";
 import { validation } from "@/lib/errors";
 import type { LogRow } from "@/lib/sheets/service";
 import { logRowSchema } from "./schemas";
-import { macMatches, sign } from "./signing";
+import { MAX_CLOCK_SKEW_MS, macMatches, sign } from "./signing";
 
 /** How long a retry token is good for: long enough to get past a bad connection, too short to keep for later. */
 export const RETRY_TOKEN_MAX_AGE_MS = 15 * 60_000;
-
-/** Servers' clocks can differ a little, so a token stamped slightly ahead of this server's clock is still believed. */
-const MAX_CLOCK_SKEW_MS = 5_000;
 
 const payloadSchema = z.object({ row: logRowSchema, viewer: z.string(), iat: z.number() });
 

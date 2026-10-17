@@ -1,6 +1,7 @@
 import "server-only";
 import NextAuth from "next-auth";
 import Google from "next-auth/providers/google";
+import { authLogger } from "@/lib/server/auth-log";
 import { isAllowedEmail, parseAllowedEmails } from "@/lib/server/env";
 import { SESSION_MAX_AGE_SECONDS, stampIssuedAt } from "@/lib/server/session-policy";
 
@@ -21,12 +22,15 @@ declare module "@auth/core/jwt" {
 /**
  * Google sign-in, restricted to ALLOWED_EMAILS. Reads AUTH_SECRET,
  * AUTH_GOOGLE_ID and AUTH_GOOGLE_SECRET from the environment. A session lasts seven days and remembers when it was
- * signed in, so SESSION_NOT_BEFORE can sign everyone out (see auth-guard.ts).
+ * signed in: getViewer refuses a session older than that however often Auth.js renews its cookie, and
+ * SESSION_NOT_BEFORE can sign everyone out (see auth-guard.ts and session-policy.ts). Auth.js's own logging goes
+ * through the structured logger (auth-log.ts).
  */
 export const { handlers, auth, signIn, signOut } = NextAuth({
   providers: [Google],
   session: { strategy: "jwt", maxAge: SESSION_MAX_AGE_SECONDS },
   pages: { signIn: "/signin", error: "/signin" },
+  logger: authLogger,
   callbacks: {
     signIn({ profile }) {
       return isAllowedEmail(
@@ -36,7 +40,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       );
     },
     jwt({ token, trigger }) {
-      return stampIssuedAt(token, trigger === "signIn" || trigger === "signUp");
+      return stampIssuedAt(token, trigger === "signIn" || trigger === "signUp", Date.now(), process.env.SESSION_NOT_BEFORE);
     },
     session({ session, token }) {
       session.issuedAt = typeof token.issuedAt === "number" ? token.issuedAt : undefined;

@@ -3,15 +3,12 @@ import { cookies } from "next/headers";
 import type { MonthView, YearMonth } from "@/lib/domain/types";
 import { getMonthView, type SheetsContext } from "@/lib/sheets/service";
 import { errorLogFields, logEvent } from "./log";
-import { macMatches, sign } from "./signing";
+import { MAX_CLOCK_SKEW_MS, macMatches, sign } from "./signing";
 
 const COOKIE = "rb-wrote";
 
 /** How long the cookie, and so a write time in it, is believed. The cache's own lifetime is 15 seconds. */
 const COOKIE_LIFETIME_SECONDS = 120;
-
-/** Servers' clocks can differ a little, so a write time slightly ahead of this server's clock is still believed. */
-const MAX_CLOCK_SKEW_MS = 5_000;
 
 /** What the signature covers: the write time and the person it was made for, so it is no good for anyone else. */
 const signedText = (writtenAt: string, email: string) => `${writtenAt}:${email.trim().toLowerCase()}`;
