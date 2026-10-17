@@ -3,9 +3,11 @@ import { createElement, type ComponentProps } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import type { PortionCard } from "@/lib/domain/types";
+import { withoutComments } from "../support/source-scan";
 
-// The bottom sheet and the three dialogs built on it, as the server renders them, and what their source promises about
-// focus, scrolling and closing (nothing here can press a key: the real browser run is in the task report).
+// The bottom sheet and the three dialogs built on it, as the server renders them. What a key press means and how the
+// page is locked are decided by helpers with their own tests (sheet-keys, page-lock); focus and scrolling in a real
+// browser were checked by hand (see the task report).
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
 
@@ -17,11 +19,6 @@ import { Sheet } from "@/components/ui/Sheet";
 const html = (element: Parameters<typeof renderToStaticMarkup>[0]) => renderToStaticMarkup(element);
 const source = (path: string) => readFileSync(new URL(`../../${path}`, import.meta.url), "utf8");
 
-/** A comment or a string, found in the order they appear, so a comment mark inside a string is not a comment. */
-const COMMENT_OR_STRING =
-  /\/\*[\s\S]*?\*\/|\/\/[^\n]*|"(?:\\.|[^"\\\n])*"|'(?:\\.|[^'\\\n])*'|`(?:\\.|[^`\\])*`/g;
-const withoutComments = (text: string) =>
-  text.replace(COMMENT_OR_STRING, (token) => (token.startsWith("//") || token.startsWith("/*") ? " " : token));
 
 const card = (overrides: Partial<PortionCard> = {}): PortionCard => ({
   portionId: "p1",
@@ -94,40 +91,15 @@ describe("Sheet", () => {
 });
 
 describe("the Sheet source", () => {
-  const code = withoutComments(source("src/components/ui/Sheet.tsx"));
-
-  it("closes on Escape only while it may be closed", () => {
-    expect(code).toMatch(/event\.key === "Escape"/);
-    expect(code).toMatch(/canClose/);
-    expect(code).toMatch(/if \(canClose\) onClose\(\)/);
-  });
-
-  it("closes from the backdrop only through shouldCloseOnBackdrop, and only when it is allowed to", () => {
-    expect(code).toMatch(/import \{[^}]*\bshouldCloseOnBackdrop\b[^}]*\} from "@\/lib\/month-nav"/);
-    expect(code).toMatch(/shouldCloseOnBackdrop\(/);
-    expect(code).toMatch(/closeOnBackdrop/);
-  });
-
-  it("keeps Tab inside with trapTabIndex over every tabbable element, not only the buttons", () => {
-    expect(code).toMatch(/import \{[^}]*\btrapTabIndex\b[^}]*\} from "@\/lib\/month-nav"/);
-    expect(code).toMatch(/tabbable\(/);
-    expect(code).not.toMatch(/querySelectorAll[^)]*"button"/);
-  });
-
-  it("remembers the opener while it renders, before an autofocus control moves focus, not in an effect", () => {
-    expect(code).toMatch(/useState\(\s*\(\)\s*=>[^;]*document\.activeElement/);
-    expect(code).toMatch(/opener\?\.isConnected/);
-  });
-
-  it("locks the page behind it while it is open, and unlocks it on close", () => {
-    expect(code).toMatch(/classList\.add\("sheet-open"\)/);
-    expect(code).toMatch(/classList\.remove\("sheet-open"\)/);
-  });
-
-  it("focuses the element it is told to, else leaves an autofocused control alone, else takes focus itself", () => {
-    expect(code).toMatch(/initialFocus\?\.current/);
-    expect(code).toMatch(/panel\.contains\(document\.activeElement\)/);
-    expect(code).toMatch(/panel\.focus\(\)/);
+  it("leaves what a key means, and the page lock, to the helpers (tested in tests/domain)", () => {
+    const code = withoutComments(source("src/components/ui/Sheet.tsx"));
+    expect(code).toMatch(/import \{ sheetKeyAction \} from "@\/lib\/sheet-keys"/);
+    expect(code).toMatch(/import \{ sheetLock \} from "@\/lib\/page-lock"/);
+    expect(code).toMatch(/sheetKeyAction\(/);
+    expect(code).toMatch(/sheetLock\.acquire\(\)/);
+    expect(code).toMatch(/sheetLock\.release\(\)/);
+    expect(code).not.toContain("classList");
+    expect(code).not.toContain('"Escape"');
   });
 });
 

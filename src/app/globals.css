@@ -6,7 +6,8 @@
  *            form control (16 px, so a phone does not zoom in on focus); text-sm secondary text; text-xs pills.
  *   Spacing: a 16 px gutter (px-4) on every screen; space-y-3 between cards and between fields; mt-3 or mt-4
  *            between blocks inside a card or a sheet.
- *   Shape:   --radius-card (cards), --radius-control (buttons and fields), --radius-chip (pills and notices).
+ *   Shape:   --radius-card (cards), --radius-control (buttons and fields), --radius-chip (pills, notices, placeholder
+ *            bars); in classes: rounded-card, rounded-control, rounded-chip (see src/lib/ui-classes.ts).
  */
 
 :root {

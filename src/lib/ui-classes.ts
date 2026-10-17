@@ -2,6 +2,9 @@
  * The class strings the shared pieces in src/components/ui are drawn with. They are the ones the screens use today,
  * so putting a screen on a primitive moves nothing. They are written out in full (not built from a tone name) so
  * that Tailwind finds each class in the source. Pure on purpose, so a test can read them.
+ *
+ * The corners come from the radius tokens in globals.css: rounded-card (1rem, what rounded-2xl was), rounded-control
+ * (0.75rem, rounded-xl) and rounded-chip (0.5rem, rounded-lg), so the three sizes are named once.
  */
 
 export type ButtonVariant = "primary" | "secondary" | "danger" | "dangerText" | "quiet";
@@ -13,7 +16,7 @@ export type PillTone = Tone | "neutral";
 export const cx = (...parts: (string | false | null | undefined)[]) => parts.filter(Boolean).join(" ");
 
 const BUTTON_BASE =
-  "press inline-flex items-center justify-center gap-2 rounded-xl px-4 font-medium disabled:opacity-60";
+  "press inline-flex items-center justify-center gap-2 rounded-control px-4 font-medium disabled:opacity-60";
 
 /** 48 px for the button that finishes a form, 44 px (the least a thumb should be asked to hit) for the rest. */
 const BUTTON_SIZE: Record<ButtonSize, string> = {
@@ -34,13 +37,13 @@ export const buttonClasses = (variant: ButtonVariant, size: ButtonSize) =>
 
 /** A text field, a select and a date field. 16 px text, so a phone does not zoom in when it takes focus. */
 export const FIELD_CONTROL =
-  "mt-1 min-h-12 w-full rounded-xl border border-control bg-surface px-3 text-base";
+  "mt-1 min-h-12 w-full rounded-control border border-control bg-surface px-3 text-base";
 
 /** The amount field: the same, with larger text. */
-const LARGE_CONTROL = "mt-1 min-h-12 w-full rounded-xl border border-control bg-surface px-3 text-lg";
+const LARGE_CONTROL = "mt-1 min-h-12 w-full rounded-control border border-control bg-surface px-3 text-lg";
 
 /** A text area grows with its rows, so it has vertical padding and no minimum height. */
-const TEXTAREA_CONTROL = "mt-1 w-full rounded-xl border border-control bg-surface px-3 py-2 text-base";
+const TEXTAREA_CONTROL = "mt-1 w-full rounded-control border border-control bg-surface px-3 py-2 text-base";
 
 export const fieldControlClasses = (kind: "input" | "textarea" = "input", large = false) =>
   `${kind === "textarea" ? TEXTAREA_CONTROL : large ? LARGE_CONTROL : FIELD_CONTROL} disabled:opacity-50`;
@@ -51,7 +54,7 @@ const NOTICE_TONE: Record<Tone, string> = {
   danger: "bg-danger-bg text-danger-ink",
 };
 
-export const noticeClasses = (tone: Tone) => `rounded-lg px-3 py-2 text-sm ${NOTICE_TONE[tone]}`;
+export const noticeClasses = (tone: Tone) => `rounded-chip px-3 py-2 text-sm ${NOTICE_TONE[tone]}`;
 
 const PILL_TONE: Record<PillTone, string> = {
   success: "bg-success-bg text-success-ink",
@@ -61,12 +64,12 @@ const PILL_TONE: Record<PillTone, string> = {
 };
 
 export const pillClasses = (tone: PillTone) =>
-  `shrink-0 rounded-lg px-2.5 py-0.5 text-xs font-medium ${PILL_TONE[tone]}`;
+  `shrink-0 rounded-chip px-2.5 py-0.5 text-xs font-medium ${PILL_TONE[tone]}`;
 
-export const CARD = "rounded-2xl border border-line bg-surface p-4";
+export const CARD = "rounded-card border border-line bg-surface p-4";
 
 /** A grey placeholder bar. It pulses, except for people who asked their device for less motion. */
-export const SKELETON_BAR = "rounded-lg bg-line animate-pulse motion-reduce:animate-none";
+export const SKELETON_BAR = "rounded-chip bg-line animate-pulse motion-reduce:animate-none";
 
 /** The single phone column, with a 16 px gutter. `center` is for the sign-in and error pages. */
 export const pageClasses = (center: boolean) =>

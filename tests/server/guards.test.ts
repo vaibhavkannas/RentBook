@@ -2,6 +2,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import { withoutComments, withoutCommentsAndStrings } from "../support/source-scan";
 
 /**
  * Every page and route handler under src/app must ask who is signed in, or be on the short list below of files that
@@ -32,15 +33,6 @@ const HTTP_METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"
 /** Files that answer a request on their own: pages, route handlers, and the special files Next serves. */
 const ENTRY_FILE =
   /^(page|route|not-found|robots|manifest|sitemap|(?:apple-)?icon\d*|opengraph-image\d*|twitter-image\d*)\.[cm]?[jt]sx?$/;
-
-/** A comment or a string, found in the order they appear, so a comment mark inside a string is not a comment. */
-const COMMENT_OR_STRING =
-  /\/\*[\s\S]*?\*\/|\/\/[^\n]*|"(?:\\.|[^"\\\n])*"|'(?:\\.|[^'\\\n])*'|`(?:\\.|[^`\\])*`/g;
-
-const isComment = (token: string) => token.startsWith("//") || token.startsWith("/*");
-const withoutComments = (source: string) => source.replace(COMMENT_OR_STRING, (t) => (isComment(t) ? " " : t));
-const withoutCommentsAndStrings = (source: string) =>
-  source.replace(COMMENT_OR_STRING, (t) => (isComment(t) ? " " : '""'));
 
 /** How many times `name(` is called in `code`. A method call such as `x.name(` does not count. */
 function callCount(code: string, name: string): number {

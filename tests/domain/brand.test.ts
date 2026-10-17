@@ -3,6 +3,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { BRAND, getBrand } from "@/lib/brand";
+import { withoutComments } from "../support/source-scan";
 
 const SRC_DIR = fileURLToPath(new URL("../../src", import.meta.url));
 const CSS = readFileSync(path.join(SRC_DIR, "app", "globals.css"), "utf8");
@@ -130,12 +131,6 @@ describe("globals.css", () => {
 });
 
 // ---- no hard-coded product name ----
-
-/** A comment or a string, found in the order they appear, so a comment mark inside a string is not a comment. */
-const COMMENT_OR_STRING =
-  /\/\*[\s\S]*?\*\/|\/\/[^\n]*|"(?:\\.|[^"\\\n])*"|'(?:\\.|[^'\\\n])*'|`(?:\\.|[^`\\])*`/g;
-const isComment = (token: string) => token.startsWith("//") || token.startsWith("/*");
-const withoutComments = (source: string) => source.replace(COMMENT_OR_STRING, (t) => (isComment(t) ? " " : t));
 
 /**
  * Where the product's name is written out in code: in a string, in template text or as text between tags.

@@ -18,8 +18,9 @@ type MarkProps = Omit<SVGProps<SVGSVGElement>, "width" | "height" | "viewBox" | 
  * The mark as an `<svg>` element, drawn the same way by the generated icons (ImageResponse) and by the BrandMark
  * component, so the two cannot drift apart. Plain JSX with no hooks: it runs outside React too.
  *
- * `inset` widens the view box by 4 units on each side (the mark then fills 80 % of the width) for an icon that
- * runs to the edge of the picture, so the mark stays inside the safe circle a maskable icon is cropped to.
+ * `inset` widens the view box by 4 units on each side, so the 32-unit grid fills 80 % of the width (the mark itself,
+ * about 20 of the 40 units across, fills about half) for an icon that runs to the edge of the picture: the mark then
+ * stays inside the safe circle a maskable icon is cropped to.
  */
 export function brandMarkSvg({
   size,

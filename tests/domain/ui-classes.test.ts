@@ -19,7 +19,7 @@ import {
 const tokens = (classes: string) => classes.split(/\s+/);
 
 describe("buttonClasses", () => {
-  const BASE = ["press", "inline-flex", "items-center", "justify-center", "gap-2", "rounded-xl", "px-4", "font-medium", "disabled:opacity-60"];
+  const BASE = ["press", "inline-flex", "items-center", "justify-center", "gap-2", "rounded-control", "px-4", "font-medium", "disabled:opacity-60"];
 
   it("gives every button the same base: press feedback, centred content, the usual shape", () => {
     for (const variant of ["primary", "secondary", "danger", "dangerText", "quiet"] as const) {
@@ -62,7 +62,7 @@ describe("buttonClasses", () => {
 
 describe("FIELD_CONTROL", () => {
   it("is the text field every form uses today", () => {
-    expect(FIELD_CONTROL).toBe("mt-1 min-h-12 w-full rounded-xl border border-control bg-surface px-3 text-base");
+    expect(FIELD_CONTROL).toBe("mt-1 min-h-12 w-full rounded-control border border-control bg-surface px-3 text-base");
   });
 
   it("is a 16 px text field, so a phone does not zoom in when it takes focus", () => {
@@ -87,7 +87,7 @@ describe("fieldControlClasses", () => {
     const area = tokens(fieldControlClasses("textarea"));
     expect(area).toContain("py-2");
     expect(area).not.toContain("min-h-12");
-    expect(area).toEqual(expect.arrayContaining(["mt-1", "w-full", "rounded-xl", "border", "border-control", "bg-surface", "px-3", "text-base"]));
+    expect(area).toEqual(expect.arrayContaining(["mt-1", "w-full", "rounded-control", "border", "border-control", "bg-surface", "px-3", "text-base"]));
   });
 });
 
@@ -97,12 +97,12 @@ describe("noticeClasses", () => {
     ["warn", "bg-warn-bg text-warn-ink"],
     ["danger", "bg-danger-bg text-danger-ink"],
   ] as const)("a %s notice is a small rounded box in the %s colours", (tone, colours) => {
-    expect(noticeClasses(tone)).toBe(`rounded-lg px-3 py-2 text-sm ${colours}`);
+    expect(noticeClasses(tone)).toBe(`rounded-chip px-3 py-2 text-sm ${colours}`);
   });
 });
 
 describe("pillClasses", () => {
-  const BASE = "shrink-0 rounded-lg px-2.5 py-0.5 text-xs font-medium";
+  const BASE = "shrink-0 rounded-chip px-2.5 py-0.5 text-xs font-medium";
 
   it.each([
     ["success", "bg-success-bg text-success-ink"],
@@ -116,8 +116,8 @@ describe("pillClasses", () => {
 
 describe("the card, the skeleton bar and the page", () => {
   it("keep the look of today's screens", () => {
-    expect(CARD).toBe("rounded-2xl border border-line bg-surface p-4");
-    expect(SKELETON_BAR).toBe("rounded-lg bg-line animate-pulse motion-reduce:animate-none");
+    expect(CARD).toBe("rounded-card border border-line bg-surface p-4");
+    expect(SKELETON_BAR).toBe("rounded-chip bg-line animate-pulse motion-reduce:animate-none");
   });
 
   it("makes the page the single phone column with a 16 px gutter", () => {
@@ -133,5 +133,25 @@ describe("cx", () => {
   it("joins the class names and skips anything empty", () => {
     expect(cx("a", false, "b", null, undefined, "", "c")).toBe("a b c");
     expect(cx()).toBe("");
+  });
+});
+
+describe("the corners", () => {
+  const all = [
+    ...(["primary", "secondary", "danger", "dangerText", "quiet"] as const).flatMap((variant) =>
+      (["lg", "md"] as const).map((size) => buttonClasses(variant, size)),
+    ),
+    fieldControlClasses(),
+    fieldControlClasses("input", true),
+    fieldControlClasses("textarea"),
+    noticeClasses("success"),
+    pillClasses("neutral"),
+    CARD,
+    SKELETON_BAR,
+  ].join(" ");
+
+  it("come from the radius tokens (rounded-card, rounded-control, rounded-chip), not from a size written out again", () => {
+    expect(all).not.toMatch(/\brounded-(?:lg|xl|2xl)\b/);
+    for (const token of ["rounded-card", "rounded-control", "rounded-chip"]) expect(all).toContain(token);
   });
 });

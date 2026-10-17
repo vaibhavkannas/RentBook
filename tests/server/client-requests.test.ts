@@ -2,6 +2,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import { withoutComments, withoutCommentsAndStrings } from "../support/source-scan";
 
 /**
  * Every request a component makes to the server goes through postJson (src/lib/post-json.ts), which gives up after
@@ -12,14 +13,6 @@ import { describe, expect, it } from "vitest";
 const COMPONENTS = fileURLToPath(new URL("../../src/components", import.meta.url));
 const files = readdirSync(COMPONENTS).filter((name) => name.endsWith(".tsx")).sort();
 const read = (name: string) => readFileSync(path.join(COMPONENTS, name), "utf8");
-
-/** A comment or a string, found in the order they appear, so a comment mark inside a string is not a comment. */
-const COMMENT_OR_STRING =
-  /\/\*[\s\S]*?\*\/|\/\/[^\n]*|"(?:\\.|[^"\\\n])*"|'(?:\\.|[^'\\\n])*'|`(?:\\.|[^`\\])*`/g;
-const isComment = (token: string) => token.startsWith("//") || token.startsWith("/*");
-const withoutComments = (source: string) => source.replace(COMMENT_OR_STRING, (t) => (isComment(t) ? " " : t));
-const withoutCommentsAndStrings = (source: string) =>
-  source.replace(COMMENT_OR_STRING, (t) => (isComment(t) ? " " : '""'));
 
 /** The components that talk to the server: their source names an address under /api/. */
 const TALKING = files.filter((name) => withoutComments(read(name)).includes('"/api/'));

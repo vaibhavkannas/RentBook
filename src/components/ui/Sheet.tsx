@@ -10,7 +10,9 @@ import {
   type RefObject,
 } from "react";
 import { tabbable } from "@/lib/focusable";
-import { shouldCloseOnBackdrop, trapTabIndex } from "@/lib/month-nav";
+import { shouldCloseOnBackdrop } from "@/lib/month-nav";
+import { sheetLock } from "@/lib/page-lock";
+import { sheetKeyAction } from "@/lib/sheet-keys";
 
 type Props = {
   /** The id of the element inside that names the dialog. */
@@ -64,33 +66,31 @@ export function Sheet({ labelledBy, describedBy, onClose, canClose, closeOnBackd
     };
   }, [opener]);
 
-  // The page behind does not scroll while a sheet is open (see globals.css).
+  // The page behind does not scroll while a sheet is open. The lock is counted, so closing one of two sheets does not
+  // free the page behind the other.
   useEffect(() => {
-    document.documentElement.classList.add("sheet-open");
-    return () => document.documentElement.classList.remove("sheet-open");
+    sheetLock.acquire();
+    return () => sheetLock.release();
   }, []);
 
+  // What a key press means is decided by sheetKeyAction; this only reads the page and carries the answer out.
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        if (canClose) onClose();
-        return;
-      }
-      if (event.key !== "Tab") return;
       const panel = panelRef.current;
-      if (!panel) return;
-      const items = tabbable(panel);
-      if (items.length === 0) {
-        // Nothing to move to (everything is disabled while a save runs): stay where focus is rather than leave.
-        event.preventDefault();
-        panel.focus();
-        return;
-      }
-      const next = trapTabIndex(items.length, items.indexOf(document.activeElement as HTMLElement), event.shiftKey);
-      if (next !== null) {
-        event.preventDefault();
-        items[next].focus();
-      }
+      if (event.key === "Tab" && !panel) return;
+      const items = event.key === "Tab" && panel ? tabbable(panel) : [];
+      const action = sheetKeyAction({
+        key: event.key,
+        shiftKey: event.shiftKey,
+        canClose,
+        itemCount: items.length,
+        activeIndex: items.indexOf(document.activeElement as HTMLElement),
+      });
+      if (!action) return;
+      if (action.type === "close") return onClose();
+      event.preventDefault();
+      if (action.type === "focus") items[action.index].focus();
+      else panel?.focus();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
