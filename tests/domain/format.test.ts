@@ -1,13 +1,20 @@
+import { readdirSync, readFileSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import { APP_TIME_ZONE } from "@/lib/domain/year-month";
 import {
   formatDay,
   formatMonthKey,
   formatMonthTitle,
   formatRupees,
   formatSavedAt,
+  formatTime,
+  indiaDayKey,
   stripRupeeFormatting,
   wholeRupeesMessage,
 } from "@/lib/format";
+import { withoutComments } from "../support/source-scan";
 
 describe("format", () => {
   it("formats rupees with Indian digit grouping", () => {
@@ -82,5 +89,92 @@ describe("stripRupeeFormatting", () => {
 
   it("leaves nothing for a blank or a lone sign, which is how a blank amount is told from text", () => {
     for (const text of ["", "   ", "₹", " , ", "₹ ,"]) expect(stripRupeeFormatting(text)).toBe("");
+  });
+});
+
+describe("indiaDayKey", () => {
+  it("is the day the time falls on in India, which starts at 18:30 UTC the evening before", () => {
+    expect(indiaDayKey("2026-10-15T19:00:00Z")).toBe("2026-10-16");
+    expect(indiaDayKey("2026-10-15T18:29:59Z")).toBe("2026-10-15");
+    expect(indiaDayKey("2026-10-15T18:30:00Z")).toBe("2026-10-16");
+    expect(indiaDayKey("2026-10-16T18:29:59.999Z")).toBe("2026-10-16");
+  });
+
+  it("reads the time the app writes, with milliseconds", () => {
+    expect(indiaDayKey("2026-10-05T04:30:00.000Z")).toBe("2026-10-05");
+  });
+
+  it("crosses the end of a month, a year and a leap February", () => {
+    expect(indiaDayKey("2026-10-31T19:00:00Z")).toBe("2026-11-01");
+    expect(indiaDayKey("2026-12-31T19:00:00Z")).toBe("2027-01-01");
+    expect(indiaDayKey("2028-02-28T18:30:00Z")).toBe("2028-02-29");
+    expect(indiaDayKey("2028-02-29T18:30:00Z")).toBe("2028-03-01");
+  });
+
+  it("reads a time written with an offset", () => {
+    expect(indiaDayKey("2026-10-16T00:15:00+05:30")).toBe("2026-10-16");
+    expect(indiaDayKey("2026-10-15T20:00:00-05:00")).toBe("2026-10-16");
+    expect(indiaDayKey("2026-10-16T01:00:00+0530")).toBe("2026-10-16");
+    expect(indiaDayKey("2026-10-16T01:00:00+09:00")).toBe("2026-10-15");
+  });
+
+  it("is null for a time it cannot read, and never guesses from the server's own time zone", () => {
+    for (const text of [
+      "",
+      "   ",
+      "not a date",
+      "46300.4166",
+      "5 Oct",
+      "10/5/2026",
+      "2026",
+      "2026-10-05",
+      "2026-10-05T10:00:00",
+      "2026-10-05 10:00:00Z",
+      "2026-02-30T10:00:00Z",
+      "2026-13-01T10:00:00Z",
+      "2026-10-05T25:00:00Z",
+      "2026-10-05T10:61:00Z",
+    ]) {
+      expect(indiaDayKey(text), text).toBeNull();
+    }
+  });
+});
+
+describe("formatTime", () => {
+  it("shows India time as hour:minute am or pm", () => {
+    expect(formatTime("2026-10-05T04:30:00.000Z")).toBe("10:00 am");
+    expect(formatTime("2026-10-05T13:35:00Z")).toBe("7:05 pm");
+    expect(formatTime("2026-10-05T00:00:00Z")).toBe("5:30 am");
+  });
+
+  it("says 12 for midnight and for noon, and zero-pads the minutes", () => {
+    expect(formatTime("2026-10-05T18:30:00Z")).toBe("12:00 am");
+    expect(formatTime("2026-10-05T18:39:00Z")).toBe("12:09 am");
+    expect(formatTime("2026-10-05T06:30:00Z")).toBe("12:00 pm");
+    expect(formatTime("2026-10-05T07:29:00Z")).toBe("12:59 pm");
+    expect(formatTime("2026-10-05T18:29:00Z")).toBe("11:59 pm");
+  });
+
+  it("separates the time and am or pm with an ordinary space, whatever the runtime's locale data says", () => {
+    expect(formatTime("2026-10-05T04:30:00Z")).toMatch(/^\d{1,2}:\d{2} [ap]m$/);
+  });
+
+  it("is null for a time it cannot read", () => {
+    for (const text of ["", "later", "46300.41", "2026-10-05", "2026-10-05T10:00:00"]) expect(formatTime(text)).toBeNull();
+  });
+});
+
+describe("the display time zone", () => {
+  it("is India, and is written once in the source: the day, the time and the saved-at text all use the one constant", () => {
+    expect(APP_TIME_ZONE).toBe("Asia/Kolkata");
+    const root = fileURLToPath(new URL("../../", import.meta.url));
+    const writing = ["src/lib", "src/app", "src/components"]
+      .flatMap((dir) =>
+        readdirSync(path.join(root, dir), { recursive: true, encoding: "utf8" })
+          .filter((file) => /\.tsx?$/.test(file))
+          .map((file) => `${dir}/${file.split(path.sep).join("/")}`),
+      )
+      .filter((file) => withoutComments(readFileSync(path.join(root, file), "utf8")).includes("Asia/Kolkata"));
+    expect(writing).toEqual(["src/lib/domain/year-month.ts"]);
   });
 });

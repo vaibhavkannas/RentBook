@@ -6,6 +6,12 @@ const DAY_PATTERN = /^(\d{4})-(\d{2})-(\d{2})$/;
 const SERIAL_UNIX_OFFSET = 25569;
 const MS_PER_DAY = 86_400_000;
 
+/**
+ * The time zone every day, month and time of day in the app is read and shown in. It is written here once: wave 3 or
+ * later may let the owner choose it, and then this is the one place that changes.
+ */
+export const APP_TIME_ZONE = "Asia/Kolkata";
+
 export function ymKey(ym: YearMonth): string {
   return `${ym.year}-${String(ym.month).padStart(2, "0")}`;
 }
@@ -49,13 +55,13 @@ export function isoDayFromSerial(serial: number): string | null {
 }
 
 /** Calendar month that `now` falls in, for the given IANA time zone. */
-export function currentYm(now: Date, timeZone = "Asia/Kolkata"): YearMonth {
+export function currentYm(now: Date, timeZone = APP_TIME_ZONE): YearMonth {
   const [year, month] = todayIso(now, timeZone).split("-").map(Number);
   return { year, month };
 }
 
 /** Calendar day of `now` as YYYY-MM-DD in the given IANA time zone. */
-export function todayIso(now: Date, timeZone = "Asia/Kolkata"): string {
+export function todayIso(now: Date, timeZone = APP_TIME_ZONE): string {
   return new Intl.DateTimeFormat("en-CA", {
     timeZone,
     year: "numeric",
