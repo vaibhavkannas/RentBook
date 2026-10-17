@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { serialFromYm } from "@/lib/domain/year-month";
 import { AppError } from "@/lib/errors";
-import { parseSchedule } from "@/lib/sheets/schedule";
+import { findHeaderRowIndex, parseSchedule } from "@/lib/sheets/schedule";
+import { inferPortions } from "@/lib/sheets/settings-store";
 import {
   baseSchedule,
   monthCell,
@@ -281,5 +282,139 @@ describe("parseSchedule: portion ids that are also property names", () => {
       expect(layout.portionCols.get(name)).toBeUndefined();
       expect(rows[1].entries.get(name)).toBeUndefined();
     }
+  });
+});
+
+describe("the owner's Sheet layout, pinned (the columns every portion has always mapped to)", () => {
+  // Typed out here, not built from the fixtures, so a change to the matching rules cannot move both sides together.
+  const OWNER_HEADERS = [
+    "Month",
+    "Tenant", "Count", "Amount",
+    "Tenant2", "Count2", "Amount2",
+    "Tenant3", "Count3", "Amount3",
+    "Tenant4", "Count4", "Amount4",
+    "Tenant5", "Count5", "Amount5",
+    "Total Rent",
+  ];
+  const COLUMNS = [
+    ["p1", { tenant: 1, count: 2, amount: 3 }],
+    ["p2", { tenant: 4, count: 5, amount: 6 }],
+    ["p3", { tenant: 7, count: 8, amount: 9 }],
+    ["p4", { tenant: 10, count: 11, amount: 12 }],
+    ["p5", { tenant: 13, count: 14, amount: 15 }],
+  ] as const;
+
+  it("maps the fixture Sheet's p1 to p5 to hard-coded column indexes", () => {
+    const { layout } = parseSchedule(baseSchedule(), PORTIONS, TOTAL_HEADER);
+    expect(baseSchedule()[2]).toEqual(OWNER_HEADERS);
+    expect([...layout.portionCols.entries()]).toEqual(COLUMNS.map(([id, cols]) => [id, cols]));
+    expect(layout.monthCol).toBe(0);
+    expect(layout.totalCol).toBe(16);
+    expect(layout.headerRow).toBe(3);
+    expect(layout.lastDataRow).toBe(5);
+  });
+
+  it("maps the same columns when the portions come from the first-run guess at the header row", () => {
+    const portions = inferPortions(OWNER_HEADERS);
+    expect(portions.map((p) => [p.tenantHeader, p.countHeader, p.amountHeader])).toEqual(
+      PORTIONS.map((p) => [p.tenantHeader, p.countHeader, p.amountHeader]),
+    );
+    const { layout } = parseSchedule(baseSchedule(), portions, TOTAL_HEADER);
+    expect([...layout.portionCols.entries()]).toEqual(COLUMNS.map(([id, cols]) => [id, cols]));
+  });
+
+  it("reads the same entries from the fixture Sheet", () => {
+    const { rows } = parseSchedule(baseSchedule(), PORTIONS, TOTAL_HEADER);
+    expect(rows.map((row) => [row.rowNumber, row.month, [...row.entries.values()]])).toEqual([
+      [4, { year: 2026, month: 8 }, [
+        { tenant: "Asha", count: 2, amount: 5450 },
+        { tenant: "Bala", count: 10, amount: 12700 },
+        { tenant: "Chitra", count: 4, amount: 9000 },
+        null,
+        null,
+      ]],
+      [5, { year: 2026, month: 9 }, [
+        { tenant: "Asha", count: 3, amount: 5450 },
+        { tenant: "Bala", count: 11, amount: 12700 },
+        { tenant: "Chitra", count: 5, amount: 9000 },
+        null,
+        { tenant: "Esha", count: 1, amount: 5100 },
+      ]],
+    ]);
+  });
+});
+
+describe("parseSchedule: header matching", () => {
+  const withHeader = (index: number, text: string) => {
+    const values = baseSchedule();
+    (values[2] as string[])[index] = text;
+    return values;
+  };
+  const portionsWith = (id: string, headers: { tenantHeader?: string; countHeader?: string; amountHeader?: string }) =>
+    PORTIONS.map((p) => (p.id === id ? { ...p, ...headers } : p));
+
+  it("says where to look when a header is missing, with the header row number", () => {
+    expect(() => parseSchedule(withHeader(4, "Tenant two"), PORTIONS, TOTAL_HEADER)).toThrow(
+      'Header "Tenant2" was not found in the Schedule tab. Check the spelling in the Schedule header row (row 3) and in the Settings tab.',
+    );
+    const lower = baseSchedule();
+    lower.splice(0, 1);
+    expect(() => parseSchedule(lower, PORTIONS, "Per Month")).toThrow(
+      'Header "Per Month" was not found in the Schedule tab. Check the spelling in the Schedule header row (row 2) and in the Settings tab.',
+    );
+  });
+
+  it("keeps the duplicate message as it was", () => {
+    expect(() => parseSchedule(withHeader(7, "Tenant"), PORTIONS, TOTAL_HEADER)).toThrow(
+      'Header "Tenant" appears more than once in the Schedule tab.',
+    );
+  });
+
+  it("matches a header whose spacing differs from Settings: inner double spaces, no-break and zero-width spaces", () => {
+    const sheet = baseSchedule();
+    (sheet[2] as string[])[5] = "Count\u00a0\u00a02";
+    (sheet[2] as string[])[7] = "Ten\u200bant3";
+    const { layout } = parseSchedule(sheet, portionsWith("p2", { countHeader: "Count 2" }), TOTAL_HEADER);
+    expect(layout.portionCols.get("p2")).toEqual({ tenant: 4, count: 5, amount: 6 });
+    expect(layout.portionCols.get("p3")).toEqual({ tenant: 7, count: 8, amount: 9 });
+
+    const doubled = baseSchedule();
+    (doubled[2] as string[])[5] = "Count  2";
+    expect(parseSchedule(doubled, portionsWith("p2", { countHeader: "Count 2" }), TOTAL_HEADER).layout.portionCols.get("p2")).toEqual({
+      tenant: 4,
+      count: 5,
+      amount: 6,
+    });
+  });
+
+  it("does not treat Count2 and Count 2 as the same header", () => {
+    expect(() => parseSchedule(withHeader(5, "Count 2"), PORTIONS, TOTAL_HEADER)).toThrow(/Header "Count2" was not found/);
+  });
+
+  it("finds the exact header when Count 2 and Count  2 are both in the row, with no duplicate error", () => {
+    const sheet = baseSchedule();
+    (sheet[2] as string[])[5] = "Count 2";
+    (sheet[2] as string[]).push("Count  2");
+    const { layout } = parseSchedule(sheet, portionsWith("p2", { countHeader: "Count 2" }), TOTAL_HEADER);
+    expect(layout.portionCols.get("p2")?.count).toBe(5);
+  });
+
+  it("still reports a header the looser rule finds twice, when the old rule found none", () => {
+    const sheet = baseSchedule();
+    (sheet[2] as string[]).push("Notes  x", "Notes\u00a0x");
+    expect(() => parseSchedule(sheet, PORTIONS, "Notes x")).toThrow(
+      'Header "Notes x" appears more than once in the Schedule tab.',
+    );
+  });
+
+  it("finds the header row when the Month header has odd spacing or invisible characters", () => {
+    expect(findHeaderRowIndex(baseSchedule())).toBe(2);
+    expect(findHeaderRowIndex([["Intro"], ["Mo\u200bnth", "Tenant"], ["Month"]])).toBe(1);
+    expect(findHeaderRowIndex([["\ufeffMonth"]])).toBe(0);
+    expect(findHeaderRowIndex([["Mo nth"], ["Month"]])).toBe(1);
+    expect(findHeaderRowIndex([["Months"], ["Month "]])).toBe(1);
+    const sheet = baseSchedule();
+    (sheet[2] as string[])[0] = "Mon\u200bth";
+    expect(parseSchedule(sheet, PORTIONS, TOTAL_HEADER).layout.monthCol).toBe(0);
   });
 });

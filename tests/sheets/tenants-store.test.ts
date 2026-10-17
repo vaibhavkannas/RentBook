@@ -230,6 +230,38 @@ describe("readTenancies: the header is checked on every read", () => {
     await expect(readTenancies(fake)).resolves.toEqual([]);
     expect(fake.calls).not.toContain("updateValues");
   });
+
+  it("ignores capitals, inner double spaces, no-break and zero-width spaces in a header", async () => {
+    const loose = [...TENANT_HEADERS];
+    loose[4] = "move-in  DATE";
+    loose[6] = "ADVANCE";
+    loose[7] = "Advance\u00a0date";
+    loose[8] = "Advance\u200b status";
+    loose[12] = " Move-out \n date ";
+    const fake = new FakeGateway({ Schedule: baseSchedule(), [TENANTS_TAB]: [loose, ["t-1", "p1", "Asha", "", "2026-01-15"]] });
+    await expect(readTenancies(fake)).resolves.toHaveLength(1);
+    expect(fake.calls).not.toContain("updateValues");
+  });
+
+  it("still goes by position: a header in the wrong column is refused however it is spelled", async () => {
+    const swapped = [...TENANT_HEADERS];
+    swapped[1] = "TENANT";
+    swapped[2] = "portion";
+    const fake = new FakeGateway({ Schedule: baseSchedule(), [TENANTS_TAB]: [swapped] });
+    const error = await structureError(() => readTenancies(fake));
+    expect(error.message).toContain('"Portion" in column B');
+    expect(error.message).toContain('(found "TENANT")');
+  });
+
+  it("keeps the message as it was for a header that is really different", async () => {
+    const wrong = [...TENANT_HEADERS];
+    wrong[4] = "Moved  in";
+    const fake = new FakeGateway({ Schedule: baseSchedule(), [TENANTS_TAB]: [wrong] });
+    const error = await structureError(() => readTenancies(fake));
+    expect(error.message).toBe(
+      'The Tenants tab must have "Move-in date" in column E (found "Moved  in"). Columns A to O must keep the 15 Tenants headers in their original order; extra columns may go to the right.',
+    );
+  });
 });
 
 describe("readTenancies", () => {

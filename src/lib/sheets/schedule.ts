@@ -7,6 +7,7 @@ import type { PortionConfig, PortionEntry, ScheduleRow } from "@/lib/domain/type
 import { BRAND } from "@/lib/brand";
 import { sheetStructure } from "@/lib/errors";
 import { isBlankCell } from "./cells";
+import { findHeader, headerKey } from "./headers";
 
 export type ScheduleLayout = {
   /** 1-based row number of the header row. */
@@ -22,8 +23,6 @@ export type ScheduleLayout = {
 };
 
 const HEADER_SEARCH_ROWS = 25;
-
-const norm = (value: unknown) => String(value ?? "").trim().toLowerCase();
 
 const MESSAGE_CELL_LENGTH = 40;
 
@@ -65,23 +64,23 @@ export function columnsOf(layout: ScheduleLayout, portionId: string) {
   return cols;
 }
 
-function findColumn(headers: unknown[], name: string): number {
-  const wanted = norm(name);
-  const matches = headers.flatMap((header, index) => (norm(header) === wanted ? [index] : []));
-  if (matches.length === 0) {
-    throw sheetStructure(`Header "${name}" was not found in the Schedule tab.`);
-  }
-  if (matches.length > 1) {
+/** The column of a header, or an error in words. `headerRow` is the header row's 1-based number, for the message. */
+function findColumn(headers: unknown[], name: string, headerRow: number): number {
+  const found = findHeader(headers, name);
+  if ("index" in found) return found.index;
+  if (found.problem === "duplicate") {
     throw sheetStructure(`Header "${name}" appears more than once in the Schedule tab.`);
   }
-  return matches[0];
+  throw sheetStructure(
+    `Header "${name}" was not found in the Schedule tab. Check the spelling in the Schedule header row (row ${headerRow}) and in the Settings tab.`,
+  );
 }
 
 /** 0-based index of the row that holds the "Month" header, or -1. */
 export function findHeaderRowIndex(values: unknown[][]): number {
   return values
     .slice(0, HEADER_SEARCH_ROWS)
-    .findIndex((row) => row.some((cell) => norm(cell) === "month"));
+    .findIndex((row) => row.some((cell) => headerKey(cell) === "month"));
 }
 
 /**
@@ -99,15 +98,16 @@ export function parseSchedule(
     throw sheetStructure('No header row containing "Month" was found in the Schedule tab.');
   }
   const headers = values[headerIndex];
-  const monthCol = findColumn(headers, "Month");
-  const totalCol = findColumn(headers, totalHeader);
+  const headerRow = headerIndex + 1;
+  const monthCol = findColumn(headers, "Month", headerRow);
+  const totalCol = findColumn(headers, totalHeader, headerRow);
 
   const portionCols: ScheduleLayout["portionCols"] = new Map();
   for (const portion of portions) {
     portionCols.set(portion.id, {
-      tenant: findColumn(headers, portion.tenantHeader),
-      count: findColumn(headers, portion.countHeader),
-      amount: findColumn(headers, portion.amountHeader),
+      tenant: findColumn(headers, portion.tenantHeader, headerRow),
+      count: findColumn(headers, portion.countHeader, headerRow),
+      amount: findColumn(headers, portion.amountHeader, headerRow),
     });
   }
   // Two Settings rows naming the same header would make two portions share cells.
@@ -164,7 +164,7 @@ export function parseSchedule(
 
   const lastDataRow = rows.length > 0 ? rows[rows.length - 1].rowNumber : headerIndex + 1;
   return {
-    layout: { headerRow: headerIndex + 1, monthCol, totalCol, portionCols, codec, lastDataRow },
+    layout: { headerRow, monthCol, totalCol, portionCols, codec, lastDataRow },
     rows,
   };
 }

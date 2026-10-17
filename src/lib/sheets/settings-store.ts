@@ -2,8 +2,11 @@ import { getBrand } from "@/lib/brand";
 import { cleanText, MAX_NAME_LENGTH } from "@/lib/domain/input-rules";
 import type { PortionConfig } from "@/lib/domain/types";
 import { sheetStructure, tabMissing, unknownPortion, validation } from "@/lib/errors";
+import { logEvent } from "@/lib/server/log";
+import { colLetter } from "./a1";
 import { isBlankCell } from "./cells";
-import type { SheetsGateway } from "./gateway";
+import type { CellWrite, SheetsGateway } from "./gateway";
+import { headerKey } from "./headers";
 import { findHeaderRowIndex, shorten } from "./schedule";
 import { addTabIfMissing } from "./tabs";
 import { ensureTenantsTab, TENANTS_TAB } from "./tenants-store";
@@ -47,48 +50,59 @@ export const SETTINGS_RANGE = "A1:G50";
 export const DEFAULT_CYCLE_LENGTH = 11;
 export const DEFAULT_HIKE_PERCENT = 5;
 
-const TENANT_HEADER = /^tenant\s*\d*$/i;
-const COUNT_HEADER = /^count\s*\d*$/i;
-const AMOUNT_HEADER = /^amount\s*\d*$/i;
+const TENANT_HEADER = /^tenant\s*(\d*)$/;
+const COUNT_HEADER = /^count\s*(\d*)$/;
+const AMOUNT_HEADER = /^amount\s*(\d*)$/;
+
+/** The number a Tenant, Count or Amount header ends in ("" when it has none), or null when it is not that kind of header. */
+const numberOf = (pattern: RegExp, header: string) => pattern.exec(headerKey(header))?.[1] ?? null;
 
 /**
- * Builds default portion settings from the Schedule header row: every
- * "Tenant*" header must be followed by a "Count*" and an "Amount*" header.
+ * Builds default portion settings from the Schedule header row: every "Tenant*" header must be followed by a
+ * "Count*" and an "Amount*" header. Straight after the Tenant header they are taken whatever their numbers; with
+ * other columns in between (a Phone column, say) the Count and the Amount must carry the Tenant's own number and
+ * lie before the next Tenant header, the Amount after the Count. Headers are recognised by `headerKey`, and the
+ * Settings get them as typed.
  */
 export function inferPortions(headerRow: unknown[]): PortionConfig[] {
   const cells = headerRow.map((cell) => String(cell ?? "").trim());
   const portions: PortionConfig[] = [];
   const seen = new Set<string>();
   cells.forEach((header, index) => {
-    if (/^tenant/i.test(header) && !TENANT_HEADER.test(header)) {
+    if (/^tenant/.test(headerKey(header)) && numberOf(TENANT_HEADER, header) === null) {
       throw sheetStructure(
         `"${header}" looks like a Tenant column but is not named like one. Use Tenant, Tenant2, Tenant3 and so on.`,
       );
     }
-    if (!TENANT_HEADER.test(header)) return;
-    for (const name of [header, cells[index + 1] ?? "", cells[index + 2] ?? ""]) {
+    const number = numberOf(TENANT_HEADER, header);
+    if (number === null) return;
+    if (seen.has(header.toLowerCase())) {
+      throw sheetStructure(
+        `Header "${header}" appears more than once in the Schedule tab. Give each portion its own headers, for example Tenant, Count, Amount, then Tenant2, Count2, Amount2.`,
+      );
+    }
+    const [count, amount] = pairWith(cells, index, number);
+    if (count === null || amount === null) {
+      throw sheetStructure(
+        `"${header}" must be followed by a Count and an Amount column in the Schedule tab.`,
+      );
+    }
+    for (const name of [header, cells[count], cells[amount]]) {
       const key = name.toLowerCase();
-      if (key && seen.has(key)) {
+      if (seen.has(key)) {
         throw sheetStructure(
           `Header "${name}" appears more than once in the Schedule tab. Give each portion its own headers, for example Tenant, Count, Amount, then Tenant2, Count2, Amount2.`,
         );
       }
       seen.add(key);
     }
-    const count = cells[index + 1] ?? "";
-    const amount = cells[index + 2] ?? "";
-    if (!COUNT_HEADER.test(count) || !AMOUNT_HEADER.test(amount)) {
-      throw sheetStructure(
-        `"${header}" must be followed by a Count and an Amount column in the Schedule tab.`,
-      );
-    }
     const position = portions.length;
     portions.push({
       id: `p${position + 1}`,
       name: DEFAULT_PORTION_NAMES[position] ?? `Portion ${position + 1}`,
       tenantHeader: header,
-      countHeader: count,
-      amountHeader: amount,
+      countHeader: cells[count],
+      amountHeader: cells[amount],
       cycleLength: DEFAULT_CYCLE_LENGTH,
       hikePercent: DEFAULT_HIKE_PERCENT,
     });
@@ -97,6 +111,25 @@ export function inferPortions(headerRow: unknown[]): PortionConfig[] {
     throw sheetStructure('No "Tenant" columns were found in the Schedule header row.');
   }
   return portions;
+}
+
+/**
+ * The columns of the Count and the Amount that belong to the Tenant header at `tenantAt` (null for one that is
+ * not there). The two columns right after it count, whatever their numbers. Otherwise the first Count with the
+ * Tenant's `number`, then the first Amount with it after that Count, both before the next Tenant header.
+ */
+function pairWith(cells: string[], tenantAt: number, number: string): [number | null, number | null] {
+  const next = cells.findIndex((cell, at) => at > tenantAt && numberOf(TENANT_HEADER, cell) !== null);
+  const end = next === -1 ? cells.length : next;
+  if (numberOf(COUNT_HEADER, cells[tenantAt + 1]) !== null && numberOf(AMOUNT_HEADER, cells[tenantAt + 2]) !== null) {
+    return [tenantAt + 1, tenantAt + 2];
+  }
+  const firstWith = (pattern: RegExp, from: number) => {
+    for (let at = from; at < end; at++) if (numberOf(pattern, cells[at]) === number) return at;
+    return null;
+  };
+  const count = firstWith(COUNT_HEADER, tenantAt + 1);
+  return [count, count === null ? null : firstWith(AMOUNT_HEADER, count + 1)];
 }
 
 const toSettingsRow = (p: PortionConfig) => [
@@ -166,6 +199,31 @@ async function seedSettings(
   ]);
 }
 
+/** The Payments Log columns that were added after the first seven (0-based): Logged by (H) and Action (I). */
+const NEWER_LOG_COLUMNS = [7, 8];
+
+/**
+ * What an older Payments Log's header row needs, by 0-based column: `fill` are the cells of H1 and I1 that are
+ * blank (the header goes there), `taken` the ones that hold other text (left alone: it is the owner's). A cell
+ * that already holds the header, in any case or spacing (`headerKey`), is neither.
+ */
+export function logHeaderUpgrade(header: unknown[]): { fill: number[]; taken: number[] } {
+  const fill: number[] = [];
+  const taken: number[] = [];
+  for (const column of NEWER_LOG_COLUMNS) {
+    const found = headerKey(header[column]);
+    if (found === "") fill.push(column);
+    else if (found !== headerKey(LOG_HEADERS[column])) taken.push(column);
+  }
+  return { fill, taken };
+}
+
+/** The writes for `fill` (see logHeaderUpgrade): H1:I1 in one write when both are blank, otherwise just the blank cell. */
+function logHeaderWrites(fill: number[]): CellWrite[] {
+  const a1 = fill.length === NEWER_LOG_COLUMNS.length ? "H1:I1" : `${colLetter(fill[0])}1`;
+  return [{ tab: LOG_TAB, a1, values: [fill.map((column) => LOG_HEADERS[column])] }];
+}
+
 /**
  * Creates the Settings, Payments Log and Tenants tabs when they are missing, once per gateway instance
  * (until resetBootstrap). Settings is seeded from the Schedule header row, and only on a Sheet that has none
@@ -198,12 +256,19 @@ export async function ensureTabs(gateway: SheetsGateway, scheduleTab: string): P
   if (!tabs.includes(LOG_TAB) && (await addTabIfMissing(gateway, LOG_TAB))) {
     await gateway.updateValues([{ tab: LOG_TAB, a1: "A1", values: [LOG_HEADERS] }]);
   } else {
-    // An older Payments Log has only the first seven columns. Add the two new headers once.
     const header = (await gateway.getValues(LOG_TAB, "A1:I1", "FORMATTED_VALUE"))[0] ?? [];
     if (header.length === 0) {
       await gateway.updateValues([{ tab: LOG_TAB, a1: "A1", values: [LOG_HEADERS] }]);
-    } else if (header[7] !== LOG_HEADERS[7] || header[8] !== LOG_HEADERS[8]) {
-      await gateway.updateValues([{ tab: LOG_TAB, a1: "H1:I1", values: [LOG_HEADERS.slice(7)] }]);
+    } else {
+      // An older Payments Log has only the first seven columns. Add the two new headers once, into blank cells only.
+      const { fill, taken } = logHeaderUpgrade(header);
+      if (fill.length > 0) await gateway.updateValues(logHeaderWrites(fill));
+      if (taken.length > 0) {
+        const cells = taken.map((column) => `${colLetter(column)}1`).join(" and ");
+        logEvent("warn", "payments-log-header-taken", {
+          message: `Payments Log ${taken.length === 1 ? "cell" : "cells"} ${cells} already ${taken.length === 1 ? "holds" : "hold"} other text, so no header was written there. Rows are still saved by column position.`,
+        });
+      }
     }
   }
   await ensureTenantsTab(gateway, tabs);
@@ -222,6 +287,9 @@ const PORTION_ID = /^[A-Za-z0-9_-]{1,20}$/;
  */
 function parseSettingsRows(values: unknown[][]): SettingsRow[] {
   const portions: SettingsRow[] = [];
+  // The first row to use each id (compared in lower case), and the id as it is typed there: two portions with one id
+  // would share a card, a URL and a write.
+  const idRows = new Map<string, { row: number; id: string }>();
   values.slice(1).forEach((row, offset) => {
     const sheetRow = offset + 2;
     const headerCells = [row[2], row[3], row[4]];
@@ -239,6 +307,13 @@ function parseSettingsRows(values: unknown[][]): SettingsRow[] {
         `Settings row ${sheetRow}: the portion id "${shorten(id)}" can only use letters, numbers, - and _, up to 20 characters.`,
       );
     }
+    const first = idRows.get(id.toLowerCase());
+    if (first !== undefined) {
+      throw sheetStructure(
+        `Settings rows ${first.row} and ${sheetRow} both use the portion id "${first.id}". Give each portion its own id.`,
+      );
+    }
+    idRows.set(id.toLowerCase(), { row: sheetRow, id });
     const cycle = row[5];
     const hike = row[6];
     if (cycle !== undefined && cycle !== "" && !(Number.isInteger(cycle) && (cycle as number) >= 1)) {

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { AppError } from "@/lib/errors";
 import {
   ensureTabs,
@@ -11,6 +11,7 @@ import {
 } from "@/lib/sheets/settings-store";
 import { TENANT_HEADERS, TENANTS_TAB } from "@/lib/sheets/tenants-store";
 import { FakeGateway } from "../support/fake-gateway";
+import { captureLogs, loggedLines } from "../support/logs";
 import { baseSchedule, PORTIONS, SCHEDULE_HEADERS, settingsGrid } from "../support/fixtures";
 
 describe("inferPortions", () => {
@@ -35,6 +36,78 @@ describe("inferPortions", () => {
 
   it("refuses a header row with no Tenant columns", () => {
     expect(() => inferPortions(["Month", "Total"])).toThrow(/No "Tenant" columns/);
+  });
+});
+
+describe("inferPortions: other columns between a portion's three", () => {
+  const headers = (...cells: string[]) => ["Month", ...cells, "Total Rent"];
+  const columnsOf = (portions: ReturnType<typeof inferPortions>) =>
+    portions.map((p) => [p.tenantHeader, p.countHeader, p.amountHeader]);
+
+  it("pairs a Tenant with a Count and an Amount that have a Phone column between them", () => {
+    const portions = inferPortions(
+      headers("Tenant", "Count", "Amount", "Tenant2", "Phone2", "Count2", "Amount2", "Tenant3", "Count3", "Notes3", "Amount3"),
+    );
+    expect(columnsOf(portions)).toEqual([
+      ["Tenant", "Count", "Amount"],
+      ["Tenant2", "Count2", "Amount2"],
+      ["Tenant3", "Count3", "Amount3"],
+    ]);
+    expect(portions.map((p) => p.id)).toEqual(["p1", "p2", "p3"]);
+  });
+
+  it("keeps the header text as it is typed, so the Schedule can be matched by it later", () => {
+    const portions = inferPortions(headers(" Tenant  2 ", "Phone", "Count  2", "Amount 2"));
+    expect(columnsOf(portions)).toEqual([["Tenant  2", "Count  2", "Amount 2"]]);
+  });
+
+  it("reads a header with a no-break or zero-width space as a Tenant, Count and Amount header", () => {
+    const portions = inferPortions(headers("Tenant\u00a02", "Count\u200b 2", "Amount\u00a0\u00a02"));
+    expect(columnsOf(portions)).toEqual([["Tenant\u00a02", "Count\u200b 2", "Amount\u00a0\u00a02"]]);
+  });
+
+  it("looks for the Count and the Amount only before the next Tenant header", () => {
+    expect(() => inferPortions(headers("Tenant", "Phone", "Tenant2", "Count2", "Amount2"))).toThrow(
+      /"Tenant" must be followed by a Count and an Amount/,
+    );
+  });
+
+  it("looks for the Amount after the Count, never before it", () => {
+    expect(() => inferPortions(headers("Tenant", "Amount", "Phone", "Count"))).toThrow(AppError);
+    expect(() => inferPortions(["Month", "Tenant", "Amount", "Count"])).toThrow(AppError);
+  });
+
+  it("pairs a Tenant N with the Count N and Amount N of the same number when other columns sit between them", () => {
+    expect(() => inferPortions(headers("Tenant2", "Phone", "Count", "Amount"))).toThrow(AppError);
+    expect(columnsOf(inferPortions(headers("Tenant2", "Phone", "Count2", "Amount2")))).toEqual([
+      ["Tenant2", "Count2", "Amount2"],
+    ]);
+  });
+
+  it("still takes a Count and an Amount straight after the Tenant, whatever their numbers", () => {
+    expect(columnsOf(inferPortions(headers("Tenant", "Count2", "Amount3")))).toEqual([["Tenant", "Count2", "Amount3"]]);
+  });
+
+  it("still refuses a Tenant-looking header it cannot read", () => {
+    expect(() => inferPortions(headers("Tenant (1F double)", "Count", "Amount"))).toThrow(/looks like a Tenant column/);
+    expect(() => inferPortions(headers("Tenant", "Count", "Amount", "Tenant (1F double)", "Count", "Amount"))).toThrow(
+      /looks like a Tenant column/,
+    );
+  });
+
+  it("still refuses the same header twice", () => {
+    expect(() => inferPortions(headers("Tenant", "Count", "Amount", "Tenant", "Phone", "Count", "Amount"))).toThrow(
+      /Header "Tenant" appears more than once/,
+    );
+    expect(() => inferPortions(headers("Tenant", "Count", "Amount", "Tenant2", "Count", "Amount2"))).toThrow(
+      /Header "Count" appears more than once/,
+    );
+  });
+
+  it("still ignores Count and Amount columns that belong to no Tenant column", () => {
+    expect(columnsOf(inferPortions(headers("Tenant", "Count", "Amount", "Count2", "Amount2")))).toEqual([
+      ["Tenant", "Count", "Amount"],
+    ]);
   });
 });
 
@@ -161,6 +234,79 @@ describe("ensureTabs: Payments Log header upgrade", () => {
   });
 });
 
+describe("ensureTabs: Payments Log headers that are not ours", () => {
+  const first7 = LOG_HEADERS.slice(0, 7);
+  const row = ["2026-09-05T00:00:00.000Z", "2026-09", "First floor, single bedroom", "Asha", 5450, 3, "2026-09-05"];
+
+  afterEach(() => vi.restoreAllMocks());
+
+  async function run(logRows: unknown[][]) {
+    const logs = captureLogs();
+    const fake = new FakeGateway({
+      Schedule: baseSchedule(),
+      [SETTINGS_TAB]: settingsGrid(),
+      [LOG_TAB]: logRows,
+      [TENANTS_TAB]: [[...TENANT_HEADERS]],
+    });
+    await ensureTabs(fake, "Schedule");
+    return { fake, logs };
+  }
+
+  it("keeps a H1 that holds other text, fills a blank I1, and logs it once", async () => {
+    const { fake, logs } = await run([[...first7, "Comments"], row]);
+    expect(fake.tabs.get(LOG_TAB)).toEqual([[...first7, "Comments", "Action"], row]);
+    expect(loggedLines(logs.warn)).toEqual([
+      expect.objectContaining({ level: "warn", event: "payments-log-header-taken", message: expect.stringContaining("H1") }),
+    ]);
+    expect(logs.error).not.toHaveBeenCalled();
+  });
+
+  it("keeps an I1 that holds other text, fills a blank H1", async () => {
+    const { fake, logs } = await run([[...first7, "", "Remarks"]]);
+    expect(fake.tabs.get(LOG_TAB)).toEqual([[...first7, "Logged by", "Remarks"]]);
+    const [line] = loggedLines(logs.warn);
+    expect(line.event).toBe("payments-log-header-taken");
+    expect(String(line.message)).toContain("I1");
+    expect(String(line.message)).not.toContain("H1");
+  });
+
+  it("leaves both cells alone, and says so in one log line, when both hold other text", async () => {
+    const { fake, logs } = await run([[...first7, "Comments", "Remarks"], row]);
+    expect(fake.tabs.get(LOG_TAB)).toEqual([[...first7, "Comments", "Remarks"], row]);
+    expect(fake.calls).not.toContain("updateValues");
+    const lines = loggedLines(logs.warn);
+    expect(lines).toHaveLength(1);
+    expect(String(lines[0].message)).toContain("H1 and I1");
+  });
+
+  it("does not put what the cell holds in the log line", async () => {
+    const { logs } = await run([[...first7, "Secret remark"]]);
+    expect(JSON.stringify(loggedLines(logs.warn))).not.toContain("Secret remark");
+  });
+
+  it("compares H1 and I1 with the same looser rule: case, spacing and invisible characters do not matter", async () => {
+    const header = [...first7, " logged  BY ", "Ac\u200btion"];
+    const { fake, logs } = await run([header, row]);
+    expect(fake.tabs.get(LOG_TAB)).toEqual([header, row]);
+    expect(fake.calls).not.toContain("updateValues");
+    expect(logs.warn).not.toHaveBeenCalled();
+  });
+
+  it("fills only the missing cell of a half-upgraded header", async () => {
+    const { fake, logs } = await run([[...first7, "Logged by"]]);
+    expect(fake.tabs.get(LOG_TAB)).toEqual([LOG_HEADERS]);
+    expect(logs.warn).not.toHaveBeenCalled();
+    const writes = fake.calls.filter((call) => call === "updateValues");
+    expect(writes).toHaveLength(1);
+  });
+
+  it("still writes both headers into an old header row in one go", async () => {
+    const { fake } = await run([first7, row]);
+    expect(fake.tabs.get(LOG_TAB)![0]).toEqual(LOG_HEADERS);
+    expect(fake.calls.filter((call) => call === "updateValues")).toHaveLength(1);
+  });
+});
+
 describe("readSettings", () => {
   const withRow = (row: unknown[]) =>
     new FakeGateway({ [SETTINGS_TAB]: [["Portion"], row] });
@@ -261,6 +407,52 @@ describe("readSettings: rows typed by hand", () => {
     expect(message).toMatch(/Settings row 3\b/);
     expect(message).toContain('"bad id !"');
     expect(message).not.toMatch(/[\u0000-\u001f\u007f-\u009f\u2028\u2029]/);
+  });
+});
+
+describe("readSettings: two rows with the same id", () => {
+  const row = (id: string, n: number) => [id, `Portion ${n}`, `Tenant${n}`, `Count${n}`, `Amount${n}`, 11, 5];
+  const problemOf = async (rows: unknown[][]) => {
+    const error = await readSettings(new FakeGateway({ [SETTINGS_TAB]: [["Portion"], ...rows] })).then(
+      () => null,
+      (e: unknown) => e,
+    );
+    expect(error).toBeInstanceOf(AppError);
+    expect((error as AppError).code).toBe("sheet-structure");
+    return (error as AppError).message;
+  };
+
+  it("names both rows and the id", async () => {
+    expect(await problemOf([row("p1", 1), row("p2", 2), row("p3", 3), row("p4", 4), row("p5", 5), row("p2", 6)])).toBe(
+      'Settings rows 3 and 7 both use the portion id "p2". Give each portion its own id.',
+    );
+  });
+
+  it("counts the real sheet rows, blank rows and notes included", async () => {
+    expect(await problemOf([row("p1", 1), [], ["a note"], row("p2", 2), row("p3", 3), [], row("p2", 4)])).toBe(
+      'Settings rows 5 and 8 both use the portion id "p2". Give each portion its own id.',
+    );
+  });
+
+  it("compares ids without regard to capitals or the spaces around them", async () => {
+    expect(await problemOf([row("p2", 1), row(" P2 ", 2)])).toBe(
+      'Settings rows 2 and 3 both use the portion id "p2". Give each portion its own id.',
+    );
+  });
+
+  it("is not triggered by a note row that repeats an id but has no headers", async () => {
+    const fake = new FakeGateway({
+      [SETTINGS_TAB]: [["Portion"], row("p1", 1), ["p1", "see the lease", "", "", ""], row("p2", 2)],
+    });
+    expect((await readSettings(fake)).map((p) => p.id)).toEqual(["p1", "p2"]);
+  });
+
+  it("is the same refusal for the page's read as for a write", async () => {
+    const fake = new FakeGateway({ [SETTINGS_TAB]: [["Portion"], row("p1", 1), row("p1", 2)] });
+    await expect(updateSettings(fake, [{ id: "p1", name: "A", cycleLength: 11, hikePercent: 5 }])).rejects.toThrow(
+      /both use the portion id "p1"/,
+    );
+    expect(fake.calls).not.toContain("updateValues");
   });
 });
 

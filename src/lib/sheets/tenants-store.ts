@@ -4,6 +4,7 @@ import { sheetStructure } from "@/lib/errors";
 import { colLetter } from "./a1";
 import { isBlankCell, text } from "./cells";
 import type { CellWrite, SheetsGateway } from "./gateway";
+import { headerKey } from "./headers";
 import { addTabIfMissing } from "./tabs";
 
 export const TENANTS_TAB = "Tenants";
@@ -54,13 +55,14 @@ export async function ensureTenantsTab(
 }
 
 /**
- * Compares row 1 with the fifteen headers (spaces around a header do not matter). Returns the first wrong or
- * missing one in plain words, or null when columns A to O are right. Columns to the right of O are not looked at.
+ * Compares row 1 with the fifteen headers, by position (capitals, spaces around a header, doubled or no-break
+ * spaces and invisible characters do not matter: see `headerKey`). Returns the first wrong or missing one in plain
+ * words, or null when columns A to O are right. Columns to the right of O are not looked at.
  */
 function headerProblem(header: unknown[]): string | null {
   for (let index = 0; index < TENANT_HEADERS.length; index++) {
     const found = String(header[index] ?? "").trim();
-    if (found !== TENANT_HEADERS[index]) {
+    if (headerKey(found) !== headerKey(TENANT_HEADERS[index])) {
       return (
         `The Tenants tab must have "${TENANT_HEADERS[index]}" in column ${colLetter(index)} ` +
         `(found ${found === "" ? "nothing" : `"${found}"`}). Columns A to ${LAST_COLUMN} must keep the ` +
