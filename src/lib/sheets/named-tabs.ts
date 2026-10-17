@@ -126,12 +126,25 @@ export class NamedTabsGateway implements SheetsGateway, TabNaming {
     return this.entries.find((entry) => entry.logical === appName)?.configured ?? appName;
   }
 
-  /** The real title of each of the four tabs, or null for one that was not found. Always read from the Sheet. */
-  async realTitles(): Promise<Record<TabKey, string | null>> {
-    const found = this.resolve(await this.run(() => this.inner.listTabs()));
+  /** The real title of each of the four tabs in what has been found, or null for one that was not found. */
+  private titlesIn(found: Map<string, string>): Record<TabKey, string | null> {
     const titles = {} as Record<TabKey, string | null>;
     for (const { key, logical } of this.entries) titles[key] = found.get(logical) ?? null;
     return titles;
+  }
+
+  /** The real title of each of the four tabs, or null for one that was not found. Always read from the Sheet. */
+  async realTitles(): Promise<Record<TabKey, string | null>> {
+    return this.titlesIn(this.resolve(await this.run(() => this.inner.listTabs())));
+  }
+
+  /**
+   * The same, from the last time the tabs were listed, without asking Google: null when they have not been listed yet,
+   * or the wrapper has forgotten them (Google said a tab is gone). For a check that lists the tabs itself and then wants
+   * their titles, so it costs no call of its own.
+   */
+  knownTitles(): Record<TabKey, string | null> | null {
+    return this.found === null ? null : this.titlesIn(this.found);
   }
 
   async addTab(title: string): Promise<void> {

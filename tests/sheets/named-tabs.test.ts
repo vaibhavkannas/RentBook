@@ -369,6 +369,27 @@ describe("realTitles", () => {
   });
 });
 
+describe("knownTitles", () => {
+  it("is null before the Sheet's tabs have been listed, and then gives the real title of each tab the last listing found, without asking Google", async () => {
+    const fake = new FakeGateway({ schedule: [], "RentBook Tenants": [], Settings: [] });
+    const gateway = new NamedTabsGateway(fake, { ...DEFAULTS, tenants: "RentBook Tenants" });
+    expect(gateway.knownTitles()).toBeNull();
+    await gateway.listTabs();
+    expect(fake.calls).toEqual(["listTabs"]);
+    expect(gateway.knownTitles()).toEqual({ schedule: "schedule", settings: "Settings", log: null, tenants: "RentBook Tenants" });
+    expect(fake.calls).toEqual(["listTabs"]);
+  });
+
+  it("is forgotten when Google says a tab is gone", async () => {
+    const fake = new GoogleLikeFake({ Schedule: baseSchedule() });
+    const gateway = new NamedTabsGateway(fake, DEFAULTS);
+    await gateway.listTabs();
+    expect(gateway.knownTitles()).not.toBeNull();
+    await gateway.getValues("Settings", "A1", "UNFORMATTED_VALUE").catch(() => undefined);
+    expect(gateway.knownTitles()).toBeNull();
+  });
+});
+
 describe("configuredTabName", () => {
   it("gives the name the owner asked for an app tab, and the app's own name for a name it does not know", () => {
     const gateway = new NamedTabsGateway(new FakeGateway({}), { ...DEFAULTS, settings: "My Settings", tenants: "RentBook Tenants" });
