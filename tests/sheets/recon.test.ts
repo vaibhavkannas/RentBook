@@ -29,6 +29,27 @@ describe("describeSheet", () => {
     expect(fake.calls.every((call) => call === "listTabs" || call === "getValues")).toBe(true);
   });
 
+  it("says there is no total column when none is set, and reads no total cell", async () => {
+    const fake = new FakeGateway({ Schedule: baseSchedule() });
+    const report = await describeSheet(fake, "Schedule", null);
+
+    expect(report.problems).toEqual([]);
+    expect(report.totalHeader).toBeNull();
+    expect(report.totalCellIsFormula).toBeNull();
+    expect(report.totalCellSample).toBeNull();
+    expect(report.notes).toEqual([expect.stringMatching(/^No total column/)]);
+    expect(report.rowBelowTableEmpty).toBe(true);
+    expect(report.lastDataRow).toBe(5);
+    // the row below the table is still looked at, with the one read that asks for formulas; the total cell is not
+    const reads = fake.calls.filter((call) => call === "getValues").length;
+    expect(reads).toBe(2);
+  });
+
+  it("has no notes for a Sheet with a total column", async () => {
+    const report = await describeSheet(new FakeGateway({ Schedule: baseSchedule() }), "Schedule", TOTAL_HEADER);
+    expect(report.notes).toEqual([]);
+  });
+
   it("puts a failure to list the tabs into problems instead of throwing", async () => {
     const fake = new FakeGateway({ Schedule: baseSchedule() });
     fake.failOn.add("listTabs");

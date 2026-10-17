@@ -13,7 +13,8 @@ export type ScheduleLayout = {
   /** 1-based row number of the header row. */
   headerRow: number;
   monthCol: number;
-  totalCol: number;
+  /** The monthly total column, or null when the app was told of none (no TOTAL_HEADER): then no total is ever written. */
+  totalCol: number | null;
   /** By portion id. A Map, because ids are typed by hand and `__proto__` or `constructor` must be plain ids. */
   portionCols: Map<string, { tenant: number; count: number; amount: number }>;
   /** The style of the bottom-most month cell: used only to write a new month row, never to read. */
@@ -91,7 +92,7 @@ export function findHeaderRowIndex(values: unknown[][]): number {
 export function parseSchedule(
   values: unknown[][],
   portions: PortionConfig[],
-  totalHeader: string,
+  totalHeader: string | null,
 ): { layout: ScheduleLayout; rows: ScheduleRow[] } {
   const headerIndex = findHeaderRowIndex(values);
   if (headerIndex === -1) {
@@ -100,7 +101,7 @@ export function parseSchedule(
   const headers = values[headerIndex];
   const headerRow = headerIndex + 1;
   const monthCol = findColumn(headers, "Month", headerRow);
-  const totalCol = findColumn(headers, totalHeader, headerRow);
+  const totalCol = totalHeader === null ? null : findColumn(headers, totalHeader, headerRow);
 
   const portionCols: ScheduleLayout["portionCols"] = new Map();
   for (const portion of portions) {
@@ -111,7 +112,8 @@ export function parseSchedule(
     });
   }
   // Two Settings rows naming the same header would make two portions share cells.
-  const owner = new Map<number, string>([[monthCol, "Month"], [totalCol, totalHeader]]);
+  const owner = new Map<number, string>([[monthCol, "Month"]]);
+  if (totalCol !== null && totalHeader !== null) owner.set(totalCol, totalHeader);
   for (const [id, cols] of portionCols) {
     for (const col of [cols.tenant, cols.count, cols.amount]) {
       const other = owner.get(col);

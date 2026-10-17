@@ -5,12 +5,13 @@ export type AppEnv = {
   serviceAccountJson: string;
   sheetId: string;
   scheduleTab: string;
-  totalHeader: string;
+  /** The header of the Schedule's monthly total column, or null when TOTAL_HEADER is not set: then no total is written. */
+  totalHeader: string | null;
   /** Lower-cased, without duplicates (Gmail dot and plus variants count as one). The first address is the owner. */
   allowedEmails: string[];
 };
 
-const REQUIRED = ["GOOGLE_SERVICE_ACCOUNT_JSON", "SHEET_ID", "TOTAL_HEADER"] as const;
+const REQUIRED = ["GOOGLE_SERVICE_ACCOUNT_JSON", "SHEET_ID"] as const;
 
 /** The shortest AUTH_SECRET the app accepts: it signs the sign-in session, the retry token and the freshness cookie. */
 export const MIN_AUTH_SECRET_LENGTH = 32;
@@ -78,7 +79,7 @@ export function readEnv(env: Record<string, string | undefined>): AppEnv {
     serviceAccountJson: env.GOOGLE_SERVICE_ACCOUNT_JSON!.trim(),
     sheetId: env.SHEET_ID!.trim(),
     scheduleTab: env.SCHEDULE_TAB?.trim() || "Schedule",
-    totalHeader: env.TOTAL_HEADER!.trim(),
+    totalHeader: env.TOTAL_HEADER?.trim() || null,
     allowedEmails,
   };
 }

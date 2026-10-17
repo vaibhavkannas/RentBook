@@ -59,8 +59,26 @@ describe("readEnv", () => {
 
   it("lists every missing variable together", () => {
     expect(() => readEnv({ SHEET_ID: "abc" })).toThrow(
-      "Missing environment variables: GOOGLE_SERVICE_ACCOUNT_JSON, TOTAL_HEADER, ALLOWED_EMAILS.",
+      "Missing environment variables: GOOGLE_SERVICE_ACCOUNT_JSON, ALLOWED_EMAILS.",
     );
+  });
+
+  it("does not require TOTAL_HEADER: left out, it is null", () => {
+    const rest: Record<string, string | undefined> = { ...base };
+    delete rest.TOTAL_HEADER;
+    expect(readEnv(rest).totalHeader).toBeNull();
+    expect(() => readEnv({ ...rest, GOOGLE_SERVICE_ACCOUNT_JSON: undefined })).toThrow(
+      "Missing environment variables: GOOGLE_SERVICE_ACCOUNT_JSON.",
+    );
+  });
+
+  it("reads a blank or spaces-only TOTAL_HEADER as no total column", () => {
+    expect(readEnv({ ...base, TOTAL_HEADER: "" }).totalHeader).toBeNull();
+    expect(readEnv({ ...base, TOTAL_HEADER: "   " }).totalHeader).toBeNull();
+  });
+
+  it("trims a TOTAL_HEADER that is set", () => {
+    expect(readEnv({ ...base, TOTAL_HEADER: "  Per Month " }).totalHeader).toBe("Per Month");
   });
 
   it("treats blank values as missing", () => {

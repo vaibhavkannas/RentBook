@@ -57,7 +57,8 @@ export type Snapshot = {
 export type SheetsContext = {
   gateway: SheetsGateway;
   scheduleTab: string;
-  totalHeader: string;
+  /** The header of the monthly total column, or null for none (TOTAL_HEADER not set): the app then writes no total. */
+  totalHeader: string | null;
   /** Short-lived copy of the Settings, Schedule and Tenants reads. Page views use it; writes never do. */
   cache?: SnapshotCache<Snapshot>;
   /** Short-lived copy of the Payments Log, for the Activity page. */
@@ -164,16 +165,21 @@ function sameEntry(a: PortionEntry, b: PortionEntry): boolean {
   return a.tenant === b.tenant && a.count === b.count && a.amount === b.amount;
 }
 
-/** Whether the total cell on `row` holds a formula (read with the FORMULA render). */
-async function totalIsFormula(
+/**
+ * The total column when the app has to fill it in itself on `row`: there is one, and the cell holds a typed value
+ * (read with the FORMULA render), not a formula that adds the row up. Null when there is no total column (nothing
+ * is read) or the total is a formula.
+ */
+async function typedTotalCol(
   ctx: SheetsContext,
   layout: ScheduleLayout,
   row: number,
-): Promise<boolean> {
-  const a1 = `${colLetter(layout.totalCol)}${row}`;
-  const cells = await ctx.gateway.getValues(ctx.scheduleTab, a1, "FORMULA");
+): Promise<number | null> {
+  const col = layout.totalCol;
+  if (col === null) return null;
+  const cells = await ctx.gateway.getValues(ctx.scheduleTab, `${colLetter(col)}${row}`, "FORMULA");
   const value = cells[0]?.[0];
-  return typeof value === "string" && value.startsWith("=");
+  return typeof value === "string" && value.startsWith("=") ? null : col;
 }
 
 /**
@@ -190,7 +196,7 @@ async function ensureMonthRow(
   ctx: SheetsContext,
   loaded: Snapshot,
   month: YearMonth,
-  totalHasFormula: boolean,
+  typedTotal: number | null,
 ): Promise<number> {
   const existing = findMonthRow(loaded.rows, month);
   if (existing) return existing.rowNumber;
@@ -231,7 +237,7 @@ async function ensureMonthRow(
     const isFormula = typeof cell === "string" && cell.startsWith("=");
     if (col !== layout.monthCol && cell !== "" && cell !== undefined && !isFormula) clearCols.add(col);
   });
-  if (!totalHasFormula) clearCols.add(layout.totalCol);
+  if (typedTotal !== null) clearCols.add(typedTotal);
 
   const below = await ctx.gateway.getValues(ctx.scheduleTab, `A${newRow}:ZZ${newRow}`, "FORMULA");
   const occupied = below.some((row) => row.some((cell) => cell !== undefined && cell !== ""));
@@ -441,8 +447,8 @@ async function logPaymentUnchecked(
   // The total's style (formula or typed value) is read from the row being written;
   // for a new month that is the last month row, which the new row is cloned from.
   const totalRow = monthRow ? monthRow.rowNumber : loaded.layout.lastDataRow;
-  const totalHasFormula = await totalIsFormula(ctx, loaded.layout, totalRow);
-  const rowNumber = await ensureMonthRow(ctx, loaded, input.month, totalHasFormula);
+  const typedTotal = await typedTotalCol(ctx, loaded.layout, totalRow);
+  const rowNumber = await ensureMonthRow(ctx, loaded, input.month, typedTotal);
   const cols = columnsOf(loaded.layout, portion.id);
   const at = (col: number) => `${colLetter(col)}${rowNumber}`;
 
@@ -451,11 +457,11 @@ async function logPaymentUnchecked(
     { col: cols.count, value: count },
     { col: cols.amount, value: input.amount },
   ];
-  if (!totalHasFormula) {
+  if (typedTotal !== null) {
     const others = loaded.portions
       .filter((p) => p.id !== portion.id)
       .map((p) => monthRow?.entries.get(p.id)?.amount);
-    cells.push({ col: loaded.layout.totalCol, value: sumAmounts(others) + input.amount });
+    cells.push({ col: typedTotal, value: sumAmounts(others) + input.amount });
   }
   await ctx.gateway.updateValues(
     cells.map(({ col, value }) => ({ tab: ctx.scheduleTab, a1: at(col), values: [[value]] })),
@@ -565,11 +571,12 @@ async function undoPaymentUnchecked(
     { col: cols.count, value: "" },
     { col: cols.amount, value: "" },
   ];
-  if (!(await totalIsFormula(ctx, loaded.layout, monthRow.rowNumber))) {
+  const typedTotal = await typedTotalCol(ctx, loaded.layout, monthRow.rowNumber);
+  if (typedTotal !== null) {
     const others = loaded.portions
       .filter((p) => p.id !== portion.id)
       .map((p) => monthRow.entries.get(p.id)?.amount);
-    cells.push({ col: loaded.layout.totalCol, value: sumAmounts(others) });
+    cells.push({ col: typedTotal, value: sumAmounts(others) });
   }
   await ctx.gateway.updateValues(
     cells.map(({ col, value }) => ({ tab: ctx.scheduleTab, a1: at(col), values: [[value]] })),

@@ -18,10 +18,13 @@ export type ReconReport = {
   lastMonth: string | null;
   monthRows: number;
   lastDataRow: number | null;
-  totalHeader: string;
+  /** Null when TOTAL_HEADER is not set: the app then writes no total (see `notes`). */
+  totalHeader: string | null;
   totalCellIsFormula: boolean | null;
   totalCellSample: string | null;
   rowBelowTableEmpty: boolean | null;
+  /** Things worth knowing that are not problems, such as that there is no total column. */
+  notes: string[];
   problems: string[];
 };
 
@@ -32,7 +35,7 @@ export type ReconReport = {
 export async function describeSheet(
   gateway: SheetsGateway,
   scheduleTab: string,
-  totalHeader: string,
+  totalHeader: string | null,
 ): Promise<ReconReport> {
   const report: ReconReport = {
     tabs: [],
@@ -50,6 +53,7 @@ export async function describeSheet(
     totalCellIsFormula: null,
     totalCellSample: null,
     rowBelowTableEmpty: null,
+    notes: totalHeader === null ? ["No total column (TOTAL_HEADER is not set): no monthly total is written."] : [],
     problems: [],
   };
   try {
@@ -93,10 +97,12 @@ export async function describeSheet(
     report.lastMonth = ymKey(rows[rows.length - 1].month);
     report.lastDataRow = layout.lastDataRow;
 
-    const totalA1 = `${colLetter(layout.totalCol)}${layout.lastDataRow}`;
-    const total = (await gateway.getValues(scheduleTab, totalA1, "FORMULA"))[0]?.[0];
-    report.totalCellIsFormula = typeof total === "string" && total.startsWith("=");
-    report.totalCellSample = total === undefined ? null : String(total);
+    if (layout.totalCol !== null) {
+      const totalA1 = `${colLetter(layout.totalCol)}${layout.lastDataRow}`;
+      const total = (await gateway.getValues(scheduleTab, totalA1, "FORMULA"))[0]?.[0];
+      report.totalCellIsFormula = typeof total === "string" && total.startsWith("=");
+      report.totalCellSample = total === undefined ? null : String(total);
+    }
 
     const nextRow = layout.lastDataRow + 1;
     const below = await gateway.getValues(scheduleTab, `A${nextRow}:ZZ${nextRow}`, "FORMULA");
@@ -122,7 +128,7 @@ export async function describeSheet(
 export async function readMonthRowsReadOnly(
   gateway: SheetsGateway,
   scheduleTab: string,
-  totalHeader: string,
+  totalHeader: string | null,
 ): Promise<ScheduleRow[]> {
   const values = await gateway.getValues(scheduleTab, "A1:ZZ", "UNFORMATTED_VALUE");
   const headerIndex = findHeaderRowIndex(values);
