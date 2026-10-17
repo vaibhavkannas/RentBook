@@ -26,7 +26,7 @@ describe("the words of each toast", () => {
     expect(code("SettingsForm")).toMatch(/import \{[^}]*\bSETTINGS_SAVED_TOAST\b[^}]*\} from "@\/lib\/toast-copy"/);
     expect(code("TenancyForm")).toMatch(/import \{[^}]*\bDETAILS_SAVED_TOAST\b[^}]*\} from "@\/lib\/toast-copy"/);
     expect(code("MoveOutForm")).toMatch(/import \{[^}]*\bmoveOutToastText\b[^}]*\} from "@\/lib\/toast-copy"/);
-    expect(code("UndoSheet")).toMatch(/\bundoToastText\b/);
+    expect(code("UndoSheet")).toMatch(/\bundoExitToastText\b/);
     expect(code("SettingsForm")).toMatch(/toast\.show\(SETTINGS_SAVED_TOAST\)/);
     expect(code("TenancyForm")).toMatch(/toast\.show\(DETAILS_SAVED_TOAST\)/);
     expect(code("MoveOutForm")).toMatch(/toast\.show\(moveOutToastText\(tenant\)\)/);
@@ -99,7 +99,17 @@ describe("a sheet that stopped on a notice", () => {
 
   it("shows the undo sheet's toast when the undo is done, after a retry or a skip, and when the sheet is closed on the notice", () => {
     const sheet = code("UndoSheet");
-    expect(sheet).toMatch(/function done\(\)\s*\{\s*toast\.show\(toastText\);\s*onClose\(\);\s*\}/);
-    expect(sheet).toMatch(/onClose=\{logPending \? done : onClose\}/);
+    expect(sheet).toMatch(/function done\(logEntrySaved: boolean\)\s*\{\s*toast\.show\(undoExitToastText\(card\.name, logEntrySaved\)\);\s*onClose\(\);\s*\}/);
+    expect(sheet).toMatch(/onClose=\{logPending \? \(\) => done\(false\) : onClose\}/);
+  });
+
+  it("says what is true on the way out of the undo sheet: saved after the undo and after a retry that worked, unsaved after Skip for now or Escape", () => {
+    const sheet = code("UndoSheet");
+    // the undo went through and its log entry saved
+    expect(sheet).toMatch(/if \(body\.logWritten === false\) return setPendingToken\(body\.retryToken \?\? ""\);\s*return done\(true\);/);
+    // a retry that worked
+    expect(sheet).toMatch(/if \(body\?\.ok && body\.logWritten\) return done\(true\);/);
+    // Skip for now
+    expect(sheet).toMatch(/onClick=\{\(\) => done\(false\)\}/);
   });
 });

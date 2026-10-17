@@ -9,6 +9,7 @@ import {
 } from "@/lib/domain/tenancy";
 import { isValidIsoDay } from "@/lib/domain/year-month";
 import { conflict } from "@/lib/errors";
+import { RELOAD_HINT } from "@/lib/recovery-hint";
 import type { SheetsGateway } from "./gateway";
 import { appendTenancy, closeTenancyRow, readTenancies } from "./tenants-store";
 
@@ -61,7 +62,7 @@ async function appendNewTenancy(
   const { portionId, tenant, fields } = checked;
   const existing = currentTenancy(tenancies, portionId);
   if (existing && sameTenantName(existing.tenant, tenant)) {
-    throw conflict(`Details already exist for ${tenant}. Refresh the page.`);
+    throw conflict(`Details already exist for ${tenant}. ${RELOAD_HINT}`);
   }
   const row: Omit<Tenancy, "rowNumber"> = {
     id: newTenancyId(),
@@ -129,7 +130,7 @@ export async function recordNewTenant(
   const fresh = await readTenancies(gateway);
   const created = added ? fresh.findLast((t) => t.id === added.id) : undefined;
   if (added && !created) {
-    throw conflict("The Tenants tab changed while the details were being saved. Refresh the page.");
+    throw conflict(`The Tenants tab changed while the details were being saved. ${RELOAD_HINT}`);
   }
 
   const newMoveIn = input.newTenancy?.fields.moveIn ?? input.dateReceived;

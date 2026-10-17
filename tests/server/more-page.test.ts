@@ -77,7 +77,8 @@ describe("the More page", () => {
     const html = await render({ month: "2026-10" });
     const link = /<a [^>]*href="\/settings\?month=2026-10"[^>]*>[\s\S]*?<\/a>/.exec(html)?.[0] ?? "";
     expect(link).toContain("Portion settings");
-    expect(link).toContain("Cycle lengths and hike percentages");
+    expect(link).toContain("Payments per cycle and the hike at each new cycle");
+    expect(link).not.toContain("Cycle length");
     expect(link).toMatch(/class="[^"]*\bmin-h-11\b/);
   });
 

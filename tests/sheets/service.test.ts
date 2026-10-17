@@ -235,6 +235,18 @@ describe("logPayment: tenants", () => {
   });
 });
 
+describe("logPayment: a row below the table that is not empty", () => {
+  it("refuses to add the month there, and says what to do in plain words", async () => {
+    const schedule = baseSchedule();
+    schedule.push(["A note under the table"]);
+    const { ctx } = setup(schedule);
+    const error = await expectCode(pay(ctx, { portionId: "p1" }), "conflict");
+    expect(error.message).toBe(
+      "Row 6 of the Schedule tab is below the last month but not empty, so a new month row cannot be added there. If someone else just added this month, switch to another tab and back, then try again.",
+    );
+  });
+});
+
 describe("logPayment: total column without a formula", () => {
   function plainTotals() {
     const schedule = baseSchedule();
@@ -315,7 +327,7 @@ describe("logPayment: input validation", () => {
   it("names the field in the details of an amount that is out of range, so the screen can show it beside the field", async () => {
     const { ctx } = setup();
     const error = await expectCode(pay(ctx, { portionId: "p1", amount: 0 }), "validation");
-    expect(error.message).toBe("Amount must be a whole number of rupees from 1 to 10,000,000.");
+    expect(error.message).toBe("Amount must be whole rupees, from ₹ 1 to ₹ 1,00,00,000.");
     expect(error.details).toEqual({ field: "amount" });
   });
 
@@ -328,7 +340,7 @@ describe("logPayment: input validation", () => {
 
   it("says in plain words that a portion is not in Settings any more, without its id, for a payment and for an undo", async () => {
     const { ctx } = setup();
-    const message = "That portion isn't in your Settings any more. Refresh the page.";
+    const message = "That portion isn't in your Settings any more. Switch to another tab and back, then try again.";
     const log = await expectCode(pay(ctx, { portionId: "p9" }), "validation");
     expect(log.message).toBe(message);
     const undo = await expectCode(
@@ -440,7 +452,7 @@ describe("logPayment: an edit carries what the person saw", () => {
     );
 
     expect(error.message).toBe(
-      "Nothing to edit. Third floor, hall and kitchen has no payment recorded for October 2026 any more. Refresh the page.",
+      "Nothing to edit. Third floor, hall and kitchen has no payment recorded for October 2026 any more. Switch to another tab and back, then try again.",
     );
     expect(fake.tabs.get("Schedule")).toEqual(scheduleBefore);
     expect(fake.tabs.get(LOG_TAB)).toEqual(logBefore);
@@ -463,7 +475,7 @@ describe("logPayment: an edit carries what the person saw", () => {
     );
 
     expect(error.message).toBe(
-      "Third floor, hall and kitchen for October 2026 was changed by someone else. Refresh the page and try again.",
+      "Third floor, hall and kitchen for October 2026 was changed by someone else. Switch to another tab and back, then try again.",
     );
     expect(fake.tabs.get("Schedule")).toEqual(scheduleBefore);
     expect(fake.tabs.get(LOG_TAB)).toEqual(logBefore);

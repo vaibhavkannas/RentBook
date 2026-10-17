@@ -36,7 +36,7 @@ describe("parseRupees", () => {
     (text) => {
       expect(parseRupees(text, "Refund", "refund")).toEqual({
         ok: false,
-        message: "Refund must be a whole number of rupees from 0 to 10,000,000.",
+        message: "Refund must be whole rupees, from ₹ 0 to ₹ 1,00,00,000.",
         field: "refund",
       });
     },
@@ -146,7 +146,7 @@ describe("newTenantDetails", () => {
     for (const advance of ["abc", "1.5", "-1", "10000001"]) {
       const result = newTenantDetails({ ...untouched, advance }, TODAY);
       expect(result.ok).toBe(false);
-      expect(result.ok ? "" : result.message).toMatch(/^Advance must be a whole number of rupees/);
+      expect(result.ok ? "" : result.message).toMatch(/^Advance must be whole rupees/);
       expect(result.ok ? "" : result.field).toBe("advance");
     }
   });
@@ -260,7 +260,7 @@ describe("buildTenancyRequest", () => {
     const result = buildTenancyRequest({ mode: "create", portionId: "p1", tenant: "Asha" }, { ...form, advance: "2.5k" });
     expect(result).toEqual({
       ok: false,
-      message: "Advance must be a whole number of rupees from 0 to 10,000,000.",
+      message: "Advance must be whole rupees, from ₹ 0 to ₹ 1,00,00,000.",
       field: "advance",
     });
   });
@@ -351,12 +351,12 @@ describe("buildMoveOutRequest", () => {
   it("names the field when the refund or the deductions are wrong", () => {
     expect(buildMoveOutRequest(target, { ...form, refund: "ten" })).toEqual({
       ok: false,
-      message: "Refund must be a whole number of rupees from 0 to 10,000,000.",
+      message: "Refund must be whole rupees, from ₹ 0 to ₹ 1,00,00,000.",
       field: "refund",
     });
     expect(buildMoveOutRequest(target, { ...form, deductions: "-5" })).toEqual({
       ok: false,
-      message: "Deductions must be a whole number of rupees from 0 to 10,000,000.",
+      message: "Deductions must be whole rupees, from ₹ 0 to ₹ 1,00,00,000.",
       field: "deductions",
     });
   });
@@ -447,7 +447,7 @@ describe("tenancy drafts", () => {
     const draft = editDraft(startDraft(editTarget(OLD_AT), oldValues), { advance: "lots" });
     expect(buildTenancyDraftRequest(draft)).toEqual({
       ok: false,
-      message: "Advance must be a whole number of rupees from 0 to 10,000,000.",
+      message: "Advance must be whole rupees, from ₹ 0 to ₹ 1,00,00,000.",
       field: "advance",
     });
   });

@@ -1,4 +1,5 @@
 import { validation } from "@/lib/errors";
+import { wholeRupeesMessage } from "@/lib/format";
 import { cleanText, MAX_NAME_LENGTH, requireDay } from "./input-rules";
 
 /** What became of a tenant's advance. */
@@ -117,7 +118,7 @@ export function validateTenancyFields(
     advance !== null &&
     !(typeof advance === "number" && Number.isInteger(advance) && advance >= 0 && advance <= MAX_RUPEES)
   ) {
-    throw validation("Advance must be a whole number of rupees from 0 to 10,000,000.");
+    throw validation(wholeRupeesMessage("Advance", 0, MAX_RUPEES));
   }
 
   const notes = cleanText(fields.notes, "Notes", { max: MAX_NOTES_LENGTH, allowNewlines: true });

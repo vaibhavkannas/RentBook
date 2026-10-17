@@ -439,7 +439,7 @@ describe("readJsonBody", () => {
   });
 
   it("says the request could not be read, in plain words, when the body is empty or not JSON", async () => {
-    const message = "That request couldn't be read. Reload the page and try again.";
+    const message = "That request couldn't be read. Switch to another tab and back, then try again.";
     await expect(readJsonBody(jsonRequest({}, ""))).rejects.toThrow(message);
     await expect(readJsonBody(jsonRequest({}, "{oops"))).rejects.toThrow(message);
     await expect(readJsonBody(jsonRequest({}, "{oops"))).rejects.toMatchObject({ code: "validation", status: undefined });
@@ -514,10 +514,10 @@ describe("parseBody", () => {
 
   it("leaves no field path in the message, however deep the field is", () => {
     const nested = thrownBy({ fields: { moveIn: "2026-10-01", phone: 5 } , portionId: "p1", tenant: "Asha" }, tenancyBody);
-    expect(nested.message).toBe("Phone isn't valid.");
+    expect(nested.message).toBe("The phone field isn't valid.");
     expect(nested.details).toEqual({ field: "fields.phone" });
     const listed = thrownBy({ portions: [{ id: "p1", name: 5, cycleLength: 11, hikePercent: 5 }] }, settingsBody);
-    expect(listed.message).toBe("Portion name isn't valid.");
+    expect(listed.message).toBe("The portion name field isn't valid.");
     expect(listed.details).toEqual({ field: "portions.0.name" });
     for (const error of [nested, listed]) expect(error.message).not.toMatch(/fields\.|portions\.|\d+\./);
   });
@@ -533,46 +533,46 @@ describe("parseBody", () => {
     expect(
       thrownBy({ portionId: "p1", tenant: "Asha", id: "t-1", fields: { moveIn: "2026-10-01" } }, tenancyBody),
     ).toMatchObject({
-      message: "This page is out of date. Refresh it and try again.",
+      message: "This page is out of date. Switch to another tab and back, then try again.",
       details: { field: "expectedUpdatedAt" },
     });
   });
 
-  // Any other kind of problem (a number where text belongs, a missing value) is "{Label} isn't valid.", the label being
+  // Any other kind of problem (a number where text belongs, a missing value) is "The {label} field isn't valid.", the label being
   // the screen's name for the last part of the path.
   it.each([
-    [paymentBody, { month: "2026-10", portionId: "p1", amount: "5k", dateReceived: "2026-10-05" }, "Amount isn't valid.", "amount"],
-    [paymentBody, { month: "2026-10", portionId: "p1", dateReceived: "2026-10-05" }, "Amount isn't valid.", "amount"],
-    [paymentBody, { month: "2026-10", portionId: "p1", amount: 1, dateReceived: 5 }, "Date received isn't valid.", "dateReceived"],
-    [paymentBody, { month: "2026-10", portionId: "p1", amount: 1, dateReceived: "2026-10-05", newTenantName: 5 }, "Tenant name isn't valid.", "newTenantName"],
-    [paymentBody, { month: 5, portionId: "p1", amount: 1, dateReceived: "2026-10-05" }, "Month isn't valid.", "month"],
-    [paymentBody, { month: "2026-10", portionId: "", amount: 1, dateReceived: "2026-10-05" }, "Portion isn't valid.", "portionId"],
-    [tenancyBody, { portionId: "p1", tenant: "Asha", fields: { moveIn: "2026-10-01", phone: 5 } }, "Phone isn't valid.", "fields.phone"],
-    [tenancyBody, { portionId: "p1", tenant: "Asha", fields: { moveIn: 5 } }, "Move-in date isn't valid.", "fields.moveIn"],
-    [tenancyBody, { portionId: "p1", tenant: "Asha", fields: { moveIn: "2026-10-01", agreementEnd: 5 } }, "Agreement end isn't valid.", "fields.agreementEnd"],
-    [tenancyBody, { portionId: "p1", tenant: "Asha", fields: { moveIn: "2026-10-01", advance: "x" } }, "Advance isn't valid.", "fields.advance"],
-    [tenancyBody, { portionId: "p1", tenant: "Asha", fields: { moveIn: "2026-10-01", advanceDate: 5 } }, "Advance date isn't valid.", "fields.advanceDate"],
-    [tenancyBody, { portionId: "p1", tenant: "Asha", fields: { moveIn: "2026-10-01", notes: 5 } }, "Notes isn't valid.", "fields.notes"],
-    [moveOutBody, { id: "t-1", expectedUpdatedAt: "x", moveOut: 5 }, "Move-out date isn't valid.", "moveOut"],
-    [moveOutBody, { id: "t-1", expectedUpdatedAt: "x", moveOut: "2026-12-31", refund: "x" }, "Refund isn't valid.", "refund"],
-    [moveOutBody, { id: "t-1", expectedUpdatedAt: "x", moveOut: "2026-12-31", deductions: "x" }, "Deductions isn't valid.", "deductions"],
-    [settingsBody, { portions: [{ id: "p1", name: 5, cycleLength: 11, hikePercent: 5 }] }, "Portion name isn't valid.", "portions.0.name"],
-    [settingsBody, { portions: [{ id: "p1", name: "A", cycleLength: "x", hikePercent: 5 }] }, "Payments per cycle isn't valid.", "portions.0.cycleLength"],
-    [settingsBody, { portions: [{ id: "p1", name: "A", cycleLength: 11, hikePercent: "x" }] }, "Hike isn't valid.", "portions.0.hikePercent"],
+    [paymentBody, { month: "2026-10", portionId: "p1", amount: "5k", dateReceived: "2026-10-05" }, "The amount field isn't valid.", "amount"],
+    [paymentBody, { month: "2026-10", portionId: "p1", dateReceived: "2026-10-05" }, "The amount field isn't valid.", "amount"],
+    [paymentBody, { month: "2026-10", portionId: "p1", amount: 1, dateReceived: 5 }, "The date received field isn't valid.", "dateReceived"],
+    [paymentBody, { month: "2026-10", portionId: "p1", amount: 1, dateReceived: "2026-10-05", newTenantName: 5 }, "The tenant name field isn't valid.", "newTenantName"],
+    [paymentBody, { month: 5, portionId: "p1", amount: 1, dateReceived: "2026-10-05" }, "The month field isn't valid.", "month"],
+    [paymentBody, { month: "2026-10", portionId: "", amount: 1, dateReceived: "2026-10-05" }, "The portion field isn't valid.", "portionId"],
+    [tenancyBody, { portionId: "p1", tenant: "Asha", fields: { moveIn: "2026-10-01", phone: 5 } }, "The phone field isn't valid.", "fields.phone"],
+    [tenancyBody, { portionId: "p1", tenant: "Asha", fields: { moveIn: 5 } }, "The move-in date field isn't valid.", "fields.moveIn"],
+    [tenancyBody, { portionId: "p1", tenant: "Asha", fields: { moveIn: "2026-10-01", agreementEnd: 5 } }, "The agreement end field isn't valid.", "fields.agreementEnd"],
+    [tenancyBody, { portionId: "p1", tenant: "Asha", fields: { moveIn: "2026-10-01", advance: "x" } }, "The advance field isn't valid.", "fields.advance"],
+    [tenancyBody, { portionId: "p1", tenant: "Asha", fields: { moveIn: "2026-10-01", advanceDate: 5 } }, "The advance date field isn't valid.", "fields.advanceDate"],
+    [tenancyBody, { portionId: "p1", tenant: "Asha", fields: { moveIn: "2026-10-01", notes: 5 } }, "The notes field isn't valid.", "fields.notes"],
+    [moveOutBody, { id: "t-1", expectedUpdatedAt: "x", moveOut: 5 }, "The move-out date field isn't valid.", "moveOut"],
+    [moveOutBody, { id: "t-1", expectedUpdatedAt: "x", moveOut: "2026-12-31", refund: "x" }, "The refund field isn't valid.", "refund"],
+    [moveOutBody, { id: "t-1", expectedUpdatedAt: "x", moveOut: "2026-12-31", deductions: "x" }, "The deductions field isn't valid.", "deductions"],
+    [settingsBody, { portions: [{ id: "p1", name: 5, cycleLength: 11, hikePercent: 5 }] }, "The portion name field isn't valid.", "portions.0.name"],
+    [settingsBody, { portions: [{ id: "p1", name: "A", cycleLength: "x", hikePercent: 5 }] }, "The payments per cycle field isn't valid.", "portions.0.cycleLength"],
+    [settingsBody, { portions: [{ id: "p1", name: "A", cycleLength: 11, hikePercent: "x" }] }, "The hike field isn't valid.", "portions.0.hikePercent"],
   ])("gives %# its label: %j -> %s", (schema, body, message, field) => {
     expect(thrownBy(body, schema as never)).toMatchObject({ message, details: { field } });
   });
 
   it("says something general, and still names the field, when the screen has no name for it", () => {
     const error = thrownBy({ token: 5 }, logRetryBody);
-    expect(error.message).toBe("Something in that request isn't valid. Reload the page and try again.");
+    expect(error.message).toBe("Something in that request isn't valid. Switch to another tab and back, then try again.");
     expect(error.details).toEqual({ field: "token" });
   });
 
   it("says something general, with no field, when the whole body is the wrong kind of thing", () => {
     for (const body of [null, "text", 5, [], undefined]) {
       const error = thrownBy(body, paymentBody);
-      expect(error.message, String(body)).toBe("Something in that request isn't valid. Reload the page and try again.");
+      expect(error.message, String(body)).toBe("Something in that request isn't valid. Switch to another tab and back, then try again.");
       expect(error.details, String(body)).toBeUndefined();
     }
   });
@@ -659,7 +659,7 @@ describe("parseBody", () => {
 
   it("does not turn a position in a list into a label", () => {
     const error = thrownBy({ portions: [5] }, settingsBody);
-    expect(error.message).toBe("Something in that request isn't valid. Reload the page and try again.");
+    expect(error.message).toBe("Something in that request isn't valid. Switch to another tab and back, then try again.");
     expect(error.details).toEqual({ field: "portions.0" });
   });
 

@@ -21,6 +21,19 @@ export function undoToastText(portionName: string): string {
 }
 
 /**
+ * The toast for an undo that is in the Schedule while its Payments Log entry did not save (the person skipped the retry, or
+ * closed the sheet on it): it says where the undo is and where it is not.
+ */
+export function undoLogUnsavedToastText(portionName: string): string {
+  return `${portionName}: payment undone in your Schedule, but not recorded in the Payments Log`;
+}
+
+/** The toast for the moment the undo sheet closes: which of the two is true depends on whether the log entry has saved. */
+export function undoExitToastText(portionName: string, logEntrySaved: boolean): string {
+  return logEntrySaved ? undoToastText(portionName) : undoLogUnsavedToastText(portionName);
+}
+
+/**
  * What to tell the person when retrying the Payments Log entry of an undo did not succeed. `body` is the answer of
  * the retry, or null when none arrived: the entry may then have been saved, so the person is sent to the Activity screen.
  */

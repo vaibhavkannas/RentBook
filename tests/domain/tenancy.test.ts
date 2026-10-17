@@ -240,7 +240,7 @@ describe("validateTenancyFields", () => {
       expect(
         validationMessage(() => validateTenancyFields({ moveIn: "2026-10-01", advance })),
         String(advance),
-      ).toMatch(/Advance must be a whole number of rupees from 0 to 10,000,000/);
+      ).toMatch(/Advance must be whole rupees, from ₹ 0 to ₹ 1,00,00,000/);
     }
     expect(MAX_RUPEES + 1).toBe(10_000_001);
   });

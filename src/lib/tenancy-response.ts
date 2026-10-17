@@ -1,5 +1,6 @@
 import { withMonth } from "@/lib/app-nav";
 import { plainProblem, serverProblem, type FormProblem } from "@/lib/form-errors";
+import { PAYMENT_NO_CONFIRMATION } from "@/lib/request-copy";
 
 /** How the tenant forms describe a save that did not succeed. Pure, so the wording can be tested. */
 
@@ -10,8 +11,8 @@ import { plainProblem, serverProblem, type FormProblem } from "@/lib/form-errors
 export const TENANCY_CONFLICT_MESSAGE =
   "This changed just now. The page was updated. Please check and save again.";
 
-export const TENANCY_NO_CONFIRMATION =
-  "Couldn't confirm that the save went through. Check your connection and refresh the page before trying again.";
+/** The same words as a payment's: the save may or may not have gone through. */
+export const TENANCY_NO_CONFIRMATION = PAYMENT_NO_CONFIRMATION;
 
 /** The JSON the tenancy routes answer with. */
 export type TenancyApiBody = {

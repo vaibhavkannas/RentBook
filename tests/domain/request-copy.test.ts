@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
   apiErrorMessage,
@@ -12,6 +13,8 @@ import {
   sendFailureMessage,
 } from "@/lib/request-copy";
 import { LOG_RETRY_UNCONFIRMED_MESSAGE } from "@/lib/payment-request";
+import { POST_TIMEOUT_MS } from "@/lib/post-json";
+import { RELOAD_STEP } from "@/lib/recovery-hint";
 import { TENANCY_NO_CONFIRMATION } from "@/lib/tenancy-response";
 
 // What a form says when no answer came, or the server's answer was an error. Each says what happened and what to do.
@@ -23,16 +26,28 @@ describe("the texts for a request that got no answer", () => {
 
   it("says when the wait ran out that the save may still have gone through, and to check before trying again", () => {
     expect(TIMEOUT_MESSAGE).toBe(
-      "No answer after 30 seconds. It may still have saved: refresh the page and check before trying again.",
+      "No answer after 30 seconds. It may still have saved. Switch to another tab and back, then check before trying again.",
     );
+  });
+
+  it("counts the seconds from the time the request really waits, so the words and the wait cannot drift apart", () => {
+    expect(TIMEOUT_MESSAGE).toContain(`No answer after ${POST_TIMEOUT_MS / 1000} seconds.`);
+    expect(readFileSync(new URL("../../src/lib/request-copy.ts", import.meta.url), "utf8")).toMatch(/POST_TIMEOUT_MS/);
+  });
+
+  it("every text that sends a person to bring the screen up to date uses the one recovery phrase", () => {
+    for (const text of [TIMEOUT_MESSAGE, PAYMENT_NO_CONFIRMATION, UNDO_NO_CONFIRMATION, SIGNED_OUT_MESSAGE]) {
+      expect(text.toLowerCase()).toContain(RELOAD_STEP);
+      expect(text).not.toMatch(/refresh|reload/i);
+    }
   });
 
   it("keeps today's texts for an answer that never arrived", () => {
     expect(PAYMENT_NO_CONFIRMATION).toBe(
-      "Couldn't confirm that the save went through. Check your connection and refresh the page before trying again.",
+      "Couldn't confirm that the save went through. Check your connection. Switch to another tab and back, then check before trying again.",
     );
     expect(UNDO_NO_CONFIRMATION).toBe(
-      "Couldn't confirm that the undo went through. Check your connection and refresh the page before trying again.",
+      "Couldn't confirm that the undo went through. Check your connection. Switch to another tab and back, then check before trying again.",
     );
     expect(TENANCY_NO_CONFIRMATION).toBe(PAYMENT_NO_CONFIRMATION);
   });
@@ -49,7 +64,7 @@ describe("sendFailureMessage", () => {
 
 describe("apiErrorMessage", () => {
   it("tells a person who has been signed out to reload and sign in again", () => {
-    expect(SIGNED_OUT_MESSAGE).toBe("You've been signed out. Reload the page to sign in again.");
+    expect(SIGNED_OUT_MESSAGE).toBe("You've been signed out. Switch to another tab and back, then sign in again.");
     expect(apiErrorMessage({ code: "unauthorized", message: "Sign in with an allowed Google account." })).toBe(SIGNED_OUT_MESSAGE);
   });
 

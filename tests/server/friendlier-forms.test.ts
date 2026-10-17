@@ -137,10 +137,13 @@ describe("the hints a phone's keyboard takes", () => {
     }
   });
 
-  it("the settings: payments per cycle takes numbers, the hike takes decimals, a portion's name capitalises words", () => {
+  it("the settings: payments per cycle takes numbers, the hike takes decimals, neither is suggested from earlier forms, a portion's name capitalises words", () => {
     const out = settingsForm();
     expect(has(control(out, "Payments per cycle"), "inputMode", "numeric")).toBe(true);
     expect(has(control(out, "Hike at each new cycle (%)"), "inputMode", "decimal")).toBe(true);
+    // a number of the owner's own, not a thing for the browser to suggest from earlier forms
+    expect(has(control(out, "Payments per cycle"), "autoComplete", "off")).toBe(true);
+    expect(has(control(out, "Hike at each new cycle (%)"), "autoComplete", "off")).toBe(true);
     const name = control(out, "Portion name");
     expect(has(name, "autoCapitalize", "words")).toBe(true);
     expect(has(name, "autoComplete", "off")).toBe(true);

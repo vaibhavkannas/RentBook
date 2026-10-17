@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 import { LOG_RETRY_UNCONFIRMED_MESSAGE, LOG_RETRY_UNUSABLE_MESSAGE } from "@/lib/payment-request";
 import {
   undoConfirmationText,
+  undoExitToastText,
   undoLogRetryFailureMessage,
+  undoLogUnsavedToastText,
   undoToastText,
   UNDO_CONFLICT_MESSAGE,
 } from "@/lib/undo-copy";
@@ -39,6 +41,22 @@ describe("undoToastText", () => {
     expect(undoToastText("First floor, single bedroom")).toBe(
       "First floor, single bedroom: payment undone",
     );
+  });
+});
+
+// "Skip for now" on the undo's log-retry notice: the undo is in the Schedule but its Payments Log entry is not, so a toast
+// that only says "undone" would leave out half of what is true.
+describe("the toast when the undo's Payments Log entry did not save", () => {
+  it("says the undo is in the Schedule and not in the Payments Log, like the payment sheet's toast does", () => {
+    expect(undoLogUnsavedToastText("First floor, single bedroom")).toBe(
+      "First floor, single bedroom: payment undone in your Schedule, but not recorded in the Payments Log",
+    );
+  });
+
+  it("picks the text that is true when the sheet closes: the log entry saved or not", () => {
+    expect(undoExitToastText("Ground floor", true)).toBe(undoToastText("Ground floor"));
+    expect(undoExitToastText("Ground floor", false)).toBe(undoLogUnsavedToastText("Ground floor"));
+    expect(undoExitToastText("Ground floor", false)).not.toBe(undoExitToastText("Ground floor", true));
   });
 });
 

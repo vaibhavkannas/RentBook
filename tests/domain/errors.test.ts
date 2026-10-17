@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { unsupportedMediaType, validation } from "@/lib/errors";
+import {
+  crossOriginRequest,
+  PAGE_OUT_OF_DATE_MESSAGE,
+  unknownPortion,
+  unsupportedMediaType,
+  validation,
+} from "@/lib/errors";
 
 describe("validation", () => {
   it("is a validation error with the message, and no details when it names no field", () => {
@@ -25,6 +31,16 @@ describe("unsupportedMediaType", () => {
     const error = unsupportedMediaType();
     expect(error.status).toBe(415);
     expect(error.code).toBe("validation");
-    expect(error.message).toBe("That request couldn't be read. Reload the page and try again.");
+    expect(error.message).toBe("That request couldn't be read. Switch to another tab and back, then try again.");
+  });
+});
+
+describe("the messages that tell a person to bring the screen up to date", () => {
+  it("say to switch to another tab and back, which loads the screen again, and never to refresh or reload", () => {
+    const hint = "Switch to another tab and back, then try again.";
+    expect(PAGE_OUT_OF_DATE_MESSAGE).toBe(`This page is out of date. ${hint}`);
+    expect(unknownPortion().message).toBe(`That portion isn't in your Settings any more. ${hint}`);
+    expect(crossOriginRequest().message).toBe(`That request didn't come from RentBook's own page. ${hint}`);
+    expect(unsupportedMediaType().message).toBe(`That request couldn't be read. ${hint}`);
   });
 });

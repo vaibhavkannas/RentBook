@@ -123,7 +123,7 @@ describe("tenancyBody", () => {
         "fields.moveIn: Move-in date must be a date from 2000 to 2100.",
       );
       expect(problem(tenancyBody, { ...tenancy, tenant: "x".repeat(61), id: "t-1" })).toBe(
-        "expectedUpdatedAt: This page is out of date. Refresh it and try again.",
+        "expectedUpdatedAt: This page is out of date. Switch to another tab and back, then try again.",
       );
     });
   });
@@ -176,7 +176,7 @@ describe("tenancyBody", () => {
 
   it("still needs expectedUpdatedAt when an id is given", () => {
     expect(problem(tenancyBody, { ...tenancy, id: "t-1" })).toBe(
-      "expectedUpdatedAt: This page is out of date. Refresh it and try again.",
+      "expectedUpdatedAt: This page is out of date. Switch to another tab and back, then try again.",
     );
   });
 });

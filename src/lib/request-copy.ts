@@ -1,3 +1,6 @@
+import { POST_TIMEOUT_MS } from "@/lib/post-json";
+import { reloadThen } from "@/lib/recovery-hint";
+
 /**
  * What a form says when a request got no answer, or the server's answer was an error: what happened, and what to do.
  * Pure on purpose, so the words can be tested. (The words for a refused Payments Log retry are in payment-request.ts.)
@@ -7,19 +10,16 @@
 export const OFFLINE_MESSAGE = "You're offline, so nothing was sent. Connect to the internet and try again.";
 
 /** The wait ran out (see POST_TIMEOUT_MS): the save may have gone through, so check before trying again. */
-export const TIMEOUT_MESSAGE =
-  "No answer after 30 seconds. It may still have saved: refresh the page and check before trying again.";
+export const TIMEOUT_MESSAGE = `No answer after ${POST_TIMEOUT_MS / 1000} seconds. It may still have saved. ${reloadThen("check before trying again")}`;
 
 /** The answer never arrived (a dropped connection, a reply that was not JSON): a payment may or may not have saved. */
-export const PAYMENT_NO_CONFIRMATION =
-  "Couldn't confirm that the save went through. Check your connection and refresh the page before trying again.";
+export const PAYMENT_NO_CONFIRMATION = `Couldn't confirm that the save went through. Check your connection. ${reloadThen("check before trying again")}`;
 
-export const UNDO_NO_CONFIRMATION =
-  "Couldn't confirm that the undo went through. Check your connection and refresh the page before trying again.";
+export const UNDO_NO_CONFIRMATION = `Couldn't confirm that the undo went through. Check your connection. ${reloadThen("check before trying again")}`;
 
 export const SETTINGS_NO_CONFIRMATION = "Couldn't reach the server. Try again.";
 
-export const SIGNED_OUT_MESSAGE = "You've been signed out. Reload the page to sign in again.";
+export const SIGNED_OUT_MESSAGE = `You've been signed out. ${reloadThen("sign in again")}`;
 
 export const SOMETHING_WENT_WRONG_MESSAGE = "Something went wrong on our side. Try again.";
 

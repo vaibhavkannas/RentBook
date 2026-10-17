@@ -8,6 +8,22 @@ export function formatRupees(amount: number): string {
   return `₹ ${rupees.format(amount)}`;
 }
 
+/**
+ * What a person typed into an amount field without the marks they use to read it: commas, spaces of any kind and the
+ * rupee sign. "₹ 5,450" -> "5450". What is left is empty for a blank field, and otherwise the digits or the slip.
+ */
+export function stripRupeeFormatting(text: string): string {
+  return text.replace(/[,\s₹]/g, "");
+}
+
+/**
+ * "Advance must be whole rupees, from ₹ 0 to ₹ 1,00,00,000.": what is wrong with an amount that is out of range, with the
+ * range written like every other amount in the app.
+ */
+export function wholeRupeesMessage(label: string, min: number, max: number): string {
+  return `${label} must be whole rupees, from ${formatRupees(min)} to ${formatRupees(max)}.`;
+}
+
 /** { year: 2026, month: 10 } -> "October 2026". */
 export function formatMonthTitle(ym: YearMonth): string {
   return `${monthName(ym.month, true)} ${ym.year}`;

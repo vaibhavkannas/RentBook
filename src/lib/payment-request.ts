@@ -1,5 +1,7 @@
 import type { TenancyFields } from "@/lib/domain/tenancy";
+import { RELOAD_STEP } from "@/lib/recovery-hint";
 import type { PortionEntry } from "@/lib/domain/types";
+import { stripRupeeFormatting } from "@/lib/format";
 
 export type PaymentRequestInput = {
   mode: "log" | "edit" | "new-tenant";
@@ -56,7 +58,7 @@ export const NEW_TENANT_NAME_BLANK_MESSAGE = "Enter the new tenant's name.";
  * rupee fields. NaN, or Infinity, when it is not a number; a blank field is NaN too, not 0.
  */
 export function amountFromText(text: string): number {
-  const cleaned = text.replace(/[,\s₹]/g, "");
+  const cleaned = stripRupeeFormatting(text);
   return cleaned === "" ? Number.NaN : Number(cleaned);
 }
 
@@ -84,7 +86,7 @@ export function buildPaymentRequest(input: PaymentRequestInput): PaymentRequest 
   if (input.mode === "new-tenant" && input.tenantName.trim() === "") {
     return { ok: false, message: NEW_TENANT_NAME_BLANK_MESSAGE, field: "tenantName" };
   }
-  if (input.amountText.replace(/[,\s₹]/g, "") === "") return { ok: false, message: AMOUNT_BLANK_MESSAGE, field: "amount" };
+  if (stripRupeeFormatting(input.amountText) === "") return { ok: false, message: AMOUNT_BLANK_MESSAGE, field: "amount" };
   const amount = amountFromText(input.amountText);
   // JSON has no NaN or Infinity: they would reach the server as null and be refused with a message about the format.
   if (!Number.isFinite(amount)) return { ok: false, message: AMOUNT_NOT_A_NUMBER_MESSAGE, field: "amount" };
@@ -93,7 +95,7 @@ export function buildPaymentRequest(input: PaymentRequestInput): PaymentRequest 
   if (replacing && !input.seenEntry) {
     return {
       ok: false,
-      message: "This payment is no longer recorded. Close this and refresh the page.",
+      message: `This payment is no longer recorded. Close this and ${RELOAD_STEP}.`,
     };
   }
   return {

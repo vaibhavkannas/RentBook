@@ -47,7 +47,7 @@ export default async function MorePage({
         >
           <span>
             <span className="block font-medium">Portion settings</span>
-            <span className="block text-sm text-muted">Cycle lengths and hike percentages</span>
+            <span className="block text-sm text-muted">Payments per cycle and the hike at each new cycle</span>
           </span>
           <span aria-hidden="true" className="text-xl text-muted">
             ›

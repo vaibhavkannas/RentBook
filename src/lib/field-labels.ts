@@ -24,6 +24,12 @@ export const FIELD_LABELS: Readonly<Record<string, string>> = {
 };
 
 /**
+ * What is said of a field that has a label, when the only thing known is that its value is not valid. It names the field
+ * in a sentence of its own, so it reads the same for a label that is singular ("Phone") and one that is plural ("Notes").
+ */
+export const invalidFieldMessage = (label: string): string => `The ${label.toLowerCase()} field isn't valid.`;
+
+/**
  * The label of the last part of a path into a request (["fields", "phone"], ["portions", 0, "name"]), or null when it
  * ends at a position in a list, is empty, or is a field the screen has no name for. Only the last part counts: what
  * a field is called does not depend on where it sits.

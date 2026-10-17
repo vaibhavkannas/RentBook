@@ -153,7 +153,7 @@ describe("when the read-back of a written payment cannot be done", () => {
     );
     expect(error).toBeInstanceOf(AppError);
     expect(error!.code).toBe("conflict");
-    expect(error!.message).toBe("Your change may not have been saved. Refresh and check this month.");
+    expect(error!.message).toBe("Your change may not have been saved. Switch to another tab and back, then check this month.");
     expect(fake.tabs.get(LOG_TAB)).toHaveLength(1);
     expect(logs.error).not.toHaveBeenCalled();
     expect(logs.warn).not.toHaveBeenCalled();

@@ -223,7 +223,7 @@ describe("saveTenancy: create", () => {
     await create(ctx);
     const before = snapshotOf(fake);
     const error = await expectCode(create(ctx, { tenant: " ASHA " }), "conflict");
-    expect(error.message).toBe("Details already exist for ASHA. Refresh the page.");
+    expect(error.message).toBe("Details already exist for ASHA. Switch to another tab and back, then try again.");
     expect(snapshotOf(fake)).toEqual(before);
   });
 
@@ -300,7 +300,7 @@ describe("saveTenancy: create", () => {
     const { fake, ctx } = await ready();
     const before = snapshotOf(fake);
     const error = await expectCode(create(ctx, { portionId: "p9" }), "validation");
-    expect(error.message).toBe("That portion isn't in your Settings any more. Refresh the page.");
+    expect(error.message).toBe("That portion isn't in your Settings any more. Switch to another tab and back, then try again.");
     expect(snapshotOf(fake)).toEqual(before);
   });
 
@@ -309,7 +309,7 @@ describe("saveTenancy: create", () => {
     setScheduleTenant(fake, "p1", "Hari"); // the person's page still said Asha
     const before = snapshotOf(fake);
     const error = await expectCode(create(ctx, { tenant: "Asha" }), "conflict");
-    expect(error.message).toBe("The tenant for First floor, single bedroom changed. Refresh the page.");
+    expect(error.message).toBe("The tenant for First floor, single bedroom changed. Switch to another tab and back, then try again.");
     expect(snapshotOf(fake)).toEqual(before);
     expect(fake.calls).not.toContain("appendRow");
     expect(fake.calls).not.toContain("updateValues");
@@ -710,7 +710,7 @@ describe("saveTenancy: update", () => {
       edit(ctx, tenancy, { moveIn: "2026-01-15", notes: "late" }, { expectedUpdatedAt: "2026-10-04T00:00:00.000Z" }),
       "conflict",
     );
-    expect(error.message).toMatch(/was changed by someone else\. Refresh the page and try again\.$/);
+    expect(error.message).toMatch(/was changed by someone else\. Switch to another tab and back, then try again\.$/);
     expect(snapshotOf(fake)).toEqual(before);
     expect(fake.calls).not.toContain("updateValues");
   });
@@ -776,7 +776,7 @@ describe("saveTenancy: update", () => {
         saveTenancy(ctx, { portionId: "p1", tenant: "Asha", fields: FIELDS, id: stored.id }, LATER_OPTIONS),
         "validation",
       );
-      expect(error.message).toBe("This page is out of date. Refresh it and try again.");
+      expect(error.message).toBe("This page is out of date. Switch to another tab and back, then try again.");
       expect(snapshotOf(fake)).toEqual(before);
     });
   });
@@ -1047,6 +1047,14 @@ describe("moveOutTenancy", () => {
     expect(await tenancies(second.ctx)).toMatchObject([{ refund: 10_000_000, deductions: 10_000_000 }]);
   });
 
+  it("refuses a refund or deductions above the limit, and writes them as the app writes an amount", async () => {
+    const { ctx, tenancy } = await created();
+    const refund = await expectCode(moveOut(ctx, tenancy, { refund: 10_000_001 }), "validation");
+    expect(refund.message).toBe("Refund must be whole rupees, from ₹ 0 to ₹ 1,00,00,000.");
+    const deductions = await expectCode(moveOut(ctx, tenancy, { deductions: -1 }), "validation");
+    expect(deductions.message).toBe("Deductions must be whole rupees, from ₹ 0 to ₹ 1,00,00,000.");
+  });
+
   it("allows moving out on the move-in day", async () => {
     const { ctx, tenancy } = await created();
     await moveOut(ctx, tenancy, { moveOut: "2026-01-15" });
@@ -1101,7 +1109,7 @@ describe("moveOutTenancy", () => {
     );
     const before = snapshotOf(fake);
     const error = await expectCode(moveOut(ctx, tenancy), "conflict");
-    expect(error.message).toMatch(/was changed by someone else\. Refresh the page and try again\.$/);
+    expect(error.message).toMatch(/was changed by someone else\. Switch to another tab and back, then try again\.$/);
     expect(snapshotOf(fake)).toEqual(before);
   });
 
@@ -1149,7 +1157,7 @@ describe("moveOutTenancy", () => {
       moveOutTenancy(ctx, { id: "t-seed", moveOut: "2026-09-30" } as Parameters<typeof moveOutTenancy>[1], LATER_OPTIONS),
       "validation",
     );
-    expect(error.message).toBe("This page is out of date. Refresh it and try again.");
+    expect(error.message).toBe("This page is out of date. Switch to another tab and back, then try again.");
     expect(snapshotOf(fake)).toEqual(before);
   });
 
@@ -1247,7 +1255,7 @@ describe("getPortionTenants", () => {
   it("refuses an unknown portion", async () => {
     const { ctx } = await ready();
     const error = await expectCode(getPortionTenants(ctx, "p9"), "validation");
-    expect(error.message).toBe("That portion isn't in your Settings any more. Refresh the page.");
+    expect(error.message).toBe("That portion isn't in your Settings any more. Switch to another tab and back, then try again.");
   });
 
   it("uses the snapshot cache when the context has one, and honours minFetchedAt", async () => {

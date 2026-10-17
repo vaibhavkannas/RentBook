@@ -15,6 +15,8 @@ import {
 import type { PortionConfig } from "@/lib/domain/types";
 import { isValidIsoDay } from "@/lib/domain/year-month";
 import { conflict, PAGE_OUT_OF_DATE_MESSAGE, sheetStructure, unknownPortion, validation } from "@/lib/errors";
+import { wholeRupeesMessage } from "@/lib/format";
+import { RELOAD_HINT } from "@/lib/recovery-hint";
 import { invalidateCaches, loadSnapshot, type SheetsContext, type Snapshot } from "./service";
 import { withWriteLock } from "./write-lock";
 import { checkNewTenancy, recordNewTenant, type WriteStamp } from "./tenancy-writes";
@@ -81,10 +83,10 @@ function scheduleTenantOf(snapshot: Snapshot, portionId: string): string | null 
 function requireOpenTenancy(snapshot: Snapshot, id: string): Tenancy {
   const found = snapshot.tenancies.findLast((t) => t.id === id);
   if (!found) {
-    throw conflict("These tenant details are no longer in the Tenants tab. Refresh the page.");
+    throw conflict(`These tenant details are no longer in the Tenants tab. ${RELOAD_HINT}`);
   }
   if (found.moveOut !== "") {
-    throw conflict(`${found.tenant} has already moved out. Refresh the page.`);
+    throw conflict(`${found.tenant} has already moved out. ${RELOAD_HINT}`);
   }
   return found;
 }
@@ -93,7 +95,7 @@ function requireOpenTenancy(snapshot: Snapshot, id: string): Tenancy {
 function requireSeen(found: Tenancy, expectedUpdatedAt: string): void {
   if (found.updatedAt !== expectedUpdatedAt) {
     throw conflict(
-      `The tenancy of ${found.tenant} was changed by someone else. Refresh the page and try again.`,
+      `The tenancy of ${found.tenant} was changed by someone else. ${RELOAD_HINT}`,
     );
   }
 }
@@ -132,7 +134,7 @@ async function createTenancy(
   const scheduleTenant = scheduleTenantOf(snapshot, input.portionId);
   if (scheduleTenant === null) throw validation("This portion has no tenant yet.");
   if (!sameTenantName(scheduleTenant, checked.tenant)) {
-    throw conflict(`The tenant for ${portion.name} changed. Refresh the page.`);
+    throw conflict(`The tenant for ${portion.name} changed. ${RELOAD_HINT}`);
   }
 
   // Add the new row first; only then close the ones it replaces, so a failed append closes nothing.
@@ -204,7 +206,7 @@ async function updateTenancy(
 function checkRupees(value: number | null | undefined, label: string): number | null | undefined {
   if (value === undefined || value === null) return value;
   if (!Number.isInteger(value) || value < 0 || value > MAX_RUPEES) {
-    throw validation(`${label} must be a whole number of rupees from 0 to 10,000,000.`);
+    throw validation(wholeRupeesMessage(label, 0, MAX_RUPEES));
   }
   return value;
 }

@@ -107,6 +107,7 @@ export default function SettingsForm({ portions }: { portions: PortionConfig[] }
                 value={row.cycle}
                 onChange={(event) => update(row.id, { cycle: event.target.value }, "cycle")}
                 inputMode="numeric"
+                autoComplete="off"
                 disabled={row.never}
               />
             </Field>
@@ -117,6 +118,7 @@ export default function SettingsForm({ portions }: { portions: PortionConfig[] }
                 value={row.hike}
                 onChange={(event) => update(row.id, { hike: event.target.value }, "hike")}
                 inputMode="decimal"
+                autoComplete="off"
               />
             </Field>
 

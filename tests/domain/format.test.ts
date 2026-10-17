@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { formatDay, formatMonthKey, formatMonthTitle, formatRupees, formatSavedAt } from "@/lib/format";
+import {
+  formatDay,
+  formatMonthKey,
+  formatMonthTitle,
+  formatRupees,
+  formatSavedAt,
+  stripRupeeFormatting,
+  wholeRupeesMessage,
+} from "@/lib/format";
 
 describe("format", () => {
   it("formats rupees with Indian digit grouping", () => {
@@ -50,4 +58,29 @@ describe("formatDay", () => {
       expect(formatDay(text)).toBe(text);
     },
   );
+});
+
+describe("wholeRupeesMessage", () => {
+  it("says the range in whole rupees the way the rest of the app writes an amount, with the Indian grouping", () => {
+    expect(wholeRupeesMessage("Advance", 0, 10_000_000)).toBe("Advance must be whole rupees, from ₹ 0 to ₹ 1,00,00,000.");
+    expect(wholeRupeesMessage("Amount", 1, 10_000_000)).toBe("Amount must be whole rupees, from ₹ 1 to ₹ 1,00,00,000.");
+  });
+
+  it("never writes the largest amount the western way", () => {
+    expect(wholeRupeesMessage("Refund", 0, 10_000_000)).not.toContain("10,000,000");
+  });
+});
+
+describe("stripRupeeFormatting", () => {
+  it("takes out commas, spaces of any kind and the rupee sign, and nothing else", () => {
+    expect(stripRupeeFormatting("₹ 5,450")).toBe("5450");
+    expect(stripRupeeFormatting(" 1,00,000 ")).toBe("100000");
+    expect(stripRupeeFormatting("5\u00a0450\t")).toBe("5450");
+    expect(stripRupeeFormatting("12.5k")).toBe("12.5k");
+    expect(stripRupeeFormatting("-5")).toBe("-5");
+  });
+
+  it("leaves nothing for a blank or a lone sign, which is how a blank amount is told from text", () => {
+    for (const text of ["", "   ", "₹", " , ", "₹ ,"]) expect(stripRupeeFormatting(text)).toBe("");
+  });
 });

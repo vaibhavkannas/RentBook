@@ -433,7 +433,7 @@ describe("POST /api/payments/undo", () => {
 
   it("does not mark the write time when the undo fails for another reason", async () => {
     signedInAs("member@example.com");
-    undoPayment.mockRejectedValue(validation("That portion isn't in your Settings any more. Refresh the page."));
+    undoPayment.mockRejectedValue(validation("That portion isn't in your Settings any more. Switch to another tab and back, then try again."));
     expect((await postUndo(undoRequest(good))).status).toBe(400);
     expect(markWritten).not.toHaveBeenCalled();
   });
@@ -579,14 +579,14 @@ describe("POST /api/tenancies", () => {
     signedInAs("member@example.com");
     const res = await postTenancy(request({ ...update, expectedUpdatedAt: undefined }));
     expect((await res.json()).error).toMatchObject({
-      message: "This page is out of date. Refresh it and try again.",
+      message: "This page is out of date. Switch to another tab and back, then try again.",
       details: { field: "expectedUpdatedAt" },
     });
   });
 
   it("answers 409 on a conflict, and marks the write time for the refresh", async () => {
     signedInAs("member@example.com");
-    saveTenancy.mockRejectedValue(conflict("Asha was changed by someone else. Refresh the page and try again."));
+    saveTenancy.mockRejectedValue(conflict("Asha was changed by someone else. Switch to another tab and back, then try again."));
     const res = await postTenancy(request(update));
     expect(res.status).toBe(409);
     expect((await res.json()).error).toMatchObject({ code: "conflict" });
@@ -871,7 +871,7 @@ describe("a 400 answer: plain words, and the field", () => {
   it("names the amount when it is not a number", async () => {
     signedInAs("member@example.com");
     const res = await postPayment(json("http://localhost/api/payments", { ...payment, amount: "5k" }));
-    expect(await answer(res)).toMatchObject({ message: "Amount isn't valid.", details: { field: "amount" } });
+    expect(await answer(res)).toMatchObject({ message: "The amount field isn't valid.", details: { field: "amount" } });
   });
 
   it("names a field inside the tenancy details by its path, and says the field's name in the message", async () => {
@@ -902,15 +902,15 @@ describe("a 400 answer: plain words, and the field", () => {
       json("http://localhost/api/tenancies", { portionId: "p1", tenant: "Asha", id: "t-abc", fields: { moveIn: "2026-01-15" } }),
     );
     const error = await answer(res);
-    expect(error.message).toBe("This page is out of date. Refresh it and try again.");
+    expect(error.message).toBe("This page is out of date. Switch to another tab and back, then try again.");
     expect(error.message).not.toMatch(/updated-at|expectedUpdatedAt|\bid\b/);
   });
 
   it("passes on the field a service gave its refusal (the amount, the new tenant's name, the move-out date)", async () => {
     signedInAs("member@example.com");
-    logPayment.mockRejectedValueOnce(validation("Amount must be a whole number of rupees from 1 to 10,000,000.", "amount"));
+    logPayment.mockRejectedValueOnce(validation("Amount must be whole rupees, from ₹ 1 to ₹ 1,00,00,000.", "amount"));
     expect(await answer(await postPayment(json("http://localhost/api/payments", payment)))).toMatchObject({
-      message: "Amount must be a whole number of rupees from 1 to 10,000,000.",
+      message: "Amount must be whole rupees, from ₹ 1 to ₹ 1,00,00,000.",
       details: { field: "amount" },
     });
     logPayment.mockRejectedValueOnce(validation("This portion has no tenant yet. Enter a tenant name.", "newTenantName"));
@@ -928,7 +928,7 @@ describe("a 400 answer: plain words, and the field", () => {
       new Request("http://localhost/api/payments", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{oops" }),
     );
     expect(res.status).toBe(400);
-    expect((await answer(res)).message).toBe("That request couldn't be read. Reload the page and try again.");
+    expect((await answer(res)).message).toBe("That request couldn't be read. Switch to another tab and back, then try again.");
   });
 
   it("says the same, with the 415 it had, when the request is not sent as JSON at all", async () => {
@@ -937,7 +937,7 @@ describe("a 400 answer: plain words, and the field", () => {
       new Request("http://localhost/api/payments", { method: "POST", headers: { "Content-Type": "text/plain" }, body: "x" }),
     );
     expect(res.status).toBe(415);
-    expect((await answer(res)).message).toBe("That request couldn't be read. Reload the page and try again.");
+    expect((await answer(res)).message).toBe("That request couldn't be read. Switch to another tab and back, then try again.");
   });
 });
 

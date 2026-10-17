@@ -131,7 +131,7 @@ describe("serverProblem: what the server said", () => {
 
   it("says the words of apiErrorMessage: signed out, something went wrong, or the server's own", () => {
     expect(serverProblem({ code: "unauthorized", message: "Sign in with an allowed Google account." }, known).message).toBe(
-      "You've been signed out. Reload the page to sign in again.",
+      "You've been signed out. Switch to another tab and back, then sign in again.",
     );
     expect(serverProblem(undefined, known).message).toBe("Something went wrong on our side. Try again.");
     expect(serverProblem({ code: "internal", message: "x" }, known).message).toBe("Something went wrong on our side. Try again.");

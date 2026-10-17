@@ -9,7 +9,9 @@ import {
   unsupportedMediaType,
   validation,
 } from "@/lib/errors";
-import { fieldLabel } from "@/lib/field-labels";
+import { fieldLabel, invalidFieldMessage } from "@/lib/field-labels";
+import { RELOAD_HINT } from "@/lib/recovery-hint";
+import { SOMETHING_WENT_WRONG_MESSAGE } from "@/lib/request-copy";
 import { getViewer, type Viewer } from "./auth-guard";
 import { describeError, logEvent, messageForLog, requestIdFrom, type LogLevel } from "./log";
 
@@ -88,7 +90,7 @@ export async function handle(run: () => Promise<Record<string, unknown>>, reques
     }
     logEvent("error", "api-error", { requestId, route, code: "internal", message: describeError(error) });
     return Response.json(
-      { ok: false, error: { code: "internal", message: "Something went wrong on our side. Try again." }, requestId },
+      { ok: false, error: { code: "internal", message: SOMETHING_WENT_WRONG_MESSAGE }, requestId },
       { status: 500 },
     );
   }
@@ -172,14 +174,14 @@ export async function readJsonBody(request: Request): Promise<unknown> {
 }
 
 /** What a person is told when the body is wrong in a way no message of ours covers. */
-const GENERAL_MESSAGE = "Something in that request isn't valid. Reload the page and try again.";
+const GENERAL_MESSAGE = `Something in that request isn't valid. ${RELOAD_HINT}`;
 
 /**
  * The body checked against `schema`: typed data, or a validation error for the first thing that is wrong.
  * The message is in plain words and carries no field path. A `custom` issue is one of our own rules (every safeText and
  * isoDay message already names its field in the screen's words), so its message is kept. Any other issue (a number where
- * text belongs, a missing value) is "{Label} isn't valid." with the screen's name for the field (src/lib/field-labels.ts),
- * or something general when there is none. The path of the field (`fields.phone`, `portions.0.name`) goes in the
+ * text belongs, a missing value) is "The {label} field isn't valid." with the screen's name for the field
+ * (src/lib/field-labels.ts), or something general when there is none. The path of the field (`fields.phone`, `portions.0.name`) goes in the
  * error's details, for the screen to show the message beside the field.
  */
 export function parseBody<T extends z.ZodType>(body: unknown, schema: T): z.infer<T> {
@@ -187,7 +189,7 @@ export function parseBody<T extends z.ZodType>(body: unknown, schema: T): z.infe
   if (!parsed.success) {
     const issue = parsed.error.issues[0];
     const label = fieldLabel(issue.path);
-    const message = issue.code === "custom" ? issue.message : label === null ? GENERAL_MESSAGE : `${label} isn't valid.`;
+    const message = issue.code === "custom" ? issue.message : label === null ? GENERAL_MESSAGE : invalidFieldMessage(label);
     throw validation(message, issue.path.length > 0 ? issue.path.join(".") : undefined);
   }
   return parsed.data;

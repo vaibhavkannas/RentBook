@@ -1,4 +1,5 @@
 import { MAX_RUPEES, type AdvanceStatus, type Tenancy, type TenancyFields } from "@/lib/domain/tenancy";
+import { stripRupeeFormatting, wholeRupeesMessage } from "@/lib/format";
 
 /**
  * What the forms send for tenancy details. The screens only gather text; the rules about what is
@@ -12,14 +13,14 @@ export type RupeesResult = { ok: true; value: number | null } | FieldFailure;
 
 /**
  * Whole rupees typed into a field. Blank is "nothing" (null). Commas, spaces and a rupee sign are
- * ignored, like the amount field of the payment sheet. Anything else that is not 0 to 10,000,000 is refused.
+ * ignored, like the amount field of the payment sheet. Anything else that is not 0 to MAX_RUPEES is refused.
  */
 export function parseRupees(text: string, label: string, field: string): RupeesResult {
-  const cleaned = text.replace(/[,\s₹]/g, "");
+  const cleaned = stripRupeeFormatting(text);
   if (cleaned === "") return { ok: true, value: null };
   const value = /^\d+$/.test(cleaned) ? Number(cleaned) : Number.NaN;
   if (!Number.isFinite(value) || value > MAX_RUPEES) {
-    return { ok: false, message: `${label} must be a whole number of rupees from 0 to 10,000,000.`, field };
+    return { ok: false, message: wholeRupeesMessage(label, 0, MAX_RUPEES), field };
   }
   return { ok: true, value };
 }

@@ -1,6 +1,8 @@
 import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import { CONNECTION_NEEDS_ATTENTION } from "@/lib/errors";
+import { SOMETHING_WENT_WRONG_MESSAGE } from "@/lib/request-copy";
 
 /**
  * The docs name files ("the Sign out button is a Server Action in src/app/more/page.tsx"). A claim that goes stale when
@@ -40,5 +42,25 @@ describe("the threat model's claim about the sign-in and sign-out buttons", () =
   it("no longer finds a Sign out on the home page, which has no Server Action left", () => {
     expect(read("src/app/page.tsx")).not.toContain('"use server"');
     expect(read("src/app/page.tsx")).not.toContain("signOut");
+  });
+});
+
+describe("the threat model's quotes of what a person reads", () => {
+  // A quoted message goes stale when its words change in the code, so each is read from the doc and compared with the
+  // code's own text.
+  const doc = read("docs/product/THREAT-MODEL.md");
+  const quoted = (before: string) => new RegExp(`${before}\\s*"([^"]+)"`).exec(doc)?.[1];
+
+  it("quotes what everyone but the owner reads about a connection problem as the code says it", () => {
+    expect(quoted("Everyone else reads")).toBe(CONNECTION_NEEDS_ATTENTION);
+  });
+
+  it("quotes what an error nobody expected reaches the browser as, as the code says it", () => {
+    expect(quoted("reaches the browser as")).toBe(SOMETHING_WENT_WRONG_MESSAGE);
+    expect(SOMETHING_WENT_WRONG_MESSAGE).toBe("Something went wrong on our side. Try again.");
+  });
+
+  it("has the server answer an unexpected error with that same text", () => {
+    expect(read("src/lib/server/http.ts")).toMatch(/message: SOMETHING_WENT_WRONG_MESSAGE/);
   });
 });

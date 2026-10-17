@@ -81,7 +81,7 @@ Each claim names the file that does it.
 
 - `import "server-only"` starts `src/auth.ts`, every file in `src/lib/server` and `src/lib/sheets/google-gateway.ts`. A build that lets browser code import them fails (`tests/server/server-only.test.ts` checks the marker). Because of this, scripts run with `tsx` (`npm run recon`, `npm run verify:testcopy`) need `--conditions=react-server`, which `package.json` already sets. Without it the marker throws.
 - A key that cannot be parsed is reported without quoting it (`fromServiceAccount` in `src/lib/sheets/google-gateway.ts`).
-- Only the owner is shown what is wrong with the connection to the Sheet (the key, the sharing, `SHEET_ID`). Everyone else reads "The Sheet connection needs attention. Ask the owner." (`messageFor` in `src/lib/errors.ts`). In an API answer, an error the app did not expect reaches the browser as "Something went wrong. Try again." and a request id.
+- Only the owner is shown what is wrong with the connection to the Sheet (the key, the sharing, `SHEET_ID`). Everyone else reads "The Sheet connection needs attention. Ask the owner." (`messageFor` in `src/lib/errors.ts`). In an API answer, an error the app did not expect reaches the browser as "Something went wrong on our side. Try again." and a request id.
 
 ### Keeping data consistent
 

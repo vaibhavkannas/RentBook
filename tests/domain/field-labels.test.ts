@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { FIELD_LABELS, fieldLabel } from "@/lib/field-labels";
+import { FIELD_LABELS, fieldLabel, invalidFieldMessage } from "@/lib/field-labels";
 
 // What a field is called in a message a person reads. A request body names its fields the way the code does
 // (dateReceived, moveIn); the message names them the way the screen does.
@@ -65,5 +65,21 @@ describe("fieldLabel", () => {
 
   it("looks only at the last part: a label further up the path does not count", () => {
     expect(fieldLabel(["amount", "extra"])).toBeNull();
+  });
+});
+
+describe("invalidFieldMessage", () => {
+  it("names the field in a sentence that reads the same for any label, singular or plural", () => {
+    expect(invalidFieldMessage("Amount")).toBe("The amount field isn't valid.");
+    expect(invalidFieldMessage("Notes")).toBe("The notes field isn't valid.");
+    expect(invalidFieldMessage("Deductions")).toBe("The deductions field isn't valid.");
+    expect(invalidFieldMessage("Move-in date")).toBe("The move-in date field isn't valid.");
+    expect(invalidFieldMessage("Payments per cycle")).toBe("The payments per cycle field isn't valid.");
+  });
+
+  it("is grammatical for every label there is: 'The ... field isn't valid.', never a label's own verb", () => {
+    for (const label of Object.values(FIELD_LABELS)) {
+      expect(invalidFieldMessage(label)).toMatch(/^The [a-z][a-z -]+ field isn't valid\.$/);
+    }
   });
 });

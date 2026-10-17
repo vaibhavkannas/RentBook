@@ -18,7 +18,8 @@ import type {
 } from "@/lib/domain/types";
 import { addMonths, compareYm, ymKey } from "@/lib/domain/year-month";
 import { AppError, conflict, sheetStructure, unknownPortion, validation } from "@/lib/errors";
-import { formatMonthTitle, formatRupees } from "@/lib/format";
+import { formatMonthTitle, formatRupees, wholeRupeesMessage } from "@/lib/format";
+import { RELOAD_HINT, RELOAD_STEP, reloadThen } from "@/lib/recovery-hint";
 import { errorLogFields, logEvent } from "@/lib/server/log";
 import { colLetter } from "./a1";
 import { text } from "./cells";
@@ -236,7 +237,7 @@ async function ensureMonthRow(
   const occupied = below.some((row) => row.some((cell) => cell !== undefined && cell !== ""));
   if (occupied) {
     throw conflict(
-      `Row ${newRow} of the Schedule tab is below the last month but not empty, so a new month row cannot be added there. If someone else just added this month, refresh the page.`,
+      `Row ${newRow} of the Schedule tab is below the last month but not empty, so a new month row cannot be added there. If someone else just added this month, ${RELOAD_STEP}, then try again.`,
     );
   }
   await ctx.gateway.cloneRow(ctx.scheduleTab, layout.lastDataRow, newRow, [...clearCols], [
@@ -307,7 +308,7 @@ function validateMonth({ year, month }: YearMonth): void {
 function validateInput(input: LogPaymentInput): string | undefined {
   validateMonth(input.month);
   if (!Number.isInteger(input.amount) || input.amount < 1 || input.amount > MAX_RUPEES) {
-    throw validation("Amount must be a whole number of rupees from 1 to 10,000,000.", "amount");
+    throw validation(wholeRupeesMessage("Amount", 1, MAX_RUPEES), "amount");
   }
   requireDay(input.dateReceived, "Date received");
   if (input.newTenantName === undefined) return undefined;
@@ -329,7 +330,7 @@ export async function logPayment(
   });
 }
 
-const NOT_SAVED_MESSAGE = "Your change may not have been saved. Refresh and check this month.";
+const NOT_SAVED_MESSAGE = `Your change may not have been saved. ${reloadThen("check this month")}`;
 
 type WrittenCell = { col: number; value: unknown };
 
@@ -383,12 +384,12 @@ async function logPaymentUnchecked(
   if (input.expected) {
     if (!existing) {
       throw conflict(
-        `Nothing to edit. ${portion.name} has no payment recorded for ${formatMonthTitle(input.month)} any more. Refresh the page.`,
+        `Nothing to edit. ${portion.name} has no payment recorded for ${formatMonthTitle(input.month)} any more. ${RELOAD_HINT}`,
       );
     }
     if (!sameEntry(existing, input.expected)) {
       throw conflict(
-        `${portion.name} for ${formatMonthTitle(input.month)} was changed by someone else. Refresh the page and try again.`,
+        `${portion.name} for ${formatMonthTitle(input.month)} was changed by someone else. ${RELOAD_HINT}`,
       );
     }
   }
@@ -545,12 +546,12 @@ async function undoPaymentUnchecked(
   const existing = monthRow?.entries.get(portion.id);
   if (!monthRow || !existing) {
     throw conflict(
-      `Nothing to undo. ${portion.name} has no payment recorded for ${formatMonthTitle(input.month)} any more. Refresh the page.`,
+      `Nothing to undo. ${portion.name} has no payment recorded for ${formatMonthTitle(input.month)} any more. ${RELOAD_HINT}`,
     );
   }
   if (!sameEntry(existing, input.expected)) {
     throw conflict(
-      `${portion.name} for ${formatMonthTitle(input.month)} was changed by someone else. Refresh the page and try again.`,
+      `${portion.name} for ${formatMonthTitle(input.month)} was changed by someone else. ${RELOAD_HINT}`,
     );
   }
   if (hasLaterEntry(loaded.rows, portion.id, input.month)) {
