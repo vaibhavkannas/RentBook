@@ -8,6 +8,7 @@ import {
   LATER_ENTRY_REASON,
 } from "@/lib/domain/month-view";
 import { nextCount, sumAmounts } from "@/lib/domain/rent-rules";
+import { occupancyFor } from "@/lib/domain/vacancy";
 import { MAX_RUPEES, type Tenancy, type TenancyFields } from "@/lib/domain/tenancy";
 import type {
   MonthView,
@@ -18,7 +19,7 @@ import type {
 } from "@/lib/domain/types";
 import { addMonths, compareYm, ymKey } from "@/lib/domain/year-month";
 import { AppError, conflict, sheetStructure, unknownPortion, validation } from "@/lib/errors";
-import { formatMonthTitle, formatRupees, wholeRupeesMessage } from "@/lib/format";
+import { formatDay, formatMonthTitle, formatRupees, wholeRupeesMessage } from "@/lib/format";
 import { RELOAD_HINT, RELOAD_STEP, reloadThen } from "@/lib/recovery-hint";
 import { errorLogFields, logEvent } from "@/lib/server/log";
 import { colLetter } from "./a1";
@@ -396,6 +397,16 @@ async function logPaymentUnchecked(
     if (!sameEntry(existing, input.expected)) {
       throw conflict(
         `${portion.name} for ${formatMonthTitle(input.month)} was changed by someone else. ${RELOAD_HINT}`,
+      );
+    }
+  }
+  // A portion whose last tenant has moved out has nobody to take this month's rent from: a plain log would carry the
+  // leaver's name and count on. A new tenant is how it starts again, and that is not refused.
+  if (newTenant === undefined && !existing) {
+    const occupancy = occupancyFor(loaded.rows, loaded.tenancies, portion.id, input.month);
+    if (occupancy.state === "vacant") {
+      throw conflict(
+        `${portion.name} is vacant in ${formatMonthTitle(input.month)}: ${occupancy.previousTenant} moved out on ${formatDay(occupancy.since)}. ${reloadThen("add the new tenant with New tenant")}`,
       );
     }
   }

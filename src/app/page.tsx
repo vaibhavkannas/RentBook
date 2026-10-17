@@ -7,6 +7,7 @@ import { Page } from "@/components/ui/Page";
 import type { MonthView } from "@/lib/domain/types";
 import { currentYm, parseYmKey, todayIso, ymKey } from "@/lib/domain/year-month";
 import { formatMonthTitle, formatRupees } from "@/lib/format";
+import { summaryCounts, summaryText } from "@/lib/month-summary";
 import { describeDifference, progressPercent } from "@/lib/rent-difference";
 import { getViewer } from "@/lib/server/auth-guard";
 import { getSheetsContext } from "@/lib/server/context";
@@ -40,10 +41,9 @@ export default async function Home({
 
   const title = formatMonthTitle(month);
   const progress = view ? progressPercent(view.received, view.due) : 0;
-  // While some portions have not paid yet, the total can still change: "so far".
-  const difference = view
-    ? describeDifference(view.difference, view.paidCount < view.cards.length)
-    : null;
+  // While some portion that is let has not paid yet, the total can still change: "so far". A vacant portion owes nothing.
+  const counts = view ? summaryCounts(view) : null;
+  const difference = view && counts ? describeDifference(view.difference, counts.paid < counts.let) : null;
 
   return (
     <Page>
@@ -55,9 +55,7 @@ export default async function Home({
             <section className="mt-3 rounded-card bg-surface p-4 ring-1 ring-line" aria-label="Month summary">
               <div className="flex items-baseline justify-between text-sm text-muted">
                 <span>Received</span>
-                <span>
-                  {view.paidCount} of {view.cards.length} portions
-                </span>
+                <span>{summaryText(view)}</span>
               </div>
               <p className="mt-0.5 text-2xl font-semibold">
                 {formatRupees(view.received)}{" "}

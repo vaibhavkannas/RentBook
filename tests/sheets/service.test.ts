@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import type { Tenancy } from "@/lib/domain/tenancy";
 import { serialFromYm } from "@/lib/domain/year-month";
 import { AppError } from "@/lib/errors";
 import { LOG_TAB } from "@/lib/sheets/settings-store";
@@ -12,6 +13,7 @@ import {
   type LogPaymentInput,
   type SheetsContext,
 } from "@/lib/sheets/service";
+import { appendTenancy } from "@/lib/sheets/tenants-store";
 import { cell, FakeGateway } from "../support/fake-gateway";
 import { baseSchedule, settingsGrid, TOTAL_HEADER } from "../support/fixtures";
 
@@ -654,5 +656,138 @@ describe("a portion whose id is also a property name", () => {
     );
     expect(cell(fake, "Schedule", "D", 6)).toBe("");
     expect((await getMonthView(ctx, OCT)).cards[0].status).toBe("pending");
+  });
+});
+
+describe("logPayment: a portion whose tenant has moved out", () => {
+  const NOV = { year: 2026, month: 11 };
+  const DEC = { year: 2026, month: 12 };
+  const VACANT_MESSAGE =
+    "First floor, single bedroom is vacant in November 2026: Asha moved out on 20 Oct 2026. Tap another tab at the bottom of the screen and come back, then add the new tenant with New tenant.";
+
+  function asha(overrides: Partial<Omit<Tenancy, "rowNumber">> = {}): Omit<Tenancy, "rowNumber"> {
+    return {
+      id: "t-asha",
+      portionId: "p1",
+      tenant: "Asha",
+      phone: "",
+      moveIn: "2026-01-15",
+      agreementEnd: "",
+      advance: null,
+      advanceDate: "",
+      advanceStatus: null,
+      refund: null,
+      deductions: null,
+      notes: "",
+      moveOut: "2026-10-20",
+      updatedBy: "owner@example.com",
+      updatedAt: "2026-10-20T05:00:00.000Z",
+      ...overrides,
+    };
+  }
+
+  /** October is paid by Asha (p1) through the app, and the Tenants tab says she moved out on `moveOut`. */
+  async function afterAsha(overrides: Partial<Omit<Tenancy, "rowNumber">> = {}) {
+    const { fake, ctx } = setup();
+    await pay(ctx, { portionId: "p1" });
+    await appendTenancy(fake, asha(overrides));
+    fake.calls = [];
+    return { fake, ctx };
+  }
+
+  const snapshotOf = (fake: FakeGateway) => structuredClone([...fake.tabs.entries()]);
+
+  it("refuses a plain log for a vacant month, in plain words, and writes nothing", async () => {
+    const { fake, ctx } = await afterAsha();
+    const before = snapshotOf(fake);
+    const error = await expectCode(pay(ctx, { portionId: "p1", month: NOV }), "conflict");
+    expect(error.message).toBe(VACANT_MESSAGE);
+    expect(snapshotOf(fake)).toEqual(before);
+    expect(fake.calls.filter((call) => ["updateValues", "appendRow", "cloneRow", "addTab"].includes(call))).toEqual([]);
+  });
+
+  it("refuses it later in the vacancy too, and when the request says to replace", async () => {
+    const { ctx } = await afterAsha();
+    const december = await expectCode(pay(ctx, { portionId: "p1", month: DEC }), "conflict");
+    expect(december.message).toContain("is vacant in December 2026: Asha moved out on 20 Oct 2026.");
+    await expectCode(pay(ctx, { portionId: "p1", month: NOV, overwrite: true }), "conflict");
+  });
+
+  it("says a payment that is not there to edit is not there, as it always did", async () => {
+    const { ctx } = await afterAsha();
+    const error = await expectCode(
+      pay(ctx, { portionId: "p1", month: NOV, overwrite: true, expected: { tenant: "Asha", count: 4, amount: 5450 } }),
+      "conflict",
+    );
+    expect(error.message).toMatch(/^Nothing to edit\./);
+  });
+
+  it("leaves every other portion alone", async () => {
+    const { ctx } = await afterAsha();
+    expect((await pay(ctx, { portionId: "p2", month: NOV, amount: 13335 })).entry).toEqual({ tenant: "Bala", count: 1, amount: 13335 });
+  });
+
+  it("shows the portion as vacant in the month view, with nothing due for it", async () => {
+    const { ctx } = await afterAsha();
+    const view = await getMonthView(ctx, NOV);
+    expect(view.cards[0]).toMatchObject({ status: "vacant", vacancy: { since: "2026-10-20", previousTenant: "Asha" } });
+    expect(view.due).toBe(13335 + 9000 + 5100);
+  });
+
+  it("lets a new tenant start on a vacant portion, at payment 1, and the next month is pending for them", async () => {
+    const { fake, ctx } = await afterAsha();
+    const result = await pay(ctx, { portionId: "p1", month: NOV, amount: 6000, newTenantName: "Hari", dateReceived: "2026-11-03" });
+    expect(result.entry).toEqual({ tenant: "Hari", count: 1, amount: 6000 });
+    expect(cell(fake, "Schedule", "B", 7)).toBe("Hari");
+    expect(cell(fake, "Schedule", "C", 7)).toBe(1);
+    expect(cell(fake, "Schedule", "D", 7)).toBe(6000);
+    const log = fake.tabs.get(LOG_TAB)!;
+    expect(log[log.length - 1]).toEqual([
+      "2026-10-05T04:30:00.000Z", "2026-11", "First floor, single bedroom", "Hari", 6000, 1, "2026-11-03", "owner@example.com", "Logged",
+    ]);
+
+    const november = await getMonthView(ctx, NOV);
+    expect(november.cards[0]).toMatchObject({ status: "paid", entry: { tenant: "Hari", count: 1 }, vacancy: null });
+    const december = await getMonthView(ctx, DEC);
+    expect(december.cards[0]).toMatchObject({
+      status: "pending",
+      next: { tenant: "Hari", count: 2, suggestedAmount: 6000 },
+      vacancy: null,
+    });
+    // and a plain log for December is no longer refused
+    expect((await pay(ctx, { portionId: "p1", month: DEC, amount: 6000 })).entry).toEqual({ tenant: "Hari", count: 2, amount: 6000 });
+  });
+
+  it("lets the same name start again: rent logged after the move-out says they stayed", async () => {
+    const { ctx } = await afterAsha();
+    await pay(ctx, { portionId: "p1", month: NOV, amount: 5450, newTenantName: "Asha" });
+    expect((await getMonthView(ctx, DEC)).cards[0]).toMatchObject({ status: "pending", next: { tenant: "Asha", count: 2 } });
+  });
+
+  describe("the owner's logging, unchanged when nobody has a move-out", () => {
+    it("logs a plain payment for the next month with an open tenancy on file", async () => {
+      const { fake, ctx } = await afterAsha({ moveOut: "" });
+      const result = await pay(ctx, { portionId: "p1", month: NOV });
+      expect(result.entry).toEqual({ tenant: "Asha", count: 5, amount: 5450 });
+      expect(cell(fake, "Schedule", "B", 7)).toBe("Asha");
+      expect(cell(fake, "Schedule", "C", 7)).toBe(5);
+    });
+
+    it("logs a plain payment with no tenancy rows at all", async () => {
+      const { ctx } = setup();
+      await pay(ctx, { portionId: "p1" });
+      expect((await pay(ctx, { portionId: "p1", month: NOV })).entry).toEqual({ tenant: "Asha", count: 5, amount: 5450 });
+    });
+
+    it("logs a plain payment when the move-out is not a date", async () => {
+      const { ctx } = await afterAsha({ moveOut: "soon" });
+      expect((await pay(ctx, { portionId: "p1", month: NOV })).entry).toEqual({ tenant: "Asha", count: 5, amount: 5450 });
+    });
+  });
+
+  it("still takes a plain payment for the month the tenant left in, when they moved out after its 1st", async () => {
+    // moved out 2 November: November is due, December is vacant
+    const { ctx } = await afterAsha({ moveOut: "2026-11-02" });
+    expect((await pay(ctx, { portionId: "p1", month: NOV })).entry).toEqual({ tenant: "Asha", count: 5, amount: 5450 });
   });
 });

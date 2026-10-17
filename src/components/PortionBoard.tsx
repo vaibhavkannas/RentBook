@@ -6,7 +6,8 @@ import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Pill } from "@/components/ui/Pill";
 import type { PortionCard } from "@/lib/domain/types";
-import { formatRupees } from "@/lib/format";
+import { formatDay, formatRupees } from "@/lib/format";
+import { isVacantCard } from "@/lib/month-summary";
 import { sheetKey } from "@/lib/month-nav";
 import { cardDifferenceText } from "@/lib/rent-difference";
 import { tenancyChips } from "@/lib/tenancy-chips";
@@ -42,7 +43,7 @@ const PILL_TONE: Record<PortionCard["status"], PillTone> = {
 const PILL_LABEL = {
   paid: "Paid",
   pending: "Pending",
-  "needs-tenant": "No tenant",
+  "needs-tenant": "Vacant",
   vacant: "Vacant",
 } as const;
 
@@ -58,7 +59,7 @@ export default function PortionBoard({ monthKey, monthLabel, cards, defaultDate 
           const lastOfCycle =
             card.cycleLength !== null && count !== undefined && count === card.cycleLength;
           // A vacant card, like one that never had a tenant, has no rent to show and nothing to log.
-          const noTenant = card.status === "needs-tenant" || card.status === "vacant";
+          const noTenant = isVacantCard(card);
           // Only a paid card says how the amount received compares with the rent.
           const rentLine =
             card.status === "paid" ? cardDifferenceText(card.rentDifference, card.rentReference) : null;
@@ -70,13 +71,27 @@ export default function PortionBoard({ monthKey, monthLabel, cards, defaultDate 
                   <Pill tone={PILL_TONE[card.status]}>{PILL_LABEL[card.status]}</Pill>
                 </div>
 
-                {noTenant ? (
+                {card.status === "vacant" && card.vacancy ? (
+                  <p className="mt-1 text-sm text-muted">
+                    {`Vacant since ${formatDay(card.vacancy.since)}. ${card.vacancy.previousTenant} moved out.`}
+                  </p>
+                ) : noTenant ? (
                   <p className="mt-1 text-sm text-muted">No tenant recorded yet.</p>
                 ) : (
                   <p className="mt-1 text-sm text-muted">
                     {tenant} · Payment {count}
                     {card.cycleLength !== null ? ` of ${card.cycleLength}` : ""}
                   </p>
+                )}
+
+                {card.status === "vacant" && (
+                  <Link
+                    href={tenantsPagePath(card.portionId, monthKey)}
+                    aria-label={`Past tenants of ${card.name}`}
+                    className="press inline-flex min-h-11 min-w-11 items-center text-sm text-muted underline"
+                  >
+                    Past tenants
+                  </Link>
                 )}
 
                 {!noTenant && (

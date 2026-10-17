@@ -23,6 +23,7 @@ import { ToastProvider } from "@/components/ui/Toast";
 import TenancyForm from "@/components/TenancyForm";
 import { emptyMoveOutForm, emptyTenancyForm } from "@/lib/tenancy-input";
 import { buttonClasses, CARD, pillClasses } from "@/lib/ui-classes";
+import { smallTargets, unpressedTargets } from "../support/tap-targets";
 
 function card(overrides: Partial<PortionCard> = {}): PortionCard {
   return {
@@ -131,7 +132,8 @@ describe("PortionBoard on the shared pieces", () => {
     expect(board([card()])).toContain(`<article class="${CARD}">`);
     expect(board([card()])).toContain(`<span class="${pillClasses("warn")}">Pending</span>`);
     expect(board([paid])).toContain(`<span class="${pillClasses("success")}">Paid</span>`);
-    expect(board([card({ status: "needs-tenant", next: null })])).toContain(`<span class="${pillClasses("neutral")}">No tenant</span>`);
+    // deliberate (3-9): the "No tenant" pill is now "Vacant", for a portion that never had a tenant as for one whose tenant left
+    expect(board([card({ status: "needs-tenant", next: null })])).toContain(`<span class="${pillClasses("neutral")}">Vacant</span>`);
   });
 
   it("draws the tenancy chips as neutral Pills", () => {
@@ -153,6 +155,74 @@ describe("PortionBoard on the shared pieces", () => {
 
   it("none of its buttons submits a form", () => {
     expect(board([card()])).not.toContain('type="submit"');
+  });
+});
+
+describe("PortionBoard: a portion with no tenant", () => {
+  const vacant = (overrides: Partial<PortionCard> = {}) =>
+    card({
+      status: "vacant",
+      entry: null,
+      next: null,
+      rentReference: null,
+      vacancy: { since: "2026-10-20", previousTenant: "Asha" },
+      ...overrides,
+    });
+
+  it("shows a vacant card with a neutral Vacant pill, since when and who moved out", () => {
+    const out = board([vacant()]);
+    expect(out).toContain(`<span class="${pillClasses("neutral")}">Vacant</span>`);
+    expect(out).toContain("Vacant since 20 Oct 2026. Asha moved out.");
+    expect(out).not.toContain("No tenant recorded yet.");
+  });
+
+  it("shows no rent, no tenant line, no details link and no Log payment on a vacant card", () => {
+    const out = board([vacant()]);
+    expect(out).not.toContain("₹");
+    expect(out).not.toContain("Payment ");
+    expect(out).not.toContain("Log payment");
+    expect(out).not.toContain("Edit amount");
+    expect(out).not.toContain("Undo");
+    expect(out).not.toContain("Add details");
+    expect(out).not.toContain("than rent");
+  });
+
+  it("links a vacant card to the past tenants of the portion, keeping the month, at least 44 px tall", () => {
+    const out = board([vacant()]);
+    expect(out).toMatch(
+      /<a [^>]*href="\/tenants\/p1\?month=2026-10"[^>]*>Past tenants<\/a>/,
+    );
+    expect(out).toContain('aria-label="Past tenants of Ground floor"');
+    expect(out).toMatch(/<a [^>]*aria-label="Past tenants of Ground floor"[^>]*class="[^"]*min-h-11[^"]*"|<a [^>]*class="[^"]*min-h-11[^"]*"[^>]*aria-label="Past tenants of Ground floor"/);
+    const other = html(
+      createElement(PortionBoard, { monthKey: "2026-12", monthLabel: "December 2026", cards: [vacant({ portionId: "first floor/2" })], defaultDate: "2026-12-05" }),
+    );
+    expect(other).toContain('href="/tenants/first%20floor%2F2?month=2026-12"');
+  });
+
+  it("gives a vacant card an Add tenant button, as a card that never had a tenant has", () => {
+    expect(board([vacant()])).toContain(`class="${buttonClasses("primary", "md")} flex-1">Add tenant</button>`);
+  });
+
+  it("keeps a card that never had a tenant as it was, with the Vacant pill: no link, since there are no past tenants", () => {
+    const out = board([card({ status: "needs-tenant", next: null })]);
+    expect(out).toContain("No tenant recorded yet.");
+    expect(out).toContain(`<span class="${pillClasses("neutral")}">Vacant</span>`);
+    expect(out).not.toContain("Past tenants");
+    expect(out).not.toContain("/tenants/");
+    expect(out).toContain(">Add tenant</button>");
+  });
+
+  it("says only that the card is vacant when it does not know since when", () => {
+    const out = board([vacant({ vacancy: undefined })]);
+    expect(out).toContain(`<span class="${pillClasses("neutral")}">Vacant</span>`);
+    expect(out).toContain("No tenant recorded yet.");
+  });
+
+  it("gives every button and link of a board with a vacant card room for a thumb and feedback on a press", () => {
+    const out = board([vacant(), card(), card({ status: "needs-tenant", next: null, portionId: "p3" })]);
+    expect(smallTargets(out)).toEqual([]);
+    expect(unpressedTargets(out)).toEqual([]);
   });
 });
 
@@ -267,6 +337,20 @@ describe("PaymentSheet", () => {
     const out = html(createElement(PaymentSheet, { ...props, mode: "new-tenant" }));
     expect(out).toContain('<div role="status"></div>');
     expect(out).not.toContain("weren&#x27;t saved");
+  });
+
+  it("marks the portions with no tenant as vacant in the choice of portion, and no other", () => {
+    const cards = [
+      card({ portionId: "p1", name: "Ground floor" }),
+      card({ portionId: "p2", name: "Shop", status: "vacant", next: null, vacancy: { since: "2026-10-20", previousTenant: "Asha" } }),
+      card({ portionId: "p3", name: "Attic", status: "needs-tenant", next: null }),
+      card({ portionId: "p4", name: "Hall", status: "paid", entry: { tenant: "Dev", count: 2, amount: 4000 }, next: null }),
+    ];
+    const out = html(createElement(PaymentSheet, { ...props, cards, mode: "new-tenant", initialPortionId: null }));
+    expect(out).toContain('<option value="p1">Ground floor</option>');
+    expect(out).toContain('<option value="p2">Shop (vacant)</option>');
+    expect(out).toContain('<option value="p3">Attic (vacant)</option>');
+    expect(out).toContain('<option value="p4">Hall</option>');
   });
 
   it("does not offer the section when logging or editing a payment", () => {

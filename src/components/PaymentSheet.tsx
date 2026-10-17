@@ -24,6 +24,7 @@ import {
   type FormProblem,
 } from "@/lib/form-errors";
 import { formatRupees } from "@/lib/format";
+import { isVacantCard } from "@/lib/month-summary";
 import {
   amountFromText,
   buildPaymentRequest,
@@ -338,7 +339,7 @@ export default function PaymentSheet({
                     </option>
                     {cards.map((c) => (
                       <option key={c.portionId} value={c.portionId}>
-                        {c.name}
+                        {isVacantCard(c) ? `${c.name} (vacant)` : c.name}
                       </option>
                     ))}
                   </Select>

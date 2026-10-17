@@ -221,6 +221,49 @@ describe("the month summary: received against rent due", () => {
   });
 });
 
+describe("the month summary: portions that are let", () => {
+  const status = (id: string, kind: PortionCard["status"]) => card({ portionId: id, name: id, status: kind });
+
+  it("counts only the portions that are let, and says how many are vacant", async () => {
+    mocks.loadMonthView.mockResolvedValue(
+      view({
+        cards: [status("p1", "paid"), status("p2", "paid"), status("p3", "paid"), status("p4", "pending"), status("p5", "vacant")],
+        paidCount: 3,
+      }),
+    );
+    const out = summary(await render());
+    expect(out).toContain("3 of 4 portions · 1 vacant");
+    expect(out).not.toContain("of 5 portions");
+  });
+
+  it("counts a portion that never had a tenant as vacant too", async () => {
+    mocks.loadMonthView.mockResolvedValue(
+      view({ cards: [status("p1", "paid"), status("p2", "needs-tenant")], paidCount: 1 }),
+    );
+    expect(summary(await render())).toContain("1 of 1 portions · 1 vacant");
+  });
+
+  it('says all portions are vacant when none is let, and never "so far"', async () => {
+    mocks.loadMonthView.mockResolvedValue(
+      view({ cards: [status("p1", "vacant"), status("p2", "vacant")], received: 0, due: 0, difference: 0, paidCount: 0 }),
+    );
+    const out = summary(await render());
+    expect(out).toContain("All portions are vacant");
+    expect(out).not.toContain("so far");
+  });
+
+  it('says "so far" while a portion that is let has not paid, and not because a portion is vacant', async () => {
+    const cards = [status("p1", "paid"), status("p2", "vacant")];
+    mocks.loadMonthView.mockResolvedValue(view({ cards, received: 5514, due: 5450, difference: 64, paidCount: 1 }));
+    // the only portion that is let has paid: the total cannot change any more
+    expect(summary(await render())).toContain("₹\u00a064 more than rent</p>");
+    mocks.loadMonthView.mockResolvedValue(
+      view({ cards: [...cards, status("p3", "pending")], received: 5514, due: 10900, difference: 64, paidCount: 1 }),
+    );
+    expect(summary(await render())).toContain("₹\u00a064 more than rent so far</p>");
+  });
+});
+
 describe("the cards on the home page", () => {
   const paid = (rentDifference: number | null, rentReference: number | null, amount: number) =>
     card({
