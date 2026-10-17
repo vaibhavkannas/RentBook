@@ -1,5 +1,14 @@
 @import "tailwindcss";
 
+/*
+ * The scale the shared pieces (src/components/ui) are built on. Reach for these before inventing a size.
+ *   Type:    text-2xl page and brand titles; text-lg screen titles and amounts; text-base body text and every
+ *            form control (16 px, so a phone does not zoom in on focus); text-sm secondary text; text-xs pills.
+ *   Spacing: a 16 px gutter (px-4) on every screen; space-y-3 between cards and between fields; mt-3 or mt-4
+ *            between blocks inside a card or a sheet.
+ *   Shape:   --radius-card (cards), --radius-control (buttons and fields), --radius-chip (pills and notices).
+ */
+
 :root {
   color-scheme: light dark;
   --background: #f6f5f1;
@@ -16,6 +25,8 @@
   --warn-ink: #7a4f0a;
   --danger-bg: #fbe4e1;
   --danger-ink: #8f2a1f;
+  --overlay: rgb(0 0 0 / 0.4);
+  --focus: var(--accent);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -34,6 +45,7 @@
     --warn-ink: #f0cf8a;
     --danger-bg: #4a1f1a;
     --danger-ink: #f4b3aa;
+    --overlay: rgb(0 0 0 / 0.6);
   }
 }
 
@@ -52,7 +64,39 @@
   --color-warn-ink: var(--warn-ink);
   --color-danger-bg: var(--danger-bg);
   --color-danger-ink: var(--danger-ink);
+  --color-overlay: var(--overlay);
+  --color-focus: var(--focus);
+  --radius-card: 1rem;
+  --radius-control: 0.75rem;
+  --radius-chip: 0.5rem;
   --font-sans: var(--font-geist-sans);
+}
+
+@layer base {
+  /* One focus ring for everything a keyboard can reach. It shows for the keyboard, not for a tap. */
+  :is(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+    outline: 2px solid var(--focus);
+    outline-offset: 2px;
+  }
+}
+
+/* A little press feedback for buttons and links: the control shrinks while it is held down. */
+@utility press {
+  transition:
+    transform 120ms ease,
+    opacity 120ms ease;
+
+  &:active:not(:disabled) {
+    transform: scale(0.98);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    transition: none;
+
+    &:active:not(:disabled) {
+      transform: none;
+    }
+  }
 }
 
 body {

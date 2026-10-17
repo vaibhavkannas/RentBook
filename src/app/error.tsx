@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { BRAND } from "@/lib/brand";
 
 // What a person sees when a page or part of a page fails inside the app (the layout above it still works).
 // It says nothing about the error itself: the details are in the server log (see src/instrumentation.ts).
@@ -19,7 +20,7 @@ export default function ErrorPage({ retry }: { error: Error & { digest?: string 
         Try again
       </button>
       <Link href="/" className="mt-3 inline-flex min-h-11 items-center justify-center text-muted">
-        Back to RentBook
+        {`Back to ${BRAND.name}`}
       </Link>
     </main>
   );

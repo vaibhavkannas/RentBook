@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { connection } from "next/server";
+import { BRAND } from "@/lib/brand";
 
 export default async function NotFound() {
   // Render for each request, not ahead of time: only then does the page receive the request's nonce (see proxy.ts).
@@ -11,7 +12,7 @@ export default async function NotFound() {
         href="/"
         className="mt-6 inline-flex min-h-11 items-center justify-center rounded-xl bg-accent px-4 font-medium text-accent-ink"
       >
-        Back to RentBook
+        {`Back to ${BRAND.name}`}
       </Link>
     </main>
   );

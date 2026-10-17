@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { signIn } from "@/auth";
+import { BRAND } from "@/lib/brand";
 import { getViewer } from "@/lib/server/auth-guard";
 
 export default async function SignInPage({
@@ -12,7 +13,7 @@ export default async function SignInPage({
 
   return (
     <main className="mx-auto flex min-h-dvh max-w-md flex-col justify-center px-4">
-      <h1 className="text-2xl font-semibold">RentBook</h1>
+      <h1 className="text-2xl font-semibold">{BRAND.name}</h1>
       <p className="mt-1 text-muted">Sign in to record rent receipts.</p>
 
       {error && (
@@ -21,7 +22,7 @@ export default async function SignInPage({
           className="mt-4 rounded-lg bg-danger-bg px-3 py-2 text-sm text-danger-ink"
         >
           {error === "AccessDenied"
-            ? "That Google account isn't allowed to use RentBook."
+            ? `That Google account isn't allowed to use ${BRAND.name}.`
             : "Sign-in failed. Try again."}
         </p>
       )}

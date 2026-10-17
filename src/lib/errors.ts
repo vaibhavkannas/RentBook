@@ -1,3 +1,5 @@
+import { BRAND } from "@/lib/brand";
+
 export class AppError extends Error {
   constructor(
     readonly code:
@@ -35,7 +37,7 @@ export const payloadTooLarge = () => new AppError("validation", "That request is
 
 /** The request did not come from the app's own page (another site, or a tool that says so). */
 export const crossOriginRequest = () =>
-  new AppError("forbidden", "That request didn't come from RentBook's own page. Reload the page and try again.");
+  new AppError("forbidden", `That request didn't come from ${BRAND.name}'s own page. Reload the page and try again.`);
 
 export const conflict = (message: string, details?: Record<string, unknown>) =>
   new AppError("conflict", message, details);

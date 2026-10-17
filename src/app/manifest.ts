@@ -1,14 +1,15 @@
 import type { MetadataRoute } from "next";
+import { BRAND } from "@/lib/brand";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "RentBook",
-    short_name: "RentBook",
-    description: "Record monthly rent receipts into your Google Sheet.",
+    name: BRAND.name,
+    short_name: BRAND.shortName,
+    description: BRAND.description,
     start_url: "/",
     display: "standalone",
-    background_color: "#f6f5f1",
-    theme_color: "#1f5f4a",
+    background_color: BRAND.colors.background,
+    theme_color: BRAND.colors.accent,
     icons: [
       { src: "/icon", sizes: "512x512", type: "image/png" },
       { src: "/apple-icon", sizes: "180x180", type: "image/png" },

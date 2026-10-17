@@ -1,3 +1,4 @@
+import { BRAND } from "@/lib/brand";
 import { cleanText, MAX_NAME_LENGTH } from "@/lib/domain/input-rules";
 import type { PortionConfig } from "@/lib/domain/types";
 import { sheetStructure, tabMissing, validation } from "@/lib/errors";
@@ -119,8 +120,7 @@ export function resetBootstrap(gateway: SheetsGateway): void {
   bootstrapped.delete(gateway);
 }
 
-const SETTINGS_MISSING =
-  "The Settings tab is missing. Restore it from File > Version history or rename it back. RentBook will not recreate it because that would reset your rent cycle lengths and hike percentages.";
+const SETTINGS_MISSING = `The Settings tab is missing. Restore it from File > Version history or rename it back. ${BRAND.name} will not recreate it because that would reset your rent cycle lengths and hike percentages.`;
 
 const isBlankRow = (row: unknown[]) => row.every(isBlankCell);
 

@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Geist } from "next/font/google";
+import { BRAND } from "@/lib/brand";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -8,16 +9,16 @@ const geistSans = Geist({
 });
 
 export const metadata: Metadata = {
-  title: "RentBook",
-  description: "Record monthly rent receipts into your Google Sheet.",
-  appleWebApp: { capable: true, title: "RentBook", statusBarStyle: "default" },
+  title: BRAND.name,
+  description: BRAND.description,
+  appleWebApp: { capable: true, title: BRAND.name, statusBarStyle: "default" },
   robots: { index: false, follow: false },
 };
 
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  themeColor: "#1f5f4a",
+  themeColor: BRAND.colors.accent,
   interactiveWidget: "resizes-content",
 };
 

@@ -1,5 +1,6 @@
 "use client";
 
+import { BRAND } from "@/lib/brand";
 import "./globals.css";
 
 // What a person sees when the page frame itself (the root layout) fails. It replaces the layout, so it is a whole
@@ -13,7 +14,7 @@ export default function GlobalError() {
   return (
     <html lang="en" className="h-full antialiased">
       <body className="min-h-full">
-        <title>RentBook</title>
+        <title>{BRAND.name}</title>
         <main className="mx-auto flex min-h-dvh max-w-md flex-col justify-center px-4">
           <h1 className="text-2xl font-semibold">Something went wrong on our side.</h1>
           <p className="mt-2 text-muted">Your data is safe in your Sheet.</p>

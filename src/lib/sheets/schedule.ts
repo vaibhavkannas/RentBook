@@ -4,6 +4,7 @@ import {
   type MonthCodec,
 } from "@/lib/domain/month-codec";
 import type { PortionConfig, PortionEntry, ScheduleRow } from "@/lib/domain/types";
+import { BRAND } from "@/lib/brand";
 import { sheetStructure } from "@/lib/errors";
 import { isBlankCell } from "./cells";
 
@@ -138,7 +139,7 @@ export function parseSchedule(
     const cell = dataRows[offset][monthCol];
     if (month === null && !isBlankCell(cell)) {
       throw sheetStructure(
-        `Row ${headerIndex + 2 + offset} of the Schedule tab has "${shorten(String(cell))}" in the Month column, which RentBook cannot read as a month. Change it to a month such as "Oct-26", or clear the cell.`,
+        `Row ${headerIndex + 2 + offset} of the Schedule tab has "${shorten(String(cell))}" in the Month column, which ${BRAND.name} cannot read as a month. Change it to a month such as "Oct-26", or clear the cell.`,
       );
     }
   });

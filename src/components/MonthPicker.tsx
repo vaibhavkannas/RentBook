@@ -45,7 +45,7 @@ export default function MonthPicker({ shownKey, currentKey, onPick, onClose }: P
 
   return (
     <div
-      className="fixed inset-0 z-40 flex items-end justify-center bg-black/40"
+      className="fixed inset-0 z-40 flex items-end justify-center bg-overlay"
       onPointerDown={(event) => {
         press.current = { downOnBackdrop: event.target === event.currentTarget, upOnBackdrop: false };
       }}
