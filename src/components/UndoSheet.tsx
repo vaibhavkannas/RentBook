@@ -2,6 +2,9 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
+import { Button } from "@/components/ui/Button";
+import { Notice } from "@/components/ui/Notice";
+import { Sheet } from "@/components/ui/Sheet";
 import type { PortionCard } from "@/lib/domain/types";
 import type { LogRetryResponse } from "@/lib/payment-request";
 import { postJson } from "@/lib/post-json";
@@ -43,27 +46,11 @@ export default function UndoSheet({ monthKey, monthLabel, card, onClose, onDone 
   const safeButton = useRef<HTMLButtonElement>(null);
   const toastText = undoToastText(card.name);
 
-  // Remember what opened the sheet and give focus back to it on close, if it is still on the page.
-  // This must stay above the focus effect below, which moves focus into the sheet.
-  useEffect(() => {
-    const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    return () => {
-      if (opener?.isConnected) opener.focus();
-    };
-  }, []);
-
-  // Focus the safe choice: Keep, then Close once the card changed, or Retry after a log failure.
+  // Focus the safe choice: Keep, then Close once the card changed, or Retry after a log failure. The Sheet puts focus
+  // on it when it opens (initialFocus) and gives focus back to what opened the sheet when it closes.
   useEffect(() => {
     safeButton.current?.focus();
   }, [conflicted, logPending]);
-
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape" && !busy) onClose();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [busy, onClose]);
 
   async function undo() {
     setBusy(true);
@@ -101,94 +88,86 @@ export default function UndoSheet({ monthKey, monthLabel, card, onClose, onDone 
   }
 
   return (
-    <div className="fixed inset-0 z-40 flex items-end justify-center bg-black/40">
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="undo-title"
-        aria-describedby="undo-description"
-        className="max-h-dvh w-full max-w-md overflow-y-auto rounded-t-2xl bg-surface p-5"
-      >
-        <h2 id="undo-title" className="text-lg font-semibold">
-          Undo payment?
-        </h2>
-        <p className="text-sm text-muted">
-          {monthLabel} · {card.name}
-        </p>
+    <Sheet
+      labelledBy="undo-title"
+      describedBy="undo-description"
+      onClose={onClose}
+      canClose={!busy}
+      closeOnBackdrop={false}
+      initialFocus={safeButton}
+    >
+      <h2 id="undo-title" className="text-lg font-semibold">
+        Undo payment?
+      </h2>
+      <p className="text-sm text-muted">
+        {monthLabel} · {card.name}
+      </p>
 
-        {logPending ? (
-          <div className="mt-4 space-y-3">
-            <p id="undo-description" className="rounded-lg bg-warn-bg px-3 py-2 text-sm text-warn-ink">
-              The payment was undone in your Schedule, but the Payments Log entry didn&apos;t save.
+      {logPending ? (
+        <div className="mt-4 space-y-3">
+          <Notice tone="warn" id="undo-description">
+            The payment was undone in your Schedule, but the Payments Log entry didn&apos;t save.
+          </Notice>
+          {error && (
+            <p role="alert" className="text-sm text-danger-ink">
+              {error}
             </p>
-            {error && (
-              <p role="alert" className="text-sm text-danger-ink">
-                {error}
-              </p>
-            )}
-            <button
-              ref={safeButton}
-              type="button"
-              onClick={retryLog}
-              disabled={busy}
-              className="min-h-12 w-full rounded-xl bg-accent px-4 font-medium text-accent-ink"
+          )}
+          <Button
+            ref={safeButton}
+            size="lg"
+            className="w-full"
+            onClick={retryLog}
+            pending={busy}
+            pendingLabel="Retrying…"
+          >
+            Retry log entry
+          </Button>
+          <Button
+            variant="quiet"
+            className="w-full"
+            onClick={() => {
+              onDone(toastText);
+              onClose();
+            }}
+            disabled={busy}
+          >
+            Skip for now
+          </Button>
+        </div>
+      ) : (
+        <div className="mt-4 space-y-3">
+          {conflicted ? (
+            <Notice tone="danger" role="alert" id="undo-description">
+              {UNDO_CONFLICT_MESSAGE}
+            </Notice>
+          ) : (
+            <p id="undo-description" className="text-sm">
+              {undoConfirmationText(entry, card.name, monthLabel)}
+            </p>
+          )}
+          {error && (
+            <Notice tone="danger" role="alert">
+              {error}
+            </Notice>
+          )}
+          {!conflicted && (
+            <Button
+              variant="danger"
+              size="lg"
+              className="w-full"
+              onClick={undo}
+              pending={busy}
+              pendingLabel="Undoing…"
             >
-              {busy ? "Retrying…" : "Retry log entry"}
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                onDone(toastText);
-                onClose();
-              }}
-              disabled={busy}
-              className="min-h-11 w-full text-muted"
-            >
-              Skip for now
-            </button>
-          </div>
-        ) : (
-          <div className="mt-4 space-y-3">
-            {conflicted ? (
-              <p
-                id="undo-description"
-                role="alert"
-                className="rounded-lg bg-danger-bg px-3 py-2 text-sm text-danger-ink"
-              >
-                {UNDO_CONFLICT_MESSAGE}
-              </p>
-            ) : (
-              <p id="undo-description" className="text-sm">
-                {undoConfirmationText(entry, card.name, monthLabel)}
-              </p>
-            )}
-            {error && (
-              <p role="alert" className="rounded-lg bg-danger-bg px-3 py-2 text-sm text-danger-ink">
-                {error}
-              </p>
-            )}
-            {!conflicted && (
-              <button
-                type="button"
-                onClick={undo}
-                disabled={busy}
-                className="min-h-12 w-full rounded-xl bg-danger-bg px-4 font-medium text-danger-ink"
-              >
-                {busy ? "Undoing…" : "Undo payment"}
-              </button>
-            )}
-            <button
-              ref={safeButton}
-              type="button"
-              onClick={onClose}
-              disabled={busy}
-              className="min-h-11 w-full text-muted"
-            >
-              {conflicted ? "Close" : "Keep"}
-            </button>
-          </div>
-        )}
-      </div>
-    </div>
+              Undo payment
+            </Button>
+          )}
+          <Button ref={safeButton} variant="quiet" className="w-full" onClick={onClose} disabled={busy}>
+            {conflicted ? "Close" : "Keep"}
+          </Button>
+        </div>
+      )}
+    </Sheet>
   );
 }

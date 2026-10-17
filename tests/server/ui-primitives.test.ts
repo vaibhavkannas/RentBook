@@ -201,6 +201,12 @@ describe("Notice", () => {
     expect(html(createElement(Notice, { tone: "warn" }, "Careful."))).toBe(`<p class="${noticeClasses("warn")}">Careful.</p>`);
   });
 
+  it("takes an id, for a dialog or field that points at it", () => {
+    expect(html(createElement(Notice, { tone: "warn", id: "why" }, "Careful."))).toBe(
+      `<p id="why" class="${noticeClasses("warn")}">Careful.</p>`,
+    );
+  });
+
   it("can hold more than a line of text, and takes a margin", () => {
     const out = html(createElement(Notice, { tone: "success", as: "div", className: "mt-4" }, createElement("p", null, "One.")));
     expect(out).toBe(`<div class="${noticeClasses("success")} mt-4"><p>One.</p></div>`);

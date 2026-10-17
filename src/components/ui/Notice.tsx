@@ -3,6 +3,8 @@ import { cx, noticeClasses, type Tone } from "@/lib/ui-classes";
 
 type Props = {
   tone: Tone;
+  /** For `aria-describedby` from the dialog or field the notice explains. */
+  id?: string;
   /** "alert" for an error the person must hear about now, "status" for a quiet update. */
   role?: "alert" | "status";
   /** A notice that holds more than a line of text (a paragraph and buttons) is a div. */
@@ -13,9 +15,9 @@ type Props = {
 };
 
 /** A short message in a tinted box. */
-export function Notice({ tone, role, as: Tag = "p", className, children }: Props) {
+export function Notice({ tone, id, role, as: Tag = "p", className, children }: Props) {
   return (
-    <Tag role={role} className={cx(noticeClasses(tone), className)}>
+    <Tag id={id} role={role} className={cx(noticeClasses(tone), className)}>
       {children}
     </Tag>
   );

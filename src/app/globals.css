@@ -80,6 +80,17 @@
   }
 }
 
+/* While a sheet is open the page behind it does not scroll (the Sheet component sets the class on <html>). */
+html.sheet-open,
+html.sheet-open body {
+  overflow: hidden;
+}
+
+/* Bottom padding for a sheet: clears the home indicator, and is never less than the usual 1.25rem. */
+@utility pb-safe {
+  padding-bottom: max(1.25rem, env(safe-area-inset-bottom));
+}
+
 /* A little press feedback for buttons and links: the control shrinks while it is held down. */
 @utility press {
   transition:
