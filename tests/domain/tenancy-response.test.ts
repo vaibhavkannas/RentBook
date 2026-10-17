@@ -51,7 +51,7 @@ describe("saveFailure", () => {
 
   it("tells a person who was signed out to sign in again", () => {
     expect(saveFailure({ ok: false, error: { code: "unauthorized", message: "Sign in with an allowed Google account." } }, known).problem.message).toBe(
-      "You've been signed out. Switch to another tab and back, then sign in again.",
+      "You've been signed out. Tap another tab at the bottom of the screen to sign in again.",
     );
   });
 

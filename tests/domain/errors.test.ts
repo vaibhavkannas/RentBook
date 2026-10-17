@@ -31,15 +31,18 @@ describe("unsupportedMediaType", () => {
     const error = unsupportedMediaType();
     expect(error.status).toBe(415);
     expect(error.code).toBe("validation");
-    expect(error.message).toBe("That request couldn't be read. Switch to another tab and back, then try again.");
+    expect(error.message).toBe("That request couldn't be read. Tap another tab at the bottom of the screen and come back, then try again.");
   });
 });
 
 describe("the messages that tell a person to bring the screen up to date", () => {
-  it("say to switch to another tab and back, which loads the screen again, and never to refresh or reload", () => {
-    const hint = "Switch to another tab and back, then try again.";
+  it("say to tap another tab at the bottom of the screen and come back, which loads the screen again, and never to refresh or reload", () => {
+    const hint = "Tap another tab at the bottom of the screen and come back, then try again.";
     expect(PAGE_OUT_OF_DATE_MESSAGE).toBe(`This page is out of date. ${hint}`);
-    expect(unknownPortion().message).toBe(`That portion isn't in your Settings any more. ${hint}`);
+    // nothing to try again with a portion that is gone: it says to check the cards instead
+    expect(unknownPortion().message).toBe(
+      "That portion isn't in your Settings any more. Tap another tab at the bottom of the screen and come back, then check the cards.",
+    );
     expect(crossOriginRequest().message).toBe(`That request didn't come from RentBook's own page. ${hint}`);
     expect(unsupportedMediaType().message).toBe(`That request couldn't be read. ${hint}`);
   });

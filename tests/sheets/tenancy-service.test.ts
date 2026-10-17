@@ -154,6 +154,29 @@ function unchangedColumns(before: unknown[], after: unknown[]): number[] {
   return Array.from({ length }, (_, index) => index).filter((index) => before[index] === after[index]);
 }
 
+/** Said when a tenancy has moved out already: there is nothing to try again, so it says to check the details. */
+const MOVED_OUT = /has already moved out\. Tap another tab at the bottom of the screen and come back, then check the details\.$/;
+
+describe("saveTenancy: when the Tenants tab changes under it", () => {
+  it("says the Tenants tab in your Sheet changed while the details were saved, and to try again after tapping another tab", async () => {
+    const { fake, ctx } = await ready();
+    // After the new row is added, the next read of the Tenants tab shows only its header: the row is not there to find again.
+    let appended = false;
+    const append = fake.appendRow.bind(fake);
+    fake.appendRow = async (tab, values) => {
+      const result = await append(tab, values);
+      if (tab === TENANTS_TAB) appended = true;
+      return result;
+    };
+    const read = fake.getValues.bind(fake);
+    fake.getValues = async (tab, a1, render) => (appended && tab === TENANTS_TAB ? read(tab, "A1:O1", render) : read(tab, a1, render));
+    const error = await expectCode(create(ctx), "conflict");
+    expect(error.message).toBe(
+      "The Tenants tab in your Sheet changed while the details were being saved. Tap another tab at the bottom of the screen and come back, then try again.",
+    );
+  });
+});
+
 describe("saveTenancy: create", () => {
   it("appends one row with id, portion, name, fields, who and when", async () => {
     const { fake, ctx } = await ready();
@@ -223,7 +246,7 @@ describe("saveTenancy: create", () => {
     await create(ctx);
     const before = snapshotOf(fake);
     const error = await expectCode(create(ctx, { tenant: " ASHA " }), "conflict");
-    expect(error.message).toBe("Details already exist for ASHA. Switch to another tab and back, then try again.");
+    expect(error.message).toBe("Details already exist for ASHA. Tap another tab at the bottom of the screen and come back, then check the details.");
     expect(snapshotOf(fake)).toEqual(before);
   });
 
@@ -300,7 +323,7 @@ describe("saveTenancy: create", () => {
     const { fake, ctx } = await ready();
     const before = snapshotOf(fake);
     const error = await expectCode(create(ctx, { portionId: "p9" }), "validation");
-    expect(error.message).toBe("That portion isn't in your Settings any more. Switch to another tab and back, then try again.");
+    expect(error.message).toBe("That portion isn't in your Settings any more. Tap another tab at the bottom of the screen and come back, then check the cards.");
     expect(snapshotOf(fake)).toEqual(before);
   });
 
@@ -309,7 +332,7 @@ describe("saveTenancy: create", () => {
     setScheduleTenant(fake, "p1", "Hari"); // the person's page still said Asha
     const before = snapshotOf(fake);
     const error = await expectCode(create(ctx, { tenant: "Asha" }), "conflict");
-    expect(error.message).toBe("The tenant for First floor, single bedroom changed. Switch to another tab and back, then try again.");
+    expect(error.message).toBe("The tenant for First floor, single bedroom changed. Tap another tab at the bottom of the screen and come back, then try again.");
     expect(snapshotOf(fake)).toEqual(before);
     expect(fake.calls).not.toContain("appendRow");
     expect(fake.calls).not.toContain("updateValues");
@@ -710,7 +733,7 @@ describe("saveTenancy: update", () => {
       edit(ctx, tenancy, { moveIn: "2026-01-15", notes: "late" }, { expectedUpdatedAt: "2026-10-04T00:00:00.000Z" }),
       "conflict",
     );
-    expect(error.message).toMatch(/was changed by someone else\. Switch to another tab and back, then try again\.$/);
+    expect(error.message).toMatch(/was changed by someone else\. Tap another tab at the bottom of the screen and come back, then try again\.$/);
     expect(snapshotOf(fake)).toEqual(before);
     expect(fake.calls).not.toContain("updateValues");
   });
@@ -776,7 +799,7 @@ describe("saveTenancy: update", () => {
         saveTenancy(ctx, { portionId: "p1", tenant: "Asha", fields: FIELDS, id: stored.id }, LATER_OPTIONS),
         "validation",
       );
-      expect(error.message).toBe("This page is out of date. Switch to another tab and back, then try again.");
+      expect(error.message).toBe("This page is out of date. Tap another tab at the bottom of the screen and come back, then try again.");
       expect(snapshotOf(fake)).toEqual(before);
     });
   });
@@ -817,7 +840,7 @@ describe("saveTenancy: update", () => {
       const [, last] = await tenancies(ctx);
       const before = snapshotOf(fake);
       const error = await expectCode(edit(ctx, last, { moveIn: "2026-01-15" }, { id: "dup" }), "conflict");
-      expect(error.message).toMatch(/already moved out/);
+      expect(error.message).toMatch(MOVED_OUT);
       expect(snapshotOf(fake)).toEqual(before);
     });
   });
@@ -831,7 +854,17 @@ describe("saveTenancy: update", () => {
     );
     const before = snapshotOf(fake);
     const error = await expectCode(edit(ctx, closed, { moveIn: "2026-01-15" }), "conflict");
-    expect(error.message).toMatch(/already moved out/);
+    expect(error.message).toMatch(MOVED_OUT);
+    expect(snapshotOf(fake)).toEqual(before);
+  });
+
+  it("says details whose row is gone from the Tenants tab of the Sheet are no longer there, and to check the details, not to try again", async () => {
+    const { fake, ctx, tenancy } = await created();
+    const before = snapshotOf(fake);
+    const error = await expectCode(edit(ctx, tenancy, { moveIn: "2026-01-15" }, { id: "no-such-tenancy" }), "conflict");
+    expect(error.message).toBe(
+      "These tenant details are no longer in the Tenants tab in your Sheet. Tap another tab at the bottom of the screen and come back, then check the details.",
+    );
     expect(snapshotOf(fake)).toEqual(before);
   });
 
@@ -1096,7 +1129,7 @@ describe("moveOutTenancy", () => {
     const { tenancy: closed } = await moveOut(ctx, tenancy);
     const before = snapshotOf(fake);
     const error = await expectCode(moveOut(ctx, closed, { moveOut: "2026-10-02" }), "conflict");
-    expect(error.message).toMatch(/already moved out/);
+    expect(error.message).toMatch(MOVED_OUT);
     expect(snapshotOf(fake)).toEqual(before);
   });
 
@@ -1109,7 +1142,7 @@ describe("moveOutTenancy", () => {
     );
     const before = snapshotOf(fake);
     const error = await expectCode(moveOut(ctx, tenancy), "conflict");
-    expect(error.message).toMatch(/was changed by someone else\. Switch to another tab and back, then try again\.$/);
+    expect(error.message).toMatch(/was changed by someone else\. Tap another tab at the bottom of the screen and come back, then try again\.$/);
     expect(snapshotOf(fake)).toEqual(before);
   });
 
@@ -1157,7 +1190,7 @@ describe("moveOutTenancy", () => {
       moveOutTenancy(ctx, { id: "t-seed", moveOut: "2026-09-30" } as Parameters<typeof moveOutTenancy>[1], LATER_OPTIONS),
       "validation",
     );
-    expect(error.message).toBe("This page is out of date. Switch to another tab and back, then try again.");
+    expect(error.message).toBe("This page is out of date. Tap another tab at the bottom of the screen and come back, then try again.");
     expect(snapshotOf(fake)).toEqual(before);
   });
 
@@ -1255,7 +1288,7 @@ describe("getPortionTenants", () => {
   it("refuses an unknown portion", async () => {
     const { ctx } = await ready();
     const error = await expectCode(getPortionTenants(ctx, "p9"), "validation");
-    expect(error.message).toBe("That portion isn't in your Settings any more. Switch to another tab and back, then try again.");
+    expect(error.message).toBe("That portion isn't in your Settings any more. Tap another tab at the bottom of the screen and come back, then check the cards.");
   });
 
   it("uses the snapshot cache when the context has one, and honours minFetchedAt", async () => {

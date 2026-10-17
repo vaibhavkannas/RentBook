@@ -180,7 +180,7 @@ describe("buildPaymentRequest", () => {
   it("refuses to build an edit that has no entry to compare against, and says what to do without the word refresh", () => {
     const result = buildPaymentRequest({ ...base, mode: "edit", seenEntry: undefined });
     expect(result.ok).toBe(false);
-    expect(result.ok ? "" : result.message).toBe("This payment is no longer recorded. Close this and switch to another tab and back.");
+    expect(result.ok ? "" : result.message).toBe("This payment is no longer recorded. Close this, then tap another tab at the bottom of the screen and come back.");
     expect(result.ok ? "" : result.message).toMatch(/no longer recorded/);
   });
 

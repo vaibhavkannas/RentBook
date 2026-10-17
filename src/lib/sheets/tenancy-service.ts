@@ -16,7 +16,7 @@ import type { PortionConfig } from "@/lib/domain/types";
 import { isValidIsoDay } from "@/lib/domain/year-month";
 import { conflict, PAGE_OUT_OF_DATE_MESSAGE, sheetStructure, unknownPortion, validation } from "@/lib/errors";
 import { wholeRupeesMessage } from "@/lib/format";
-import { RELOAD_HINT } from "@/lib/recovery-hint";
+import { RELOAD_HINT, reloadThen } from "@/lib/recovery-hint";
 import { invalidateCaches, loadSnapshot, type SheetsContext, type Snapshot } from "./service";
 import { withWriteLock } from "./write-lock";
 import { checkNewTenancy, recordNewTenant, type WriteStamp } from "./tenancy-writes";
@@ -83,10 +83,10 @@ function scheduleTenantOf(snapshot: Snapshot, portionId: string): string | null 
 function requireOpenTenancy(snapshot: Snapshot, id: string): Tenancy {
   const found = snapshot.tenancies.findLast((t) => t.id === id);
   if (!found) {
-    throw conflict(`These tenant details are no longer in the Tenants tab. ${RELOAD_HINT}`);
+    throw conflict(`These tenant details are no longer in the Tenants tab in your Sheet. ${reloadThen("check the details")}`);
   }
   if (found.moveOut !== "") {
-    throw conflict(`${found.tenant} has already moved out. ${RELOAD_HINT}`);
+    throw conflict(`${found.tenant} has already moved out. ${reloadThen("check the details")}`);
   }
   return found;
 }

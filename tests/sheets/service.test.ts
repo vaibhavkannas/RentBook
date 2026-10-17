@@ -242,7 +242,7 @@ describe("logPayment: a row below the table that is not empty", () => {
     const { ctx } = setup(schedule);
     const error = await expectCode(pay(ctx, { portionId: "p1" }), "conflict");
     expect(error.message).toBe(
-      "Row 6 of the Schedule tab is below the last month but not empty, so a new month row cannot be added there. If someone else just added this month, switch to another tab and back, then try again.",
+      "Row 6 of the Schedule tab in your Sheet is below the last month but not empty, so a new month row cannot be added there. If someone else just added this month, tap another tab at the bottom of the screen and come back, then try again.",
     );
   });
 });
@@ -340,7 +340,7 @@ describe("logPayment: input validation", () => {
 
   it("says in plain words that a portion is not in Settings any more, without its id, for a payment and for an undo", async () => {
     const { ctx } = setup();
-    const message = "That portion isn't in your Settings any more. Switch to another tab and back, then try again.";
+    const message = "That portion isn't in your Settings any more. Tap another tab at the bottom of the screen and come back, then check the cards.";
     const log = await expectCode(pay(ctx, { portionId: "p9" }), "validation");
     expect(log.message).toBe(message);
     const undo = await expectCode(
@@ -452,7 +452,7 @@ describe("logPayment: an edit carries what the person saw", () => {
     );
 
     expect(error.message).toBe(
-      "Nothing to edit. Third floor, hall and kitchen has no payment recorded for October 2026 any more. Switch to another tab and back, then try again.",
+      "Nothing to edit. Third floor, hall and kitchen has no payment recorded for October 2026 any more. Tap another tab at the bottom of the screen and come back, then check the card.",
     );
     expect(fake.tabs.get("Schedule")).toEqual(scheduleBefore);
     expect(fake.tabs.get(LOG_TAB)).toEqual(logBefore);
@@ -475,7 +475,7 @@ describe("logPayment: an edit carries what the person saw", () => {
     );
 
     expect(error.message).toBe(
-      "Third floor, hall and kitchen for October 2026 was changed by someone else. Switch to another tab and back, then try again.",
+      "Third floor, hall and kitchen for October 2026 was changed by someone else. Tap another tab at the bottom of the screen and come back, then try again.",
     );
     expect(fake.tabs.get("Schedule")).toEqual(scheduleBefore);
     expect(fake.tabs.get(LOG_TAB)).toEqual(logBefore);

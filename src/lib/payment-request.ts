@@ -95,7 +95,7 @@ export function buildPaymentRequest(input: PaymentRequestInput): PaymentRequest 
   if (replacing && !input.seenEntry) {
     return {
       ok: false,
-      message: `This payment is no longer recorded. Close this and ${RELOAD_STEP}.`,
+      message: `This payment is no longer recorded. Close this, then ${RELOAD_STEP}.`,
     };
   }
   return {

@@ -237,7 +237,7 @@ async function ensureMonthRow(
   const occupied = below.some((row) => row.some((cell) => cell !== undefined && cell !== ""));
   if (occupied) {
     throw conflict(
-      `Row ${newRow} of the Schedule tab is below the last month but not empty, so a new month row cannot be added there. If someone else just added this month, ${RELOAD_STEP}, then try again.`,
+      `Row ${newRow} of the Schedule tab in your Sheet is below the last month but not empty, so a new month row cannot be added there. If someone else just added this month, ${RELOAD_STEP}, then try again.`,
     );
   }
   await ctx.gateway.cloneRow(ctx.scheduleTab, layout.lastDataRow, newRow, [...clearCols], [
@@ -384,7 +384,7 @@ async function logPaymentUnchecked(
   if (input.expected) {
     if (!existing) {
       throw conflict(
-        `Nothing to edit. ${portion.name} has no payment recorded for ${formatMonthTitle(input.month)} any more. ${RELOAD_HINT}`,
+        `Nothing to edit. ${portion.name} has no payment recorded for ${formatMonthTitle(input.month)} any more. ${reloadThen("check the card")}`,
       );
     }
     if (!sameEntry(existing, input.expected)) {
@@ -546,7 +546,7 @@ async function undoPaymentUnchecked(
   const existing = monthRow?.entries.get(portion.id);
   if (!monthRow || !existing) {
     throw conflict(
-      `Nothing to undo. ${portion.name} has no payment recorded for ${formatMonthTitle(input.month)} any more. ${RELOAD_HINT}`,
+      `Nothing to undo. ${portion.name} has no payment recorded for ${formatMonthTitle(input.month)} any more. ${reloadThen("check the card")}`,
     );
   }
   if (!sameEntry(existing, input.expected)) {

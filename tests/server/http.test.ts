@@ -439,7 +439,7 @@ describe("readJsonBody", () => {
   });
 
   it("says the request could not be read, in plain words, when the body is empty or not JSON", async () => {
-    const message = "That request couldn't be read. Switch to another tab and back, then try again.";
+    const message = "That request couldn't be read. Tap another tab at the bottom of the screen and come back, then try again.";
     await expect(readJsonBody(jsonRequest({}, ""))).rejects.toThrow(message);
     await expect(readJsonBody(jsonRequest({}, "{oops"))).rejects.toThrow(message);
     await expect(readJsonBody(jsonRequest({}, "{oops"))).rejects.toMatchObject({ code: "validation", status: undefined });
@@ -533,7 +533,7 @@ describe("parseBody", () => {
     expect(
       thrownBy({ portionId: "p1", tenant: "Asha", id: "t-1", fields: { moveIn: "2026-10-01" } }, tenancyBody),
     ).toMatchObject({
-      message: "This page is out of date. Switch to another tab and back, then try again.",
+      message: "This page is out of date. Tap another tab at the bottom of the screen and come back, then try again.",
       details: { field: "expectedUpdatedAt" },
     });
   });
@@ -565,14 +565,14 @@ describe("parseBody", () => {
 
   it("says something general, and still names the field, when the screen has no name for it", () => {
     const error = thrownBy({ token: 5 }, logRetryBody);
-    expect(error.message).toBe("Something in that request isn't valid. Switch to another tab and back, then try again.");
+    expect(error.message).toBe("Something in that request isn't valid. Tap another tab at the bottom of the screen and come back, then try again.");
     expect(error.details).toEqual({ field: "token" });
   });
 
   it("says something general, with no field, when the whole body is the wrong kind of thing", () => {
     for (const body of [null, "text", 5, [], undefined]) {
       const error = thrownBy(body, paymentBody);
-      expect(error.message, String(body)).toBe("Something in that request isn't valid. Switch to another tab and back, then try again.");
+      expect(error.message, String(body)).toBe("Something in that request isn't valid. Tap another tab at the bottom of the screen and come back, then try again.");
       expect(error.details, String(body)).toBeUndefined();
     }
   });
@@ -659,7 +659,7 @@ describe("parseBody", () => {
 
   it("does not turn a position in a list into a label", () => {
     const error = thrownBy({ portions: [5] }, settingsBody);
-    expect(error.message).toBe("Something in that request isn't valid. Switch to another tab and back, then try again.");
+    expect(error.message).toBe("Something in that request isn't valid. Tap another tab at the bottom of the screen and come back, then try again.");
     expect(error.details).toEqual({ field: "portions.0" });
   });
 

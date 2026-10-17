@@ -1,5 +1,5 @@
 import { POST_TIMEOUT_MS } from "@/lib/post-json";
-import { reloadThen } from "@/lib/recovery-hint";
+import { reloadThen, SIGN_IN_HINT } from "@/lib/recovery-hint";
 
 /**
  * What a form says when a request got no answer, or the server's answer was an error: what happened, and what to do.
@@ -19,7 +19,7 @@ export const UNDO_NO_CONFIRMATION = `Couldn't confirm that the undo went through
 
 export const SETTINGS_NO_CONFIRMATION = "Couldn't reach the server. Try again.";
 
-export const SIGNED_OUT_MESSAGE = `You've been signed out. ${reloadThen("sign in again")}`;
+export const SIGNED_OUT_MESSAGE = `You've been signed out. ${SIGN_IN_HINT}`;
 
 export const SOMETHING_WENT_WRONG_MESSAGE = "Something went wrong on our side. Try again.";
 

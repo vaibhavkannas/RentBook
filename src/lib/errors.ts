@@ -1,5 +1,5 @@
 import { getBrand } from "@/lib/brand";
-import { RELOAD_HINT } from "@/lib/recovery-hint";
+import { RELOAD_HINT, reloadThen } from "@/lib/recovery-hint";
 
 export class AppError extends Error {
   constructor(
@@ -45,7 +45,7 @@ export const PAGE_OUT_OF_DATE_MESSAGE = `This page is out of date. ${RELOAD_HINT
 
 /** A portion that is not in Settings: removed or renamed since the page was loaded. The page's id for it means nothing to a person. */
 export const unknownPortion = () =>
-  validation(`That portion isn't in your Settings any more. ${RELOAD_HINT}`);
+  validation(`That portion isn't in your Settings any more. ${reloadThen("check the cards")}`);
 
 /** The request body is bigger than any request the app makes. */
 export const payloadTooLarge = () => new AppError("validation", "That request is too large.", undefined, 413);

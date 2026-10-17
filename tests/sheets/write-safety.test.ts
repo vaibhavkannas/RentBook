@@ -19,7 +19,7 @@ const NOW = new Date("2026-10-05T04:30:00Z");
 const OCT = { year: 2026, month: 10 };
 const OPTIONS = { now: NOW, retryDelayMs: 0, loggedBy: "owner@example.com" };
 const STAMP = { now: NOW, updatedBy: "owner@example.com" };
-const SAVED_MESSAGE = "Your change may not have been saved. Switch to another tab and back, then check this month.";
+const SAVED_MESSAGE = "Your change may not have been saved. Tap another tab at the bottom of the screen and come back, then check this month.";
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 

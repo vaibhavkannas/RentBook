@@ -379,7 +379,7 @@ describe("updateSettings", () => {
     ).rejects.toMatchObject({ message: "Hike must be a number from 0 to 100.", details: { field: "portions.1.hikePercent" } });
     await expect(
       updateSettings(fake, [{ id: "zz", name: "A", cycleLength: 11, hikePercent: 5 }]),
-    ).rejects.toThrow("That portion isn't in your Settings any more. Switch to another tab and back, then try again.");
+    ).rejects.toThrow("That portion isn't in your Settings any more. Tap another tab at the bottom of the screen and come back, then check the cards.");
     expect(JSON.stringify([...fake.tabs.get(SETTINGS_TAB)!])).toBe(before);
   });
 });

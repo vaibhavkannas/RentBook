@@ -114,7 +114,7 @@ describe("undoPayment", () => {
 
     expect(error.code).toBe("conflict");
     expect(error.message).toBe(
-      "First floor, single bedroom for October 2026 was changed by someone else. Switch to another tab and back, then try again.",
+      "First floor, single bedroom for October 2026 was changed by someone else. Tap another tab at the bottom of the screen and come back, then try again.",
     );
     expect(fake.tabs.get("Schedule")).toEqual(scheduleBefore);
     expect(fake.tabs.get(LOG_TAB)).toEqual(logBefore);
@@ -131,7 +131,7 @@ describe("undoPayment", () => {
     );
     expect(error.code).toBe("conflict");
     expect(error.message).toBe(
-      "Nothing to undo. First floor, single bedroom has no payment recorded for October 2026 any more. Switch to another tab and back, then try again.",
+      "Nothing to undo. First floor, single bedroom has no payment recorded for October 2026 any more. Tap another tab at the bottom of the screen and come back, then check the card.",
     );
   });
 
