@@ -66,7 +66,7 @@ beforeEach(() => {
 describe("PortionBoard", () => {
   it("shows the chips and a Details link on a card whose tenant has details", () => {
     const out = board([card({ tenancy: SUMMARY })]);
-    expect(out).toContain("Advance ₹ 20,000 held");
+    expect(out).toContain("Advance ₹ 20,000 held");
     expect(out).toContain("Agreement ends 15 Mar 2027");
     expect(out).toContain('href="/tenants/p1?month=2026-10"');
     expect(out).toContain('aria-label="Details for Ground floor"');
@@ -136,7 +136,7 @@ describe("PortionBoard on the shared pieces", () => {
 
   it("draws the tenancy chips as neutral Pills", () => {
     const out = board([card({ tenancy: SUMMARY })]);
-    expect(out).toContain(`<span class="${pillClasses("neutral")}">Advance ₹ 20,000 held</span>`);
+    expect(out).toContain(`<span class="${pillClasses("neutral")}">Advance ₹ 20,000 held</span>`);
     expect(out).toContain(`<span class="${pillClasses("neutral")}">Agreement ends 15 Mar 2027</span>`);
   });
 
@@ -171,15 +171,15 @@ describe("PortionBoard: rent against the amount received", () => {
 
   it("says how much more than the rent a paid card received, in a small muted line under the amount", () => {
     const out = board([paid(10030, 10000, 30)]);
-    expect(lines(out)).toContain('<p class="mt-2 text-lg font-medium">₹ 10,030</p>');
+    expect(lines(out)).toContain('<p class="mt-2 text-lg font-medium">₹ 10,030</p>');
     expect(lines(out)).toMatch(
-      /<\/p><p class="[^"]*text-sm[^"]*text-muted[^"]*">₹ 30 more than rent \(₹ 10,000\)<\/p>/,
+      /<\/p><p class="[^"]*text-sm[^"]*text-muted[^"]*">₹ 30 more than rent \(₹ 10,000\)<\/p>/,
     );
   });
 
   it("says how much less, with no minus sign", () => {
     const out = board([paid(9999, 10000, -1)]);
-    expect(out).toContain("₹ 1 less than rent (₹ 10,000)");
+    expect(out).toContain("₹ 1 less than rent (₹ 10,000)");
     expect(out).not.toMatch(/₹\s*[-−]/);
   });
 
@@ -190,7 +190,7 @@ describe("PortionBoard: rent against the amount received", () => {
 
   it("says nothing when there is no earlier entry to compare with", () => {
     const out = board([paid(7000, null, null)]);
-    expect(out).toContain("₹ 7,000");
+    expect(out).toContain("₹ 7,000");
     expect(out).not.toContain("than rent");
   });
 

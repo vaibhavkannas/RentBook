@@ -48,20 +48,20 @@ describe("toActivityEntry", () => {
         portion: "Ground floor",
         tone: "success",
         label: "Logged",
-        summary: "Logged ₹ 10,000 from Asha for October 2026 (payment 4).",
-        amount: "₹ 10,000",
+        summary: "Logged ₹ 10,000 from Asha for October 2026 (payment 4).",
+        amount: "₹ 10,000",
         struck: false,
         meta: "10:00 am · by owner@example.com · received 5 Oct",
       });
     });
 
     it("writes the amount with Indian grouping", () => {
-      expect(entry({ amount: 1234567 }).summary).toBe("Logged ₹ 12,34,567 from Asha for October 2026 (payment 4).");
+      expect(entry({ amount: 1234567 }).summary).toBe("Logged ₹ 12,34,567 from Asha for October 2026 (payment 4).");
     });
 
-    it("keeps a real amount of nothing: ₹ 0 is something somebody typed", () => {
-      expect(entry({ amount: 0 }).summary).toBe("Logged ₹ 0 from Asha for October 2026 (payment 4).");
-      expect(entry({ amount: 0 }).amount).toBe("₹ 0");
+    it("keeps a real amount of nothing: ₹ 0 is something somebody typed", () => {
+      expect(entry({ amount: 0 }).summary).toBe("Logged ₹ 0 from Asha for October 2026 (payment 4).");
+      expect(entry({ amount: 0 }).amount).toBe("₹ 0");
     });
   });
 
@@ -71,8 +71,8 @@ describe("toActivityEntry", () => {
         portion: "Ground floor",
         tone: "warn",
         label: "Changed",
-        summary: "Changed Asha's October 2026 payment to ₹ 9,500.",
-        amount: "₹ 9,500",
+        summary: "Changed Asha's October 2026 payment to ₹ 9,500.",
+        amount: "₹ 9,500",
         struck: false,
         meta: "10:00 am · by owner@example.com · received 5 Oct",
       });
@@ -85,8 +85,8 @@ describe("toActivityEntry", () => {
         portion: "Ground floor",
         tone: "danger",
         label: "Undone",
-        summary: "Undid Asha's October 2026 payment of ₹ 10,000.",
-        amount: "₹ 10,000",
+        summary: "Undid Asha's October 2026 payment of ₹ 10,000.",
+        amount: "₹ 10,000",
         struck: true,
         meta: "10:00 am · by owner@example.com",
       });
@@ -103,8 +103,8 @@ describe("toActivityEntry", () => {
         portion: "Ground floor",
         tone: "neutral",
         label: "Entry",
-        summary: "₹ 10,000 from Asha for October 2026.",
-        amount: "₹ 10,000",
+        summary: "₹ 10,000 from Asha for October 2026.",
+        amount: "₹ 10,000",
         struck: false,
         meta: "10:00 am · who: not recorded",
       });
@@ -115,7 +115,7 @@ describe("toActivityEntry", () => {
     });
 
     it("does not say the payment number either: the table leaves it out", () => {
-      expect(entry({ action: null, count: 7 }).summary).toBe("₹ 10,000 from Asha for October 2026.");
+      expect(entry({ action: null, count: 7 }).summary).toBe("₹ 10,000 from Asha for October 2026.");
     });
   });
 
@@ -129,7 +129,7 @@ describe("toActivityEntry", () => {
 
     it("says by and the address for anyone else, as it is stored", () => {
       expect(entry({ loggedBy: "Owner@Example.com" }).meta).toBe("10:00 am · by Owner@Example.com · received 5 Oct");
-      expect(entry({ loggedBy: "member@example.com.au" }).meta).toContain("by member@example.com.au");
+      expect(entry({ loggedBy: "member@mail.example.com" }).meta).toContain("by member@mail.example.com");
       expect(entry({ loggedBy: "xmember@example.com" }).meta).toContain("by xmember@example.com");
     });
 
@@ -186,27 +186,27 @@ describe("toActivityEntry", () => {
     });
 
     it("leaves out the payment number", () => {
-      expect(entry({ action: "Logged", count: null }).summary).toBe("Logged ₹ 10,000 from Asha for October 2026.");
-      expect(entry({ action: "Edited", count: null }).summary).toBe("Changed Asha's October 2026 payment to ₹ 10,000.");
+      expect(entry({ action: "Logged", count: null }).summary).toBe("Logged ₹ 10,000 from Asha for October 2026.");
+      expect(entry({ action: "Edited", count: null }).summary).toBe("Changed Asha's October 2026 payment to ₹ 10,000.");
     });
 
     it("leaves out the tenant", () => {
-      expect(entry({ action: "Logged", tenant: "" }).summary).toBe("Logged ₹ 10,000 for October 2026 (payment 4).");
-      expect(entry({ action: "Edited", tenant: "" }).summary).toBe("Changed the October 2026 payment to ₹ 10,000.");
-      expect(entry({ action: "Undone", tenant: "" }).summary).toBe("Undid the October 2026 payment of ₹ 10,000.");
-      expect(entry({ action: null, tenant: "" }).summary).toBe("₹ 10,000 for October 2026.");
-      expect(entry({ tenant: "   " }).summary).toBe("Logged ₹ 10,000 for October 2026 (payment 4).");
+      expect(entry({ action: "Logged", tenant: "" }).summary).toBe("Logged ₹ 10,000 for October 2026 (payment 4).");
+      expect(entry({ action: "Edited", tenant: "" }).summary).toBe("Changed the October 2026 payment to ₹ 10,000.");
+      expect(entry({ action: "Undone", tenant: "" }).summary).toBe("Undid the October 2026 payment of ₹ 10,000.");
+      expect(entry({ action: null, tenant: "" }).summary).toBe("₹ 10,000 for October 2026.");
+      expect(entry({ tenant: "   " }).summary).toBe("Logged ₹ 10,000 for October 2026 (payment 4).");
     });
 
     it("leaves out the month", () => {
-      expect(entry({ action: "Logged", month: "" }).summary).toBe("Logged ₹ 10,000 from Asha (payment 4).");
-      expect(entry({ action: "Edited", month: "" }).summary).toBe("Changed Asha's payment to ₹ 10,000.");
-      expect(entry({ action: "Undone", month: "" }).summary).toBe("Undid Asha's payment of ₹ 10,000.");
-      expect(entry({ action: null, month: "" }).summary).toBe("₹ 10,000 from Asha.");
+      expect(entry({ action: "Logged", month: "" }).summary).toBe("Logged ₹ 10,000 from Asha (payment 4).");
+      expect(entry({ action: "Edited", month: "" }).summary).toBe("Changed Asha's payment to ₹ 10,000.");
+      expect(entry({ action: "Undone", month: "" }).summary).toBe("Undid Asha's payment of ₹ 10,000.");
+      expect(entry({ action: null, month: "" }).summary).toBe("₹ 10,000 from Asha.");
     });
 
     it("writes a month as it was typed when it is not a month key, rather than hide it", () => {
-      expect(entry({ month: "Oct-26" }).summary).toBe("Logged ₹ 10,000 from Asha for Oct-26 (payment 4).");
+      expect(entry({ month: "Oct-26" }).summary).toBe("Logged ₹ 10,000 from Asha for Oct-26 (payment 4).");
     });
 
     it("says what it can when almost everything is missing", () => {
@@ -412,25 +412,30 @@ describe("groupByDay", () => {
     expect(groupByDay([row], NOW)[0].entries[0]).toBe(row);
   });
 
-  it("groups the entries of a mixed-up log of 500 rows without losing or doubling one, quickly", () => {
-    // 500 rows over 60 days, newest first, with a few that cannot be read and a few saved out of order.
-    const rows = Array.from({ length: ACTIVITY_SCAN_LIMIT }, (_, index) =>
+  it("groups the entries of a mixed-up log of 5,000 rows without losing or doubling one, reading each row's time once", () => {
+    // 5,000 rows over 625 days, newest first, with some that cannot be read and two saved out of order.
+    const rows = Array.from({ length: 5000 }, (_, index) =>
       at(index % 97 === 0 ? "n/a" : new Date(Date.UTC(2026, 9, 16, 5, 0, 0) - index * 3 * 3_600_000).toISOString(), {
         tenant: `Tenant ${index}`,
       }),
     );
     [rows[10], rows[200]] = [rows[200], rows[10]];
-    const started = performance.now();
-    const groups = groupByDay(rows, NOW);
-    const took = performance.now() - started;
-    expect(groups.flatMap((group) => group.entries)).toHaveLength(ACTIVITY_SCAN_LIMIT);
-    expect(new Set(groups.flatMap((group) => group.entries.map((row) => row.tenant))).size).toBe(ACTIVITY_SCAN_LIMIT);
+    // The work is counted, not timed: one read of each row's saved time is the least it can take, so no pass is repeated per row.
+    let reads = 0;
+    const counted = rows.map((row) => {
+      const copy = { ...row };
+      Object.defineProperty(copy, "savedAt", { get: () => (reads++, row.savedAt) });
+      return copy;
+    });
+    const groups = groupByDay(counted, NOW);
+    expect(reads).toBe(rows.length);
+    expect(groups.flatMap((group) => group.entries)).toHaveLength(rows.length);
+    expect(new Set(groups.flatMap((group) => group.entries.map((row) => row.tenant))).size).toBe(rows.length);
     const keys = groups.map((group) => group.key);
     expect(new Set(keys).size).toBe(keys.length);
     expect(keys.at(-1)).toBe(UNKNOWN_DAY_KEY);
     expect(keys.slice(0, -1)).toEqual([...keys.slice(0, -1)].sort().reverse());
     expect(groups[0]).toMatchObject({ key: "2026-10-16", heading: "Today" });
-    expect(took).toBeLessThan(500);
   });
 });
 
@@ -597,10 +602,11 @@ describe("activityHref", () => {
 });
 
 describe("the whole log, as the screen reads it", () => {
-  it("scans 500 rows, filters, shows the newest 50 and groups them, quickly and in order", () => {
+  it("filters every row of a long log, shows the newest 50 and groups only those, in order", () => {
+    const LOG = 2000;
     const portions = ["Ground floor", "First floor", "Attic", "Shop"];
     const actions: ActivityItem["action"][] = ["Logged", "Logged", "Edited", "Undone", null];
-    const rows = Array.from({ length: ACTIVITY_SCAN_LIMIT }, (_, index) =>
+    const rows = Array.from({ length: LOG }, (_, index) =>
       item({
         savedAt: new Date(Date.UTC(2026, 9, 16, 5, 0, 0) - index * 7_200_000).toISOString(),
         portion: portions[index % portions.length],
@@ -608,23 +614,29 @@ describe("the whole log, as the screen reads it", () => {
         tenant: `Tenant ${index}`,
       }),
     );
-    const started = performance.now();
     const names = portionsIn(rows);
     const matching = filterActivity(rows, { show: "all", portion: "Attic" });
     const shown = matching.slice(0, ACTIVITY_SHOWN_LIMIT);
-    const days = groupByDay(shown, new Date("2026-10-16T05:00:00Z")).map((group) => ({
+    // Only the rows that are shown are dated and written out (the saved time is read once to group a row and once to write
+    // its time), so that work does not grow with the log; only the filter does.
+    let reads = 0;
+    const counted = shown.map((row) => {
+      const copy = { ...row };
+      Object.defineProperty(copy, "savedAt", { get: () => (reads++, row.savedAt) });
+      return copy;
+    });
+    const days = groupByDay(counted, new Date("2026-10-16T05:00:00Z")).map((group) => ({
       ...group,
       entries: group.entries.map((row) => toActivityEntry(row, VIEWER)),
     }));
-    const took = performance.now() - started;
 
+    expect(reads).toBe(2 * ACTIVITY_SHOWN_LIMIT);
     expect(names).toEqual(portions);
-    expect(matching).toHaveLength(125);
+    expect(matching).toHaveLength(LOG / portions.length);
     expect(shown).toHaveLength(ACTIVITY_SHOWN_LIMIT);
     expect(shown.map((row) => row.tenant)).toEqual(matching.slice(0, 50).map((row) => row.tenant));
     expect(days.reduce((sum, group) => sum + group.entries.length, 0)).toBe(ACTIVITY_SHOWN_LIMIT);
     expect(days[0].heading).toBe("Today");
-    expect(took).toBeLessThan(500);
   });
 
   it("copes with an empty log", () => {

@@ -127,7 +127,7 @@ describe("logPayment: duplicates", () => {
     const { ctx } = setup();
     await pay(ctx, { portionId: "p1" });
     const error = await expectCode(pay(ctx, { portionId: "p1", amount: 6000 }), "conflict");
-    expect(error.message).toBe("First floor, single bedroom already has ₹ 5,450 recorded for October 2026.");
+    expect(error.message).toBe("First floor, single bedroom already has ₹ 5,450 recorded for October 2026.");
     expect(error.message).not.toMatch(/\d{4}-\d{2}/);
   });
 
@@ -327,7 +327,7 @@ describe("logPayment: input validation", () => {
   it("names the field in the details of an amount that is out of range, so the screen can show it beside the field", async () => {
     const { ctx } = setup();
     const error = await expectCode(pay(ctx, { portionId: "p1", amount: 0 }), "validation");
-    expect(error.message).toBe("Amount must be whole rupees, from ₹ 1 to ₹ 1,00,00,000.");
+    expect(error.message).toBe("Amount must be whole rupees, from ₹ 1 to ₹ 1,00,00,000.");
     expect(error.details).toEqual({ field: "amount" });
   });
 

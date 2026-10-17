@@ -219,8 +219,8 @@ describe("PaymentSheet on Sheet", () => {
       next: { tenant: "Asha", count: 1, suggestedAmount: 10503, previousAmount: 10000, startsNewCycle: true },
     });
     const out = html(createElement(PaymentSheet, { ...props, cards: [hike], mode: "log" }));
-    expect(out).toContain(`class="${buttonClasses("outline", "md")} flex-1">Round to ₹ 10,500</button>`);
-    expect(out).toContain(`class="${buttonClasses("outline", "md")} w-full">Keep ₹ 10,000</button>`);
+    expect(out).toContain(`class="${buttonClasses("outline", "md")} flex-1">Round to ₹ 10,500</button>`);
+    expect(out).toContain(`class="${buttonClasses("outline", "md")} w-full">Keep ₹ 10,000</button>`);
   });
 });
 

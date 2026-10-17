@@ -64,6 +64,8 @@ describe("amountFromText", () => {
     expect(amountFromText("5450")).toBe(5450);
     expect(amountFromText("5,450")).toBe(5450);
     expect(amountFromText("₹ 5 450")).toBe(5450);
+    // an amount copied out of a screen has a non-breaking space after the sign
+    expect(amountFromText("₹\u00a05,450")).toBe(5450);
     expect(amountFromText(" 12,000 ")).toBe(12000);
   });
 
@@ -113,6 +115,7 @@ describe("buildPaymentRequest: an amount that is not there, or not a number", ()
 
   it("reads the amount the way amountFromText does: commas, spaces and a rupee sign are ignored", () => {
     expect(buildPaymentRequest({ ...base, amountText: "₹ 5,450 " })).toMatchObject({ ok: true, body: { amount: 5450 } });
+    expect(buildPaymentRequest({ ...base, amountText: "₹\u00a05,450" })).toMatchObject({ ok: true, body: { amount: 5450 } });
   });
 
   it("leaves the other checks of the amount to the server: zero, a negative number and a fraction are sent", () => {

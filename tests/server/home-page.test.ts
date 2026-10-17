@@ -122,8 +122,8 @@ describe("the month summary: received against rent due", () => {
       view({ received: 5450, due: 5450, difference: 0, paidCount: 1 }),
     );
     const out = summary(await render());
-    expect(out).toContain("₹ 5,450");
-    expect(out).toContain("of ₹ 5,450");
+    expect(out).toContain("₹ 5,450");
+    expect(out).toContain("of ₹ 5,450");
     expect(out).not.toContain("than rent");
     expect(out).toContain("1 of 1 portions");
   });
@@ -134,12 +134,12 @@ describe("the month summary: received against rent due", () => {
     );
     const out = summary(await render());
     // the total is measured against the rent due, not against what was entered
-    expect(out).toContain("₹ 5,480");
-    expect(out).toContain("of ₹ 5,450");
-    expect(out).toMatch(/<p class="[^"]*text-success-ink[^"]*">₹ 30 more than rent<\/p>/);
+    expect(out).toContain("₹ 5,480");
+    expect(out).toContain("of ₹ 5,450");
+    expect(out).toMatch(/<p class="[^"]*text-success-ink[^"]*">₹ 30 more than rent<\/p>/);
     expect(out).not.toContain("text-warn-ink");
     // it comes after the total line and before the progress bar
-    expect(out.indexOf("of ₹ 5,450")).toBeLessThan(out.indexOf("more than rent"));
+    expect(out.indexOf("of ₹ 5,450")).toBeLessThan(out.indexOf("more than rent"));
     expect(out.indexOf("more than rent")).toBeLessThan(out.indexOf('role="presentation"'));
   });
 
@@ -148,7 +148,7 @@ describe("the month summary: received against rent due", () => {
       view({ received: 5449, due: 5450, difference: -1, paidCount: 1 }),
     );
     const out = summary(await render());
-    expect(out).toMatch(/<p class="[^"]*text-warn-ink[^"]*">₹ 1 less than rent<\/p>/);
+    expect(out).toMatch(/<p class="[^"]*text-warn-ink[^"]*">₹ 1 less than rent<\/p>/);
     expect(out).not.toContain("text-success-ink");
     expect(out).not.toMatch(/₹\s*[-−]/);
   });
@@ -166,13 +166,13 @@ describe("the month summary: received against rent due", () => {
     it('says "so far" after the extra, because the total can still change', async () => {
       mocks.loadMonthView.mockResolvedValue(two(1, 64));
       const out = summary(await render());
-      expect(out).toMatch(/<p class="[^"]*text-success-ink[^"]*">₹ 64 more than rent so far<\/p>/);
+      expect(out).toMatch(/<p class="[^"]*text-success-ink[^"]*">₹ 64 more than rent so far<\/p>/);
       expect(out).toContain("1 of 2 portions");
     });
 
     it('says "so far" after the shortfall too, in the warning colour', async () => {
       mocks.loadMonthView.mockResolvedValue(two(1, -3));
-      expect(summary(await render())).toMatch(/<p class="[^"]*text-warn-ink[^"]*">₹ 3 less than rent so far<\/p>/);
+      expect(summary(await render())).toMatch(/<p class="[^"]*text-warn-ink[^"]*">₹ 3 less than rent so far<\/p>/);
     });
 
     it("says nothing when the difference is nil, even though some portions are unpaid", async () => {
@@ -183,7 +183,7 @@ describe("the month summary: received against rent due", () => {
     it('does not say "so far" once every portion has paid', async () => {
       mocks.loadMonthView.mockResolvedValue(two(2, 64));
       const out = summary(await render());
-      expect(out).toContain("₹ 64 more than rent</p>");
+      expect(out).toContain("₹ 64 more than rent</p>");
       expect(out).not.toContain("so far");
     });
 
@@ -198,7 +198,7 @@ describe("the month summary: received against rent due", () => {
         view({ cards: [paidCard, card({ portionId: "p2" })], difference: 64, paidCount: 1 }),
       );
       const html = await render();
-      expect(html).toContain("₹ 64 more than rent (₹ 5,450)");
+      expect(html).toContain("₹ 64 more than rent (₹ 5,450)");
       expect(html.match(/so far/g)).toHaveLength(1);
     });
   });
@@ -235,7 +235,7 @@ describe("the cards on the home page", () => {
       view({ cards: [paid(30, 5450, 5480)], received: 5480, difference: 30, paidCount: 1 }),
     );
     const html = await render();
-    expect(html).toContain("₹ 30 more than rent (₹ 5,450)");
+    expect(html).toContain("₹ 30 more than rent (₹ 5,450)");
     // once on the card and once in the summary, which has no brackets
     expect(html.match(/more than rent/g)).toHaveLength(2);
   });
@@ -251,8 +251,8 @@ describe("the cards on the home page", () => {
       }),
     );
     const html = await render();
-    expect(html).toContain("₹ 1 more than rent (₹ 5,450)");
-    expect(html).toContain("₹ 1 less than rent (₹ 5,450)");
+    expect(html).toContain("₹ 1 more than rent (₹ 5,450)");
+    expect(html).toContain("₹ 1 less than rent (₹ 5,450)");
     expect(summary(html)).not.toContain("than rent");
   });
 });

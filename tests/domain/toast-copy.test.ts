@@ -18,28 +18,28 @@ import { undoToastText } from "@/lib/undo-copy";
 
 describe("the toast after logging a payment", () => {
   it("names the portion, the amount and the month", () => {
-    expect(logToastText("Ground floor", 10000, "October 2026")).toBe("Ground floor: ₹ 10,000 logged for October 2026");
+    expect(logToastText("Ground floor", 10000, "October 2026")).toBe("Ground floor: ₹ 10,000 logged for October 2026");
     expect(logToastText("First floor, double bedroom", 13335, "November 2026")).toBe(
-      "First floor, double bedroom: ₹ 13,335 logged for November 2026",
+      "First floor, double bedroom: ₹ 13,335 logged for November 2026",
     );
   });
 });
 
 describe("the toast after editing an amount", () => {
   it("says the amount changed, and to what", () => {
-    expect(editToastText("Ground floor", 10500)).toBe("Ground floor: amount changed to ₹ 10,500");
+    expect(editToastText("Ground floor", 10500)).toBe("Ground floor: amount changed to ₹ 10,500");
   });
 });
 
 describe("the toast after Replace amount on a duplicate warning", () => {
   it("says the amount was replaced, and with what", () => {
-    expect(replaceToastText("Ground floor", 9800)).toBe("Ground floor: amount replaced with ₹ 9,800");
+    expect(replaceToastText("Ground floor", 9800)).toBe("Ground floor: amount replaced with ₹ 9,800");
   });
 });
 
 describe("the toast after adding a new tenant", () => {
   it("names the portion, the tenant and the first payment", () => {
-    expect(newTenantToastText("Ground floor", "Asha", 10000)).toBe("Ground floor: Asha added, ₹ 10,000 logged");
+    expect(newTenantToastText("Ground floor", "Asha", 10000)).toBe("Ground floor: Asha added, ₹ 10,000 logged");
   });
 });
 
@@ -96,7 +96,7 @@ describe("paymentToastText, the one the payment sheet asks for", () => {
 describe("the toast when the Payments Log entry did not save", () => {
   it("says the payment is in the Schedule and not in the Payments Log, in plain words", () => {
     expect(logUnsavedToastText("Ground floor", 10000)).toBe(
-      "Ground floor: ₹ 10,000 saved to your Schedule, but not to the Payments Log",
+      "Ground floor: ₹ 10,000 saved to your Schedule, but not to the Payments Log",
     );
   });
 
@@ -109,10 +109,10 @@ describe("the toast when the Payments Log entry did not save", () => {
 
   it("keeps both texts for a payment, the one for a saved log entry and the one for an unsaved one", () => {
     expect(paymentToasts(saved)).toEqual({
-      saved: "Ground floor: ₹ 10,000 logged for October 2026",
-      logUnsaved: "Ground floor: ₹ 10,000 saved to your Schedule, but not to the Payments Log",
+      saved: "Ground floor: ₹ 10,000 logged for October 2026",
+      logUnsaved: "Ground floor: ₹ 10,000 saved to your Schedule, but not to the Payments Log",
     });
-    expect(paymentToasts({ ...saved, mode: "new-tenant", tenant: "Asha" }).saved).toBe("Ground floor: Asha added, ₹ 10,000 logged");
+    expect(paymentToasts({ ...saved, mode: "new-tenant", tenant: "Asha" }).saved).toBe("Ground floor: Asha added, ₹ 10,000 logged");
     expect(paymentToasts({ ...saved, mode: "new-tenant", tenant: "Asha" }).logUnsaved).toBe(logUnsavedToastText("Ground floor", 10000));
   });
 

@@ -17,10 +17,16 @@ import {
 import { withoutComments } from "../support/source-scan";
 
 describe("format", () => {
+  it("keeps the rupee sign and its number together: a non-breaking space between them, so a line cannot end after the sign", () => {
+    expect(formatRupees(5450)).toBe("\u20b9\u00a05,450");
+    expect(formatRupees(5450)).not.toContain(" ");
+    expect(formatRupees(1234567)).not.toContain(" ");
+    expect(formatRupees(0)).toBe("\u20b9\u00a00");
+  });
   it("formats rupees with Indian digit grouping", () => {
-    expect(formatRupees(5450)).toBe("₹ 5,450");
-    expect(formatRupees(1234567)).toBe("₹ 12,34,567");
-    expect(formatRupees(0)).toBe("₹ 0");
+    expect(formatRupees(5450)).toBe("₹ 5,450");
+    expect(formatRupees(1234567)).toBe("₹ 12,34,567");
+    expect(formatRupees(0)).toBe("₹ 0");
   });
   it("formats a month title", () => {
     expect(formatMonthTitle({ year: 2026, month: 10 })).toBe("October 2026");
@@ -69,8 +75,8 @@ describe("formatDay", () => {
 
 describe("wholeRupeesMessage", () => {
   it("says the range in whole rupees the way the rest of the app writes an amount, with the Indian grouping", () => {
-    expect(wholeRupeesMessage("Advance", 0, 10_000_000)).toBe("Advance must be whole rupees, from ₹ 0 to ₹ 1,00,00,000.");
-    expect(wholeRupeesMessage("Amount", 1, 10_000_000)).toBe("Amount must be whole rupees, from ₹ 1 to ₹ 1,00,00,000.");
+    expect(wholeRupeesMessage("Advance", 0, 10_000_000)).toBe("Advance must be whole rupees, from ₹ 0 to ₹ 1,00,00,000.");
+    expect(wholeRupeesMessage("Amount", 1, 10_000_000)).toBe("Amount must be whole rupees, from ₹ 1 to ₹ 1,00,00,000.");
   });
 
   it("never writes the largest amount the western way", () => {
@@ -81,6 +87,9 @@ describe("wholeRupeesMessage", () => {
 describe("stripRupeeFormatting", () => {
   it("takes out commas, spaces of any kind and the rupee sign, and nothing else", () => {
     expect(stripRupeeFormatting("₹ 5,450")).toBe("5450");
+    // the way the app writes an amount, copied out of a screen: a non-breaking space after the sign
+    expect(stripRupeeFormatting(formatRupees(5450))).toBe("5450");
+    expect(stripRupeeFormatting(formatRupees(1234567))).toBe("1234567");
     expect(stripRupeeFormatting(" 1,00,000 ")).toBe("100000");
     expect(stripRupeeFormatting("5\u00a0450\t")).toBe("5450");
     expect(stripRupeeFormatting("12.5k")).toBe("12.5k");

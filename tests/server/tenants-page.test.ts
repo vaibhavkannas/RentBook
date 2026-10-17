@@ -129,7 +129,7 @@ describe("the tenant details page", () => {
     expect(html).toContain('href="tel:9876543210"');
     expect(html).toContain("15 Jan 2026");
     expect(html).toContain("15 Mar 2027");
-    expect(html).toContain("₹ 20,000 · Held · paid 10 Jan 2026");
+    expect(html).toContain("₹ 20,000 · Held · paid 10 Jan 2026");
     // the notes sit on a row of their own, full width and left-aligned, not in the narrow right-aligned column
     expect(html).toMatch(/<dt class="text-muted">Notes<\/dt><dd class="[^"]*text-left[^"]*">Paid by cheque<\/dd>/);
     expect(html).not.toMatch(/Notes<\/dt><dd class="[^"]*text-right/);
@@ -237,7 +237,7 @@ describe("the tenant details page", () => {
     const html = await render();
     expect(html).toContain("Bala");
     expect(html).toContain("1 Feb 2025 to 31 Dec 2025");
-    expect(html).toContain("Advance ₹ 20,000 · Adjusted · Refund ₹ 15,000 · Deductions ₹ 5,000");
+    expect(html).toContain("Advance ₹ 20,000 · Adjusted · Refund ₹ 15,000 · Deductions ₹ 5,000");
     expect(html).not.toContain("No past tenants yet.");
   });
 

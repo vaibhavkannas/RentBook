@@ -1050,9 +1050,9 @@ describe("moveOutTenancy", () => {
   it("refuses a refund or deductions above the limit, and writes them as the app writes an amount", async () => {
     const { ctx, tenancy } = await created();
     const refund = await expectCode(moveOut(ctx, tenancy, { refund: 10_000_001 }), "validation");
-    expect(refund.message).toBe("Refund must be whole rupees, from ₹ 0 to ₹ 1,00,00,000.");
+    expect(refund.message).toBe("Refund must be whole rupees, from ₹ 0 to ₹ 1,00,00,000.");
     const deductions = await expectCode(moveOut(ctx, tenancy, { deductions: -1 }), "validation");
-    expect(deductions.message).toBe("Deductions must be whole rupees, from ₹ 0 to ₹ 1,00,00,000.");
+    expect(deductions.message).toBe("Deductions must be whole rupees, from ₹ 0 to ₹ 1,00,00,000.");
   });
 
   it("allows moving out on the move-in day", async () => {

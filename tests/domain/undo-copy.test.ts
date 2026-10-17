@@ -18,7 +18,7 @@ describe("undoConfirmationText", () => {
         "October 2026",
       ),
     ).toBe(
-      "This clears Asha's payment 3 (₹ 10,835) for First floor, single bedroom in October 2026. The Payments Log keeps a record.",
+      "This clears Asha's payment 3 (₹ 10,835) for First floor, single bedroom in October 2026. The Payments Log keeps a record.",
     );
   });
 

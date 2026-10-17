@@ -216,8 +216,8 @@ describe("the Activity page", () => {
       expect(html).toContain(`<li class="${CARD}">`);
       expect(html).toMatch(/<p class="[^"]*\bfont-medium\b[^"]*">Ground floor<\/p>/);
       expect(html).toContain(`<span class="${pillClasses("success")}">Logged</span>`);
-      expect(html).toContain("Logged ₹ 10,000 from Asha for October 2026 (payment 4).");
-      expect(html).toMatch(/<p class="mt-1 text-lg font-medium">₹ 10,000<\/p>/);
+      expect(html).toContain("Logged ₹ 10,000 from Asha for October 2026 (payment 4).");
+      expect(html).toMatch(/<p class="mt-1 text-lg font-medium">₹ 10,000<\/p>/);
       expect(html).toContain("10:00 am · by owner@example.com · received 5 Oct");
     });
 
@@ -239,7 +239,7 @@ describe("the Activity page", () => {
       mocks.readActivity.mockResolvedValue([item({ action: "Edited", amount: 9500 })]);
       const html = await render();
       expect(html).toContain(`<span class="${pillClasses("warn")}">Changed</span>`);
-      expect(html).toContain("Changed Asha&#x27;s October 2026 payment to ₹ 9,500.");
+      expect(html).toContain("Changed Asha&#x27;s October 2026 payment to ₹ 9,500.");
       expect(html).not.toContain(">Edited<");
     });
 
@@ -247,9 +247,9 @@ describe("the Activity page", () => {
       mocks.readActivity.mockResolvedValue([item({ action: "Undone", amount: 10000, dateReceived: "" })]);
       const html = await render();
       expect(html).toContain(`<span class="${pillClasses("danger")}">Undone</span>`);
-      expect(html).toContain("Undid Asha&#x27;s October 2026 payment of ₹ 10,000.");
+      expect(html).toContain("Undid Asha&#x27;s October 2026 payment of ₹ 10,000.");
       expect(html).toMatch(
-        /<p class="mt-1 text-lg font-medium text-muted line-through"><span class="sr-only">removed <\/span>₹ 10,000<\/p>/,
+        /<p class="mt-1 text-lg font-medium text-muted line-through"><span class="sr-only">removed <\/span>₹ 10,000<\/p>/,
       );
       expect(html).not.toContain("received");
     });
@@ -265,7 +265,7 @@ describe("the Activity page", () => {
       mocks.readActivity.mockResolvedValue([item({ action: null, loggedBy: "" })]);
       const html = await render();
       expect(html).toContain(`<span class="${pillClasses("neutral")}">Entry</span>`);
-      expect(html).toContain("₹ 10,000 from Asha for October 2026.");
+      expect(html).toContain("₹ 10,000 from Asha for October 2026.");
       expect(html).toContain("10:00 am · who: not recorded");
       expect(html).not.toContain("No action recorded");
     });

@@ -3,11 +3,11 @@ import { cardDifferenceText, describeDifference, progressPercent } from "@/lib/r
 
 describe("describeDifference", () => {
   it("says how much more than the rent was paid, in plain words", () => {
-    expect(describeDifference(30)).toEqual({ tone: "more", text: "₹ 30 more than rent" });
+    expect(describeDifference(30)).toEqual({ tone: "more", text: "₹ 30 more than rent" });
   });
 
   it("says how much less than the rent was paid, with no minus sign", () => {
-    expect(describeDifference(-1)).toEqual({ tone: "less", text: "₹ 1 less than rent" });
+    expect(describeDifference(-1)).toEqual({ tone: "less", text: "₹ 1 less than rent" });
   });
 
   it("has nothing to say when the rent was paid exactly", () => {
@@ -16,21 +16,21 @@ describe("describeDifference", () => {
   });
 
   it("uses the same wording for one rupee and for many: there is no singular or plural to get wrong", () => {
-    expect(describeDifference(1)?.text).toBe("₹ 1 more than rent");
-    expect(describeDifference(2)?.text).toBe("₹ 2 more than rent");
-    expect(describeDifference(-2)?.text).toBe("₹ 2 less than rent");
+    expect(describeDifference(1)?.text).toBe("₹ 1 more than rent");
+    expect(describeDifference(2)?.text).toBe("₹ 2 more than rent");
+    expect(describeDifference(-2)?.text).toBe("₹ 2 less than rent");
   });
 
   it("groups digits the Indian way, like every other amount on the page", () => {
-    expect(describeDifference(123456)?.text).toBe("₹ 1,23,456 more than rent");
-    expect(describeDifference(-100000)?.text).toBe("₹ 1,00,000 less than rent");
+    expect(describeDifference(123456)?.text).toBe("₹ 1,23,456 more than rent");
+    expect(describeDifference(-100000)?.text).toBe("₹ 1,00,000 less than rent");
   });
 
   it("rounds to a whole rupee and says nothing when that rounds to zero", () => {
     expect(describeDifference(0.4)).toBeNull();
     expect(describeDifference(-0.4)).toBeNull();
-    expect(describeDifference(30.4)?.text).toBe("₹ 30 more than rent");
-    expect(describeDifference(-29.6)?.text).toBe("₹ 30 less than rent");
+    expect(describeDifference(30.4)?.text).toBe("₹ 30 more than rent");
+    expect(describeDifference(-29.6)?.text).toBe("₹ 30 less than rent");
   });
 
   it("has nothing to say about a number that is not finite", () => {
@@ -47,14 +47,14 @@ describe("describeDifference", () => {
 
 describe("describeDifference while some portions have not paid yet", () => {
   it('adds "so far", because the total can still change', () => {
-    expect(describeDifference(64, true)).toEqual({ tone: "more", text: "₹ 64 more than rent so far" });
-    expect(describeDifference(-3, true)).toEqual({ tone: "less", text: "₹ 3 less than rent so far" });
+    expect(describeDifference(64, true)).toEqual({ tone: "more", text: "₹ 64 more than rent so far" });
+    expect(describeDifference(-3, true)).toEqual({ tone: "less", text: "₹ 3 less than rent so far" });
   });
 
   it("is the plain wording when everything has been paid", () => {
     expect(describeDifference(64, false)).toEqual(describeDifference(64));
-    expect(describeDifference(64, false)?.text).toBe("₹ 64 more than rent");
-    expect(describeDifference(-3, false)?.text).toBe("₹ 3 less than rent");
+    expect(describeDifference(64, false)?.text).toBe("₹ 64 more than rent");
+    expect(describeDifference(-3, false)?.text).toBe("₹ 3 less than rent");
   });
 
   it("still has nothing to say about a zero difference", () => {
@@ -65,8 +65,8 @@ describe("describeDifference while some portions have not paid yet", () => {
 
 describe("cardDifferenceText", () => {
   it("adds the reference rent in brackets", () => {
-    expect(cardDifferenceText(30, 6330)).toBe("₹ 30 more than rent (₹ 6,330)");
-    expect(cardDifferenceText(-1, 10836)).toBe("₹ 1 less than rent (₹ 10,836)");
+    expect(cardDifferenceText(30, 6330)).toBe("₹ 30 more than rent (₹ 6,330)");
+    expect(cardDifferenceText(-1, 10836)).toBe("₹ 1 less than rent (₹ 10,836)");
   });
 
   it("shows nothing when the rent was paid exactly", () => {
@@ -79,7 +79,7 @@ describe("cardDifferenceText", () => {
   });
 
   it("leaves out the brackets rather than guess when the reference is missing", () => {
-    expect(cardDifferenceText(30, null)).toBe("₹ 30 more than rent");
+    expect(cardDifferenceText(30, null)).toBe("₹ 30 more than rent");
   });
 });
 

@@ -17,11 +17,11 @@ function summary(overrides: Partial<TenancySummary> = {}): TenancySummary {
 
 describe("tenancyChips", () => {
   it("shows a held advance with its amount", () => {
-    expect(tenancyChips(summary({ advance: 20000, advanceStatus: "Held" }))).toEqual(["Advance ₹ 20,000 held"]);
+    expect(tenancyChips(summary({ advance: 20000, advanceStatus: "Held" }))).toEqual(["Advance ₹ 20,000 held"]);
   });
 
   it("uses Indian digit grouping for the amount", () => {
-    expect(tenancyChips(summary({ advance: 150000, advanceStatus: "Held" }))).toEqual(["Advance ₹ 1,50,000 held"]);
+    expect(tenancyChips(summary({ advance: 150000, advanceStatus: "Held" }))).toEqual(["Advance ₹ 1,50,000 held"]);
   });
 
   it("shows a refunded advance as returned, without the amount", () => {
@@ -33,7 +33,7 @@ describe("tenancyChips", () => {
   });
 
   it("shows an advance with no known status by its amount alone", () => {
-    expect(tenancyChips(summary({ advance: 20000, advanceStatus: null }))).toEqual(["Advance ₹ 20,000"]);
+    expect(tenancyChips(summary({ advance: 20000, advanceStatus: null }))).toEqual(["Advance ₹ 20,000"]);
   });
 
   it("shows nothing for an advance that is null or zero", () => {
@@ -55,7 +55,7 @@ describe("tenancyChips", () => {
   it("puts the advance first and the agreement second", () => {
     expect(
       tenancyChips(summary({ advance: 20000, advanceStatus: "Held", agreementEnd: "2027-03-15" })),
-    ).toEqual(["Advance ₹ 20,000 held", "Agreement ends 15 Mar 2027"]);
+    ).toEqual(["Advance ₹ 20,000 held", "Agreement ends 15 Mar 2027"]);
   });
 
   it("has no chips for a summary with only a phone and a move-in date", () => {

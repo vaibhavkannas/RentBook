@@ -14,22 +14,22 @@ import {
 describe("advanceSummary", () => {
   it("shows the amount, the status and the day it was paid", () => {
     expect(advanceSummary({ advance: 20000, advanceStatus: "Held", advanceDate: "2026-01-10" })).toBe(
-      "₹ 20,000 · Held · paid 10 Jan 2026",
+      "₹ 20,000 · Held · paid 10 Jan 2026",
     );
   });
   it("leaves out what is not there", () => {
-    expect(advanceSummary({ advance: 20000, advanceStatus: null, advanceDate: "" })).toBe("₹ 20,000");
-    expect(advanceSummary({ advance: 5000, advanceStatus: "Adjusted", advanceDate: "" })).toBe("₹ 5,000 · Adjusted");
+    expect(advanceSummary({ advance: 20000, advanceStatus: null, advanceDate: "" })).toBe("₹ 20,000");
+    expect(advanceSummary({ advance: 5000, advanceStatus: "Adjusted", advanceDate: "" })).toBe("₹ 5,000 · Adjusted");
   });
   it("is null when there is no advance", () => {
     expect(advanceSummary({ advance: null, advanceStatus: null, advanceDate: "" })).toBeNull();
     expect(advanceSummary({ advance: null, advanceStatus: "Held", advanceDate: "2026-01-10" })).toBeNull();
   });
   it("shows an advance of zero", () => {
-    expect(advanceSummary({ advance: 0, advanceStatus: "Held", advanceDate: "" })).toBe("₹ 0 · Held");
+    expect(advanceSummary({ advance: 0, advanceStatus: "Held", advanceDate: "" })).toBe("₹ 0 · Held");
   });
   it("shows a date typed by hand as it is", () => {
-    expect(advanceSummary({ advance: 100, advanceStatus: null, advanceDate: "ten Jan" })).toBe("₹ 100 · paid ten Jan");
+    expect(advanceSummary({ advance: 100, advanceStatus: null, advanceDate: "ten Jan" })).toBe("₹ 100 · paid ten Jan");
   });
 });
 
@@ -50,29 +50,29 @@ describe("advanceOutcome", () => {
   it("shows the advance, its outcome, the refund and the deductions", () => {
     expect(
       advanceOutcome({ advance: 20000, advanceStatus: "Adjusted", refund: 15000, deductions: 5000 }),
-    ).toBe("Advance ₹ 20,000 · Adjusted · Refund ₹ 15,000 · Deductions ₹ 5,000");
+    ).toBe("Advance ₹ 20,000 · Adjusted · Refund ₹ 15,000 · Deductions ₹ 5,000");
   });
   it("shows a refunded advance", () => {
     expect(advanceOutcome({ advance: 20000, advanceStatus: "Refunded", refund: 20000, deductions: null })).toBe(
-      "Advance ₹ 20,000 · Refunded · Refund ₹ 20,000",
+      "Advance ₹ 20,000 · Refunded · Refund ₹ 20,000",
     );
   });
   it("shows a refund of zero and zero deductions, because they were recorded", () => {
     expect(advanceOutcome({ advance: 20000, advanceStatus: "Adjusted", refund: 0, deductions: 0 })).toBe(
-      "Advance ₹ 20,000 · Adjusted · Refund ₹ 0 · Deductions ₹ 0",
+      "Advance ₹ 20,000 · Adjusted · Refund ₹ 0 · Deductions ₹ 0",
     );
   });
   it("shows only what is there", () => {
     expect(advanceOutcome({ advance: 20000, advanceStatus: null, refund: null, deductions: null })).toBe(
-      "Advance ₹ 20,000",
+      "Advance ₹ 20,000",
     );
     expect(advanceOutcome({ advance: null, advanceStatus: null, refund: 500, deductions: null })).toBe(
-      "Refund ₹ 500",
+      "Refund ₹ 500",
     );
   });
   it("does not show a status without an advance", () => {
     expect(advanceOutcome({ advance: null, advanceStatus: "Held", refund: null, deductions: 700 })).toBe(
-      "Deductions ₹ 700",
+      "Deductions ₹ 700",
     );
   });
   it("is null when nothing was recorded", () => {

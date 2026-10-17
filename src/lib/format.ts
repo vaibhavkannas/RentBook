@@ -3,9 +3,13 @@ import { APP_TIME_ZONE, isValidIsoDay, monthName, parseYmKey } from "@/lib/domai
 
 const rupees = new Intl.NumberFormat("en-IN", { maximumFractionDigits: 0 });
 
-/** 5450 -> "₹ 5,450", 1234567 -> "₹ 12,34,567". */
+/**
+ * 5450 -> "₹ 5,450", 1234567 -> "₹ 12,34,567". The space is a non-breaking one (U+00A0), so a line never ends after the
+ * sign with the number on the next. A person can still copy an amount out of a screen and type it back: stripRupeeFormatting
+ * takes out spaces of any kind.
+ */
 export function formatRupees(amount: number): string {
-  return `₹ ${rupees.format(amount)}`;
+  return `₹\u00a0${rupees.format(amount)}`;
 }
 
 /**

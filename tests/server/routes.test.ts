@@ -908,9 +908,9 @@ describe("a 400 answer: plain words, and the field", () => {
 
   it("passes on the field a service gave its refusal (the amount, the new tenant's name, the move-out date)", async () => {
     signedInAs("member@example.com");
-    logPayment.mockRejectedValueOnce(validation("Amount must be whole rupees, from ₹ 1 to ₹ 1,00,00,000.", "amount"));
+    logPayment.mockRejectedValueOnce(validation("Amount must be whole rupees, from ₹ 1 to ₹ 1,00,00,000.", "amount"));
     expect(await answer(await postPayment(json("http://localhost/api/payments", payment)))).toMatchObject({
-      message: "Amount must be whole rupees, from ₹ 1 to ₹ 1,00,00,000.",
+      message: "Amount must be whole rupees, from ₹ 1 to ₹ 1,00,00,000.",
       details: { field: "amount" },
     });
     logPayment.mockRejectedValueOnce(validation("This portion has no tenant yet. Enter a tenant name.", "newTenantName"));
