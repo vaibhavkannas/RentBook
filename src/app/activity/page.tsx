@@ -8,7 +8,6 @@ import { Page } from "@/components/ui/Page";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Pill } from "@/components/ui/Pill";
 import {
-  ACTIVITY_SCAN_LIMIT,
   ACTIVITY_SHOWN_LIMIT,
   activityHref,
   filterActivity,
@@ -16,6 +15,7 @@ import {
   parseActivityFilters,
   portionsIn,
   toActivityEntry,
+  withKnownPortion,
   type ActivityFilters,
   type ActivityShow,
 } from "@/lib/activity-view";
@@ -102,19 +102,24 @@ export default async function ActivityPage({
   const params = await searchParams;
   // The month the person was looking at: the chips and Try again keep it, so the tab bar and the way back still lead to it.
   const month = monthParam(params?.month);
-  const filters = parseActivityFilters(params);
+  // What the address asks for. A portion the log does not have is dropped below, once the log is read.
+  const asked = parseActivityFilters(params);
 
   let items: ActivityItem[] | null = null;
   let problem: string | null = null;
   try {
-    items = await readActivity(getSheetsContext(), ACTIVITY_SCAN_LIMIT, { minFetchedAt: await readWrittenAt(viewer.email) });
+    // The whole log: the service already holds all of it, and a filter that looked at only the newest rows could say
+    // that nothing matches when an older entry does. Only the entries that are drawn are limited.
+    items = await readActivity(getSheetsContext(), undefined, { minFetchedAt: await readWrittenAt(viewer.email) });
   } catch (error) {
     problem = problemMessage(error, viewer);
   }
 
+  const portions = items ? portionsIn(items) : [];
+  const filters = items ? withKnownPortion(asked, portions) : asked;
   const matching = items ? filterActivity(items, filters) : [];
   const days = groupByDay(matching.slice(0, ACTIVITY_SHOWN_LIMIT), new Date());
-  const rows = items && items.length > 0 ? filterRows(filters, portionsIn(items), month) : null;
+  const rows = items && items.length > 0 ? filterRows(filters, portions, month) : null;
 
   return (
     <Page>
@@ -135,7 +140,7 @@ export default async function ActivityPage({
 
       {rows && matching.length === 0 && (
         <EmptyState
-          title="No entries match these filters."
+          title="No entries match these filters"
           action={
             <ButtonLink href={activityHref(EVERYTHING, month)} replace scroll={false} variant="secondary">
               Show everything
@@ -150,7 +155,7 @@ export default async function ActivityPage({
 
       {matching.length > ACTIVITY_SHOWN_LIMIT && (
         <p className="mt-4 text-center text-sm text-muted">
-          {`Showing the newest ${ACTIVITY_SHOWN_LIMIT}. Older entries are in the Payments Log tab of your Sheet.`}
+          {`Showing the newest ${ACTIVITY_SHOWN_LIMIT}. Older entries are in the Payments Log.`}
         </p>
       )}
     </Page>

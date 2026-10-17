@@ -85,7 +85,7 @@ npm run recon
 
 On Windows PowerShell, use `npm.cmd` in place of `npm`, and run it from the project folder. On a company laptop you may also need the certificate setting below. See "Windows and company-network problems".
 
-Before the first save, open More and then Portion settings in the app and set each portion's cycle length (or tick "Count never resets") and hike percent. The app cannot edit a payment count, so a wrong setting here writes a wrong count. Do the same again after you switch to the live Sheet, because it gets its own fresh `Settings` tab with default values.
+Before the first save, open More and then Portion settings in the app and set each portion's payments per cycle (or tick "Count never resets") and the hike at each new cycle (%). The app cannot edit a payment count, so a wrong setting here writes a wrong count. Do the same again after you switch to the live Sheet, because it gets its own fresh `Settings` tab with default values.
 
 ## Windows and company-network problems
 
@@ -131,7 +131,7 @@ Do not set `NODE_TLS_REJECT_UNAUTHORIZED=0`. It turns off certificate checking f
 - "Access blocked" or "Error 403: access_denied": the Google account you signed in with is not listed under Test users (step 5).
 - "Error 400: redirect_uri_mismatch": the redirect URI must match exactly, including http or https, the host, the port, and no trailing slash. `npm run dev` moves to port 3001 when port 3000 is busy; add that URI too, or free port 3000.
 - "Error 401: invalid_client": the client ID or secret is wrong, or has stray spaces.
-- RentBook says "That Google account isn't allowed": the account you used is not listed in `ALLOWED_EMAILS`. Add it there (in `.env.local`, and in Vercel followed by a redeploy).
+- RentBook says "That Google account isn't on the list for RentBook": the account you used is not listed in `ALLOWED_EMAILS`. Add it there (in `.env.local`, and in Vercel followed by a redeploy).
 - RentBook says "Can't load your Sheet": read the message under it. It names the problem, for example that the Sheets API is not enabled or the Sheet is not shared with the service account.
 
 ## Adding another person
@@ -158,7 +158,7 @@ Older deployments have a single `ALLOWED_EMAIL`. The app still reads it, but onl
 3. Delete `ALLOWED_EMAIL`.
 4. Redeploy on Vercel, and restart `npm run dev` locally.
 
-The first time the new version loads, it adds two new header columns, "Logged by" and "Action", to the Payments Log tab by itself. Older log rows keep those two cells empty and show without an action on the Activity screen. You do not need to edit the tab.
+The first time the new version loads, it adds two new header columns, "Logged by" and "Action", to the Payments Log tab by itself. Older log rows keep those two cells empty; the Activity screen shows each of them as an "Entry" with "who: not recorded". You do not need to edit the tab.
 
 ## Tenant details
 

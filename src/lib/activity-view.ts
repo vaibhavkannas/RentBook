@@ -10,9 +10,10 @@ import type { PillTone } from "@/lib/ui-classes";
  * log, asks these functions and draws the answers.
  */
 
-/** How many of the newest Payments Log rows the screen looks through. The filters work on these. */
-export const ACTIVITY_SCAN_LIMIT = 500;
-/** How many of the matching rows it shows, newest first. */
+/**
+ * How many of the matching rows the screen shows, newest first. The filters look through the whole log, which the page
+ * already holds in memory when it reads it, so only what is drawn is limited.
+ */
 export const ACTIVITY_SHOWN_LIMIT = 50;
 
 /** The heading of the rows whose saved time cannot be read. */
@@ -208,6 +209,14 @@ export function parseActivityFilters(
     show: SHOWS.find((candidate) => candidate === show) ?? "all",
     portion: portion === undefined || clean(portion) === "" ? null : portion,
   };
+}
+
+/**
+ * The filters, with a portion that the log does not have taken as all portions, as a kind of entry that is not one of the
+ * four is (an address kept from before the portion was renamed or removed). The log's portions come from `portionsIn`.
+ */
+export function withKnownPortion(filters: ActivityFilters, portions: readonly string[]): ActivityFilters {
+  return filters.portion !== null && !portions.includes(filters.portion) ? { ...filters, portion: null } : filters;
 }
 
 /** The rows the filters keep, in the order they were given. A row is kept by its portion's exact name. */

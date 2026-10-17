@@ -678,12 +678,13 @@ async function loadActivity(ctx: SheetsContext): Promise<ActivityItem[]> {
 }
 
 /**
- * The latest Payments Log rows, newest first. Rows from before "Logged by" and "Action" existed have no logged-by
- * and no action. `minFetchedAt` (ms since epoch) rejects a cached copy read before that time.
+ * The Payments Log rows, newest first: all of them, or the newest `limit`. The whole log is read (and kept) either way, so
+ * asking for all of it costs no more than asking for a few. Rows from before "Logged by" and "Action" existed have no
+ * logged-by and no action. `minFetchedAt` (ms since epoch) rejects a cached copy read before that time.
  */
 export async function readActivity(
   ctx: SheetsContext,
-  limit = 50,
+  limit?: number,
   options: { minFetchedAt?: number } = {},
 ): Promise<ActivityItem[]> {
   const items = ctx.activityCache ? await ctx.activityCache.get(options.minFetchedAt) : await loadActivity(ctx);

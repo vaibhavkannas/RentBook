@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { createElement, type ReactElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { ACTIVITY_SCAN_LIMIT, ACTIVITY_SHOWN_LIMIT } from "@/lib/activity-view";
+import { ACTIVITY_SHOWN_LIMIT } from "@/lib/activity-view";
 import type { ActivityItem } from "@/lib/sheets/service";
 import { CARD, pillClasses } from "@/lib/ui-classes";
 import { withoutComments } from "../support/source-scan";
@@ -103,12 +103,11 @@ describe("the Activity page", () => {
     expect(html).not.toContain("Back to");
   });
 
-  it("reads the newest 500 rows of the log, no older than the person's own last write", async () => {
+  it("reads the whole log, with no limit, no older than the person's own last write", async () => {
     mocks.readWrittenAt.mockResolvedValue(1_800_000_000_000);
     await render();
     expect(mocks.readWrittenAt).toHaveBeenCalledWith("member@example.com");
-    expect(mocks.readActivity).toHaveBeenCalledWith(expect.anything(), ACTIVITY_SCAN_LIMIT, { minFetchedAt: 1_800_000_000_000 });
-    expect(ACTIVITY_SCAN_LIMIT).toBe(500);
+    expect(mocks.readActivity).toHaveBeenCalledWith(expect.anything(), undefined, { minFetchedAt: 1_800_000_000_000 });
   });
 
   it("only reads the Payments Log: the one thing it takes from the Sheets service is readActivity", () => {
@@ -388,6 +387,43 @@ describe("the Activity page", () => {
     });
   });
 
+  describe("a portion in the address that the log does not have", () => {
+    const rows = [
+      item({ portion: "Ground floor", action: "Logged", tenant: "A" }),
+      item({ portion: "First floor", action: "Undone", tenant: "B" }),
+    ];
+
+    it("is taken as all portions, as a kind of entry it does not know is taken as all: every entry shows and All portions is chosen", async () => {
+      mocks.readActivity.mockResolvedValue(rows);
+      const html = await render({ portion: "Renamed portion" });
+      expect(html.match(/<li\b/g)).toHaveLength(2);
+      expect(html).not.toContain("No entries match");
+      expect(chips(html, "Portion").map((chip) => chip.current)).toEqual(["true", undefined, undefined]);
+    });
+
+    it("leaves the kind of entry alone, and the chips lead on without the portion it does not have", async () => {
+      mocks.readActivity.mockResolvedValue(rows);
+      const html = await render({ show: "undone", portion: "Renamed portion", month: "2026-10" });
+      expect(html.match(/<li\b/g)).toHaveLength(1);
+      expect(chips(html, "Show").map((chip) => chip.href)).toEqual([
+        "/activity?month=2026-10",
+        "/activity?show=logged&month=2026-10",
+        "/activity?show=edited&month=2026-10",
+        "/activity?show=undone&month=2026-10",
+      ]);
+      expect(chips(html, "Show").map((chip) => chip.current)).toEqual([undefined, undefined, undefined, "true"]);
+    });
+
+    it("is not kept in Try again either", async () => {
+      mocks.readActivity.mockRejectedValue(new Error("down"));
+      const log = vi.spyOn(console, "error").mockImplementation(() => {});
+      const html = await render({ show: "logged", portion: "Renamed portion" });
+      log.mockRestore();
+      // the log could not be read, so which portions it has is not known: the filters the person asked for are kept as they are
+      expect(links(html).find((link) => link.text === "Try again")?.href).toBe("/activity?show=logged&portion=Renamed+portion");
+    });
+  });
+
   describe("when there is nothing to show", () => {
     it("says Nothing logged yet, and what will show up, when the log has no rows, with no chips", async () => {
       mocks.readActivity.mockResolvedValue([]);
@@ -402,7 +438,7 @@ describe("the Activity page", () => {
     it("says no entries match when the filters keep nothing, keeps the chips, and offers Show everything", async () => {
       mocks.readActivity.mockResolvedValue([item({ action: "Logged" })]);
       const html = await render({ show: "undone", month: "2026-10" });
-      expect(html).toContain("No entries match these filters.");
+      expect(html).toContain("No entries match these filters");
       expect(html).not.toContain("Nothing logged yet");
       expect(html).not.toContain("<li");
       expect(chips(html, "Show")).toHaveLength(4);
@@ -412,9 +448,18 @@ describe("the Activity page", () => {
     });
 
     it("offers Show everything with no month when there is none", async () => {
-      mocks.readActivity.mockResolvedValue([item()]);
-      const html = await render({ portion: "Nowhere" });
+      mocks.readActivity.mockResolvedValue([item({ action: "Logged" })]);
+      const html = await render({ show: "edited" });
       expect(links(html).find((link) => link.text === "Show everything")?.href).toBe("/activity");
+    });
+
+    it("gives the empty state the same plain title as Nothing logged yet: no full stop", async () => {
+      mocks.readActivity.mockResolvedValue([item({ action: "Logged" })]);
+      const html = await render({ show: "undone" });
+      expect(html).toContain('<p class="font-medium">No entries match these filters</p>');
+      expect(html).not.toContain("No entries match these filters.");
+      mocks.readActivity.mockResolvedValue([]);
+      expect(await render()).toContain('<p class="font-medium">Nothing logged yet</p>');
     });
 
     it("does not offer Show everything when entries are showing", async () => {
@@ -427,7 +472,7 @@ describe("the Activity page", () => {
       Array.from({ length: count }, (_, index) =>
         item({ savedAt: new Date(NOW.getTime() - index * 3_600_000).toISOString(), tenant: `Tenant ${index}` }),
       );
-    const NOTE = "Showing the newest 50. Older entries are in the Payments Log tab of your Sheet.";
+    const NOTE = "Showing the newest 50. Older entries are in the Payments Log.";
 
     it("shows the newest 50 and says so, with where the older ones are", async () => {
       mocks.readActivity.mockResolvedValue(log(51));
@@ -460,9 +505,9 @@ describe("the Activity page", () => {
       expect(few).not.toContain("Showing the newest");
     });
 
-    it("copes with a full scan of 500 rows over many days", async () => {
+    it("copes with a log of 5,000 rows over many days", async () => {
       mocks.readActivity.mockResolvedValue(
-        Array.from({ length: ACTIVITY_SCAN_LIMIT }, (_, index) =>
+        Array.from({ length: 5000 }, (_, index) =>
           item({ savedAt: new Date(NOW.getTime() - index * 5 * 3_600_000).toISOString(), portion: `Portion ${index % 7}` }),
         ),
       );
@@ -470,6 +515,32 @@ describe("the Activity page", () => {
       expect(html.match(/<li\b/g)).toHaveLength(50);
       expect(chips(html, "Portion")).toHaveLength(8);
       expect(html).toContain("Showing the newest 50.");
+    });
+
+    it("searches the whole log: an entry older than the newest 500 is found, and Nothing matches is never said falsely", async () => {
+      // 700 Logged rows, newest first, and the one Undone row is the oldest of all
+      const rows = Array.from({ length: 700 }, (_, index) =>
+        item({ savedAt: new Date(NOW.getTime() - index * 3_600_000).toISOString(), tenant: `Tenant ${index}` }),
+      );
+      rows[699] = { ...rows[699], action: "Undone", tenant: "The oldest" };
+      // a Sheets service that honours the limit it is given, as the real one does
+      mocks.readActivity.mockImplementation(async (_ctx: unknown, limit?: number) => rows.slice(0, limit));
+      const html = await render({ show: "undone" });
+      expect(html).not.toContain("No entries match these filters");
+      expect(html.match(/<li\b/g)).toHaveLength(1);
+      expect(html).toContain("The oldest");
+      expect(html).not.toContain("Showing the newest");
+    });
+
+    it("says the newest 50 of the matches out of the whole log, not out of the newest 500", async () => {
+      const rows = Array.from({ length: 700 }, (_, index) =>
+        item({ savedAt: new Date(NOW.getTime() - index * 3_600_000).toISOString(), tenant: `Tenant ${index}`, action: index >= 600 ? "Undone" : "Logged" }),
+      );
+      mocks.readActivity.mockImplementation(async (_ctx: unknown, limit?: number) => rows.slice(0, limit));
+      const html = await render({ show: "undone" });
+      expect(html.match(/<li\b/g)).toHaveLength(50);
+      expect(html).toContain("Tenant 600");
+      expect(html).toContain(NOTE);
     });
   });
 

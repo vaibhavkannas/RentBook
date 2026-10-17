@@ -41,7 +41,8 @@ describe("readActivity", () => {
     expect(await readActivity(ctx, 3)).toHaveLength(3);
   });
 
-  it("returns at most 50 rows when no limit is given, newest first", async () => {
+  it("returns every row, newest first, when no limit is given, and the newest ones when a limit is", async () => {
+    // The Activity screen filters the whole log and draws the newest 50 matches, so asking for no limit gives all of it.
     const sixty = Array.from({ length: 60 }, (_, i) => [
       `2026-10-05T04:30:${String(i).padStart(2, "0")}.000Z`,
       "2026-10",
@@ -55,10 +56,13 @@ describe("readActivity", () => {
     ]);
     const { ctx } = setup(sixty);
     const items = await readActivity(ctx);
-    expect(items).toHaveLength(50);
+    expect(items).toHaveLength(60);
     expect(items[0].count).toBe(60);
-    expect(items[49].count).toBe(11);
-    expect(items.map((i) => i.count)).toEqual(Array.from({ length: 50 }, (_, i) => 60 - i));
+    expect(items[59].count).toBe(1);
+    expect(items.map((i) => i.count)).toEqual(Array.from({ length: 60 }, (_, i) => 60 - i));
+    const newest = await readActivity(ctx, 50);
+    expect(newest).toHaveLength(50);
+    expect(newest.map((i) => i.count)).toEqual(Array.from({ length: 50 }, (_, i) => 60 - i));
   });
 
   it("treats rows from before the new columns as logged by nobody, with no action", async () => {

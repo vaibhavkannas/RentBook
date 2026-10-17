@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import {
-  ACTIVITY_SCAN_LIMIT,
   ACTIVITY_SHOWN_LIMIT,
   DATE_NOT_RECORDED,
   UNKNOWN_DAY_KEY,
@@ -11,6 +10,7 @@ import {
   parseActivityFilters,
   portionsIn,
   toActivityEntry,
+  withKnownPortion,
   type ActivityFilters,
 } from "@/lib/activity-view";
 import type { ActivityItem } from "@/lib/sheets/service";
@@ -34,9 +34,8 @@ const VIEWER = "member@example.com";
 const entry = (overrides: Partial<ActivityItem> = {}, viewer: string | null | undefined = VIEWER) =>
   toActivityEntry(item(overrides), viewer);
 
-describe("the limits", () => {
-  it("looks through the newest 500 rows of the log and shows the newest 50 that match", () => {
-    expect(ACTIVITY_SCAN_LIMIT).toBe(500);
+describe("the limit", () => {
+  it("shows the newest 50 of the rows that match, out of the whole log", () => {
     expect(ACTIVITY_SHOWN_LIMIT).toBe(50);
   });
 });
@@ -513,6 +512,27 @@ describe("parseActivityFilters", () => {
 
   it("ignores a value that is undefined", () => {
     expect(parseActivityFilters({ show: undefined, portion: undefined })).toEqual(ALL);
+  });
+});
+
+describe("withKnownPortion", () => {
+  const portions = ["Ground floor", "First floor"];
+
+  it("keeps a portion that is in the log", () => {
+    expect(withKnownPortion({ show: "undone", portion: "First floor" }, portions)).toEqual({ show: "undone", portion: "First floor" });
+  });
+
+  it("falls back to all portions for a name that is not in the log, as a kind of entry it does not know falls back to all", () => {
+    expect(withKnownPortion({ show: "undone", portion: "Nowhere" }, portions)).toEqual({ show: "undone", portion: null });
+    expect(withKnownPortion({ show: "all", portion: "first floor" }, portions)).toEqual({ show: "all", portion: null });
+    expect(withKnownPortion({ show: "all", portion: "Anything" }, [])).toEqual({ show: "all", portion: null });
+  });
+
+  it("leaves no portion as no portion, and does not change what it is given", () => {
+    const filters = { show: "logged" as const, portion: "Gone" };
+    expect(withKnownPortion({ show: "logged", portion: null }, portions)).toEqual({ show: "logged", portion: null });
+    withKnownPortion(filters, portions);
+    expect(filters).toEqual({ show: "logged", portion: "Gone" });
   });
 });
 

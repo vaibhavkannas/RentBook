@@ -67,6 +67,21 @@ describe("the Activity page's cache", () => {
     expect(reads()).toBe(afterFirst);
   });
 
+  it("gives every row of the log, newest first, when no limit is asked for, from the read a limited view already made", async () => {
+    // 120 rows, more than the 50 the Activity screen shows: the screen filters all of them and draws the newest 50 of the matches
+    const rows = Array.from({ length: 120 }, (_, index) => [
+      new Date(Date.UTC(2026, 9, 1, 4, 30) + index * 60_000).toISOString(), "2026-10", "First floor, single bedroom", "Asha", 5450, index + 1, "2026-10-01", "owner@example.com", "Logged",
+    ]);
+    const { ctx, reads } = setup(rows);
+    expect(await readActivity(ctx, 50)).toHaveLength(50);
+    const afterFirst = reads();
+    const all = await readActivity(ctx);
+    expect(all).toHaveLength(120);
+    expect(all[0].count).toBe(120);
+    expect(all.at(-1)?.count).toBe(1);
+    expect(reads()).toBe(afterFirst);
+  });
+
   it("shows a logged payment straight away", async () => {
     const { ctx } = setup();
     expect(await readActivity(ctx)).toEqual([]);
