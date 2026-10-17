@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { configError, conflict, rateLimited, sheetStructure, unavailable } from "@/lib/errors";
 import type { Viewer } from "@/lib/server/auth-guard";
-import { problemMessage } from "@/lib/server/problem";
+import { problemMessage, setupHrefFor } from "@/lib/server/problem";
 import { captureLogs, loggedLines, type LogSpies } from "../support/logs";
 
 // What a page says when reading the Sheet failed, and the one line it leaves in the server log.
@@ -95,5 +95,34 @@ describe("problemMessage: a problem that is the Sheet's or Google's, which the p
     expect(logs.info).not.toHaveBeenCalled();
     expect(logs.warn).not.toHaveBeenCalled();
     expect(logs.error).not.toHaveBeenCalled();
+  });
+});
+
+describe("setupHrefFor: when a failed page read points the owner to Set up", () => {
+  it("is Set up for the owner when the connection or the Sheet's own structure is the problem", () => {
+    expect(setupHrefFor(configError(DETAIL), OWNER)).toBe("/setup");
+    expect(setupHrefFor(sheetStructure("The Tenants tab must have a Phone column."), OWNER)).toBe("/setup");
+  });
+
+  it("carries the month the person was looking at", () => {
+    expect(setupHrefFor(configError(DETAIL), OWNER, "2026-10")).toBe("/setup?month=2026-10");
+    expect(setupHrefFor(configError(DETAIL), OWNER, "garbage")).toBe("/setup");
+    expect(setupHrefFor(configError(DETAIL), OWNER, null)).toBe("/setup");
+  });
+
+  it("is nothing for a member, who cannot open Set up", () => {
+    expect(setupHrefFor(configError(DETAIL), MEMBER)).toBeUndefined();
+    expect(setupHrefFor(sheetStructure("x"), MEMBER)).toBeUndefined();
+  });
+
+  it("is nothing when Set up could not explain it: Google busy or down, a stale screen, or a failure that is not ours", () => {
+    for (const error of [rateLimited(), unavailable(), conflict("The Sheet changed."), new Error("boom"), "text", undefined]) {
+      expect(setupHrefFor(error, OWNER), String(error)).toBeUndefined();
+    }
+  });
+
+  it("logs nothing: it only decides where a link goes", () => {
+    setupHrefFor(configError(DETAIL), OWNER);
+    expect(allOutput()).toBe("");
   });
 });

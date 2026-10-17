@@ -34,6 +34,7 @@ describe("maxDuration", () => {
       "api/setup/prepare/route.ts",
       "api/tenancies/move-out/route.ts",
       "api/tenancies/route.ts",
+      "diagnostics/page.tsx",
       "page.tsx",
       "settings/page.tsx",
       "setup/page.tsx",

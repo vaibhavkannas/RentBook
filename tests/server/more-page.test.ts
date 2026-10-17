@@ -5,7 +5,7 @@ import pkg from "../../package.json";
 import { BRAND } from "@/lib/brand";
 import { buttonClasses, pillClasses } from "@/lib/ui-classes";
 
-// The More screen: who is signed in, the owner's way to the portion settings, Sign out, and the version.
+// The More screen: who is signed in, the owner's way to the portion settings, Set up and Diagnostics, Sign out, and the version.
 
 const mocks = vi.hoisted(() => ({
   getViewer: vi.fn(),
@@ -77,7 +77,7 @@ describe("the More page", () => {
     const html = await render({ month: "2026-10" });
     const link = /<a [^>]*href="\/settings\?month=2026-10"[^>]*>[\s\S]*?<\/a>/.exec(html)?.[0] ?? "";
     expect(link).toContain("Portion settings");
-    expect(link).toContain("Payments per cycle and the hike at each new cycle");
+    expect(link).toContain("Cycles, hikes, and adding or switching off portions");
     expect(link).not.toContain("Cycle length");
     expect(link).toMatch(/class="[^"]*\bmin-h-11\b/);
   });
@@ -92,6 +92,38 @@ describe("the More page", () => {
     const html = await render({ month: "2026-10" });
     expect(html).not.toContain("Portion settings");
     expect(html).not.toContain("/settings");
+  });
+
+  it.each([
+    ["Set up", "/setup", "Check each part of the connection to your Sheet"],
+    ["Diagnostics", "/diagnostics", "How the app and your Sheet are doing"],
+  ])("lets the owner open %s, with what it is for, and carries the month", async (title, path, hint) => {
+    asOwner();
+    const html = await render({ month: "2026-10" });
+    const link = new RegExp(`<a [^>]*href="${path}\\?month=2026-10"[^>]*>[\\s\\S]*?</a>`).exec(html)?.[0] ?? "";
+    expect(link).toContain(`>${title}<`);
+    expect(link).toContain(hint);
+    expect(link).toMatch(/class="[^"]*\bmin-h-11\b/);
+    expect(link).toMatch(/class="[^"]*\bpress\b/);
+    expect(await render()).toContain(`href="${path}"`);
+    expect(await render({ month: "garbage" })).toContain(`href="${path}"`);
+  });
+
+  it("puts the owner's rows in order: Portion settings, Set up, Diagnostics, then Sign out", async () => {
+    asOwner();
+    const html = await render();
+    const at = (text: string) => html.indexOf(text);
+    expect(at("Portion settings")).toBeGreaterThan(at("Signed in as"));
+    expect(at("Set up")).toBeGreaterThan(at("Portion settings"));
+    expect(at("Diagnostics")).toBeGreaterThan(at("Set up"));
+    expect(at("Sign out")).toBeGreaterThan(at("Diagnostics"));
+  });
+
+  it("does not show a member Set up or Diagnostics, or a link to either", async () => {
+    const html = await render({ month: "2026-10" });
+    for (const text of ["Set up", "Diagnostics", "/setup", "/diagnostics", "Check each part", "How the app and your Sheet"]) {
+      expect(html, text).not.toContain(text);
+    }
   });
 
   it("has a Sign out button that says what it is doing while it works", async () => {

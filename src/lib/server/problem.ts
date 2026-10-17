@@ -1,4 +1,5 @@
 import "server-only";
+import { withMonth } from "@/lib/app-nav";
 import { AppError, messageFor } from "@/lib/errors";
 import type { Viewer } from "./auth-guard";
 import { errorLogFields, logEvent } from "./log";
@@ -19,4 +20,15 @@ export function problemMessage(error: unknown, viewer: Viewer): string {
   }
   logEvent("error", "page-load-failed", errorLogFields(error, WHAT));
   return "Couldn't reach Google Sheets. Try again.";
+}
+
+/**
+ * Where a page that could not read the Sheet sends the owner to see what is wrong: Set up, kept in the month the person was
+ * looking at (`monthKey`). Only for the owner, who is the only one who can open it, and only for a problem Set up can
+ * explain: the connection (config) or the Sheet's own structure. Google being busy or down, a screen that is out of date and
+ * a failure that is not ours are not for Set up. Logs nothing: `problemMessage` has said what there is to say.
+ */
+export function setupHrefFor(error: unknown, viewer: Viewer, monthKey?: string | null): string | undefined {
+  if (!viewer.isOwner || !(error instanceof AppError)) return undefined;
+  return error.code === "config" || error.code === "sheet-structure" ? withMonth("/setup", monthKey) : undefined;
 }

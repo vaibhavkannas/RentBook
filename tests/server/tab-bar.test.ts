@@ -68,6 +68,8 @@ describe("TabBar", () => {
     expect(current("/activity")).toEqual([undefined, "page", undefined]);
     expect(current("/more")).toEqual([undefined, undefined, "page"]);
     expect(current("/settings")).toEqual([undefined, undefined, "page"]);
+    expect(current("/setup")).toEqual([undefined, undefined, "page"]);
+    expect(current("/diagnostics")).toEqual([undefined, undefined, "page"]);
   });
 
   it("shows the current tab in the accent colour and the others muted", () => {

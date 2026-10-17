@@ -141,6 +141,7 @@ describe("the pages and routes under src/app", () => {
       expect.arrayContaining([
         "page.tsx",
         "activity/page.tsx",
+        "diagnostics/page.tsx",
         "settings/page.tsx",
         "more/page.tsx",
         "setup/page.tsx",

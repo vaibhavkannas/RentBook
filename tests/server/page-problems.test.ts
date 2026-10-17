@@ -44,6 +44,7 @@ vi.mock("@/lib/sheets/tenancy-service", async (importOriginal) => ({
 import ActivityPage from "@/app/activity/page";
 import Home from "@/app/page";
 import SettingsPage from "@/app/settings/page";
+import LoadProblem from "@/components/LoadProblem";
 import TenantsPage from "@/app/tenants/[portionId]/page";
 
 const DETAIL = "Google rejected the service account key. Create a new key and update GOOGLE_SERVICE_ACCOUNT_JSON.";
@@ -135,5 +136,78 @@ describe("the settings page, when the Sheet cannot be read", () => {
     expect(out).toContain("Can&#x27;t load your Sheet");
     expect(out).toMatch(/<a [^>]*href="\/settings"[^>]*>Try again<\/a>/);
     expect(out).toContain('role="alert"');
+  });
+});
+
+describe("LoadProblem, with a way to Set up", () => {
+  const render = (props: { setupHref?: string }) =>
+    renderToStaticMarkup(createElement(LoadProblem, { message: "Google rejected the key.", retryHref: "/activity", ...props }));
+
+  it("shows only Try again when it is not given Set up, as it always did", () => {
+    const out = render({});
+    expect(out).toMatch(/<a [^>]*href="\/activity"[^>]*>Try again<\/a>/);
+    expect(out).not.toContain("Set up");
+    expect(out).not.toContain("flex-wrap");
+  });
+
+  it("shows a second link, to Set up, with what it is for", () => {
+    const out = render({ setupHref: "/setup?month=2026-10" });
+    expect(out).toMatch(/<a [^>]*href="\/activity"[^>]*>Try again<\/a>/);
+    expect(out).toMatch(/<a [^>]*href="\/setup\?month=2026-10"[^>]*>Open Set up to see what is wrong<\/a>/);
+    for (const tag of out.match(/<a [^>]*>/g) ?? []) expect(tag).toContain("min-h-11");
+  });
+});
+
+describe.each(pages)("%s: the link to Set up", (_name, render, mock) => {
+  const SETUP = /<a [^>]*href="\/setup[^"]*"[^>]*>Open Set up to see what is wrong<\/a>/;
+
+  it("is shown to the owner when the connection is broken, and when the Sheet's structure is", async () => {
+    asOwner();
+    mock.mockRejectedValue(configError(DETAIL));
+    expect(await render()).toMatch(SETUP);
+    mock.mockRejectedValue(sheetStructure("The Schedule tab has no month rows to copy the format from."));
+    expect(await render()).toMatch(SETUP);
+  });
+
+  it("is not shown to a member, who is told to ask the owner", async () => {
+    mock.mockRejectedValue(configError(DETAIL));
+    expect(await render()).not.toContain("Set up");
+    mock.mockRejectedValue(sheetStructure("The Schedule tab has no month rows to copy the format from."));
+    expect(await render()).not.toContain("Set up");
+  });
+
+  it("is not shown to the owner for a problem Set up cannot explain", async () => {
+    asOwner();
+    for (const error of [rateLimited(), unavailable(), new Error("secret internals")]) {
+      mock.mockRejectedValue(error);
+      expect(await render(), String(error)).not.toContain("Set up");
+    }
+  });
+});
+
+describe("the link to Set up carries the month, and the settings page has it too", () => {
+  it("keeps the month of the home page and of the settings page in the link", async () => {
+    asOwner();
+    mocks.loadMonthView.mockRejectedValue(configError(DETAIL));
+    expect(await html(Home({ searchParams: Promise.resolve({ month: "2026-10" }) }))).toMatch(/href="\/setup\?month=2026-10"/);
+    mocks.getSettings.mockRejectedValue(configError(DETAIL));
+    expect(await html(SettingsPage({ searchParams: Promise.resolve({ month: "2026-09" }) }))).toMatch(/href="\/setup\?month=2026-09"/);
+    expect(await html(SettingsPage())).toMatch(/href="\/setup"/);
+  });
+
+  it("is on the tenant page too when the Tenants tab cannot be used, for the owner only", async () => {
+    mocks.getPortionTenants.mockResolvedValue({
+      portion: { id: "p1", name: "Ground floor" },
+      scheduleTenant: null,
+      current: null,
+      mismatched: null,
+      past: [],
+      tenantsProblem: "The Tenants tab must have a Phone column.",
+    });
+    const page = () => html(TenantsPage({ params: Promise.resolve({ portionId: "p1" }), searchParams: Promise.resolve({}) }));
+    asOwner();
+    expect(await page()).toMatch(/href="\/setup"[^>]*>Open Set up to see what is wrong</);
+    asMember();
+    expect(await page()).not.toContain("Set up");
   });
 });

@@ -1,7 +1,7 @@
 import "server-only";
 import { AppError } from "@/lib/errors";
 import { waitingChecks, checkSheet, type SheetFacts } from "@/lib/sheets/sheet-checks";
-import { NamedTabsGateway } from "@/lib/sheets/named-tabs";
+import { NamedTabsGateway, type TabKey } from "@/lib/sheets/named-tabs";
 import type { SheetsContext } from "@/lib/sheets/service";
 import type { Check } from "@/lib/setup-checks";
 import { readEnv, type AppEnv } from "./env";
@@ -15,6 +15,8 @@ export type SetupReport = {
   facts: SheetFacts | null;
   /** The names the app's own tabs have in the Sheet (the usual ones where the owner gave none); null when the settings cannot be read. */
   appTabNames: { settings: string; log: string; tenants: string } | null;
+  /** The title each tab has in the Sheet, when the tabs were listed through the tab wrapper; null otherwise. */
+  realTitles: Record<TabKey, string | null> | null;
 };
 
 /** What the Sheet's checks say when the settings are too wrong to open the Sheet at all. */
@@ -41,15 +43,16 @@ export async function setupReport(rawEnv: Record<string, string | undefined>, ge
     }
   }
   if (app === null || ctx === null) {
-    return { checks: [...env, ...waitingChecks(FIX_SETTINGS_FIRST)], facts: null, appTabNames: app === null ? null : tabNamesOf(app) };
+    return { checks: [...env, ...waitingChecks(FIX_SETTINGS_FIRST)], facts: null, appTabNames: app === null ? null : tabNamesOf(app), realTitles: null };
   }
   const gateway = ctx.gateway;
   const appTabNames = tabNamesOf(app);
+  let realTitles: Record<TabKey, string | null> | null = null;
   const sheet = await checkSheet(gateway, {
     scheduleTab: ctx.scheduleTab,
     totalHeader: ctx.totalHeader,
     appTabNames,
-    realTitles: gateway instanceof NamedTabsGateway ? () => gateway.knownTitles() : undefined,
+    realTitles: gateway instanceof NamedTabsGateway ? () => (realTitles = gateway.knownTitles()) : undefined,
   });
-  return { checks: [...env, ...sheet.checks], facts: sheet.facts, appTabNames };
+  return { checks: [...env, ...sheet.checks], facts: sheet.facts, appTabNames, realTitles };
 }

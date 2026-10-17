@@ -6,6 +6,7 @@ import { Card } from "@/components/ui/Card";
 import { Notice } from "@/components/ui/Notice";
 import { Page } from "@/components/ui/Page";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { monthParam, withMonth } from "@/lib/app-nav";
 import { BRAND } from "@/lib/brand";
 import { LAYOUT_RULES } from "@/lib/layout-rules";
 import { getViewer } from "@/lib/server/auth-guard";
@@ -23,7 +24,11 @@ export const maxDuration = 15;
  * the tabs the app needs. It never shows a secret, a key, a setting's value or a tenant's data (see setup-env.ts and
  * sheet-checks.ts); the service account's address is the one thing taken from the settings, so the owner can share the Sheet.
  */
-export default async function SetupPage() {
+export default async function SetupPage({
+  searchParams,
+}: {
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
+} = {}) {
   const viewer = await getViewer();
   if (!viewer) redirect("/signin");
 
@@ -39,6 +44,8 @@ export default async function SetupPage() {
     );
   }
 
+  // The month the person was looking at: the links keep it, so the tab bar and the way back still lead to it.
+  const month = monthParam((await searchParams)?.month);
   const { checks, facts, appTabNames } = await setupReport(process.env, getSheetsContext);
   const offer = prepareOffer(checks, facts, appTabNames ?? {});
   const settingsReady = checks.some((check) => check.id === "settings" && check.status === "ok");
@@ -67,7 +74,7 @@ export default async function SetupPage() {
                 cannot change a payment count later.
               </p>
               {settingsReady && (
-                <ButtonLink href="/settings" variant="secondary" className="mt-3">
+                <ButtonLink href={withMonth("/settings", month)} variant="secondary" className="mt-3">
                   Open Portion settings
                 </ButtonLink>
               )}
@@ -90,7 +97,7 @@ export default async function SetupPage() {
         </details>
       </Card>
 
-      <ButtonLink href="/setup" variant="secondary" className="mt-3 w-full">
+      <ButtonLink href={withMonth("/setup", month)} variant="secondary" className="mt-3 w-full">
         Check again
       </ButtonLink>
     </Page>

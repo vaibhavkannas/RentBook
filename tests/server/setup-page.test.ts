@@ -35,8 +35,8 @@ vi.mock("@/lib/server/context", () => ({ getSheetsContext: mocks.getSheetsContex
 
 import SetupPage, { maxDuration } from "@/app/setup/page";
 
-async function render(): Promise<string> {
-  const page = (await SetupPage()) as ReactElement;
+async function render(searchParams?: Record<string, string | string[] | undefined>): Promise<string> {
+  const page = (await SetupPage(searchParams ? { searchParams: Promise.resolve(searchParams) } : undefined)) as ReactElement;
   return renderToStaticMarkup(createElement(() => page));
 }
 
@@ -239,6 +239,14 @@ describe("the owner's view of a connected Sheet", () => {
   it("ends with a Check again link to this page", async () => {
     const html = await render();
     expect(html).toMatch(/<a [^>]*href="\/setup"[^>]*>Check again<\/a>/);
+  });
+
+  it("keeps the month the person was looking at in its links: Check again and the portion settings", async () => {
+    const html = await render({ month: "2026-10" });
+    expect(html).toMatch(/<a [^>]*href="\/setup\?month=2026-10"[^>]*>Check again<\/a>/);
+    expect(html).toMatch(/<a [^>]*href="\/settings\?month=2026-10"[^>]*>Open Portion settings<\/a>/);
+    const plain = await render({ month: "garbage" });
+    expect(plain).toMatch(/href="\/setup"[^>]*>Check again/);
   });
 
   it("makes room for the tab bar, and has every tap target at least 44 px, with press feedback", async () => {

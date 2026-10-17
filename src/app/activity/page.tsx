@@ -23,7 +23,7 @@ import { monthParam } from "@/lib/app-nav";
 import { getViewer } from "@/lib/server/auth-guard";
 import { getSheetsContext } from "@/lib/server/context";
 import { readWrittenAt } from "@/lib/server/freshness";
-import { problemMessage } from "@/lib/server/problem";
+import { problemMessage, setupHrefFor } from "@/lib/server/problem";
 import { readActivity, type ActivityItem } from "@/lib/sheets/service";
 import { cx } from "@/lib/ui-classes";
 
@@ -107,12 +107,14 @@ export default async function ActivityPage({
 
   let items: ActivityItem[] | null = null;
   let problem: string | null = null;
+  let setupHref: string | undefined;
   try {
     // The whole log: the service already holds all of it, and a filter that looked at only the newest rows could say
     // that nothing matches when an older entry does. Only the entries that are drawn are limited.
     items = await readActivity(getSheetsContext(), undefined, { minFetchedAt: await readWrittenAt(viewer.email) });
   } catch (error) {
     problem = problemMessage(error, viewer);
+    setupHref = setupHrefFor(error, viewer, month);
   }
 
   const portions = items ? portionsIn(items) : [];
@@ -125,7 +127,7 @@ export default async function ActivityPage({
     <Page>
       <PageHeader title="Activity" />
 
-      {problem && <LoadProblem message={problem} retryHref={activityHref(filters, month)} />}
+      {problem && <LoadProblem message={problem} retryHref={activityHref(filters, month)} setupHref={setupHref} />}
 
       {items && items.length === 0 && (
         <EmptyState title="Nothing logged yet">Payments you log, change or undo show up here, newest first.</EmptyState>

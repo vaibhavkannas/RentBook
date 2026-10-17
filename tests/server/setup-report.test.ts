@@ -103,6 +103,30 @@ describe("setupReport", () => {
     expect(checks.find((check) => check.id === "log")?.detail).toBe('Found as "payments log". Headers are right. 0 entries.');
   });
 
+  it("gives the real titles of the tabs when the gateway can say them, and none when it cannot or the Sheet was not opened", async () => {
+    const inner = new FakeGateway({
+      schedule: baseSchedule(),
+      settings: settingsGrid(),
+      "payments log": [[...LOG_HEADERS]],
+      "RentBook Tenants": [[...TENANT_HEADERS]],
+    });
+    const wrapper = new NamedTabsGateway(inner, { schedule: "Schedule", settings: SETTINGS_TAB, log: LOG_TAB, tenants: "RentBook Tenants" });
+    expect((await setupReport(ENV, () => ctxFor(wrapper))).realTitles).toEqual({
+      schedule: "schedule",
+      settings: "settings",
+      log: "payments log",
+      tenants: "RentBook Tenants",
+    });
+    expect((await setupReport(ENV, () => ctxFor(healthy()))).realTitles).toBeNull();
+    expect(
+      (
+        await setupReport(ENV, () => {
+          throw configError("x");
+        })
+      ).realTitles,
+    ).toBeNull();
+  });
+
   it("never writes to the Sheet", async () => {
     const fake = new FakeGateway({ Schedule: baseSchedule() });
     await setupReport(ENV, () => ctxFor(fake));

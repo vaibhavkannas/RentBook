@@ -7,14 +7,14 @@ import { Card } from "@/components/ui/Card";
 import { Notice } from "@/components/ui/Notice";
 import { Page } from "@/components/ui/Page";
 import { PageHeader } from "@/components/ui/PageHeader";
-import { monthParam } from "@/lib/app-nav";
+import { monthParam, withMonth } from "@/lib/app-nav";
 import { todayIso } from "@/lib/domain/year-month";
 import { AppError } from "@/lib/errors";
 import { formatDay } from "@/lib/format";
 import { getViewer } from "@/lib/server/auth-guard";
 import { getSheetsContext } from "@/lib/server/context";
 import { readWrittenAt } from "@/lib/server/freshness";
-import { problemMessage } from "@/lib/server/problem";
+import { problemMessage, setupHrefFor } from "@/lib/server/problem";
 import { getPortionTenants, type PortionTenants } from "@/lib/sheets/tenancy-service";
 import { emptyMoveOutForm, emptyTenancyForm, tenancyFormText } from "@/lib/tenancy-input";
 import { showChangedNotice, tenantsPagePath, TENANCY_CONFLICT_MESSAGE } from "@/lib/tenancy-response";
@@ -80,6 +80,7 @@ export default async function TenantsPage({
 
   let data: PortionTenants | null = null;
   let problem: string | null = null;
+  let setupHref: string | undefined;
   let unknownPortion = false;
   try {
     data = await getPortionTenants(getSheetsContext(), portionId, { minFetchedAt: await readWrittenAt(viewer.email) });
@@ -87,7 +88,10 @@ export default async function TenantsPage({
     if (error instanceof AppError) {
       // getPortionTenants answers an id that is not one of the portions with a validation error; nothing else on this page does.
       if (error.code === "validation") unknownPortion = true;
-      else problem = problemMessage(error, viewer);
+      else {
+        problem = problemMessage(error, viewer);
+        setupHref = setupHrefFor(error, viewer, monthKey);
+      }
     } else {
       problem = problemMessage(error, viewer);
     }
@@ -99,7 +103,11 @@ export default async function TenantsPage({
     return (
       <Page>
         <Header title="Tenant details" />
-        <LoadProblem message={problem ?? "Couldn't reach Google Sheets. Try again."} retryHref={tenantsPagePath(portionId, monthKey)} />
+        <LoadProblem
+          message={problem ?? "Couldn't reach Google Sheets. Try again."}
+          retryHref={tenantsPagePath(portionId, monthKey)}
+          setupHref={setupHref}
+        />
       </Page>
     );
   }
@@ -115,6 +123,7 @@ export default async function TenantsPage({
           title="Can't show the tenant details"
           message={`${tenantsProblem} Put the header back, then try again. Logging rent and the other pages still work.`}
           retryHref={tenantsPagePath(portion.id, monthKey)}
+          setupHref={viewer.isOwner ? withMonth("/setup", monthKey) : undefined}
         />
       </Page>
     );

@@ -88,13 +88,15 @@ describe("tabForPath", () => {
     expect(tabForPath("/activity")).toBe("activity");
   });
 
-  it("puts More and the settings page under More", () => {
+  it("puts More, the settings page, Set up and Diagnostics under More", () => {
     expect(tabForPath("/more")).toBe("more");
     expect(tabForPath("/settings")).toBe("more");
+    expect(tabForPath("/setup")).toBe("more");
+    expect(tabForPath("/diagnostics")).toBe("more");
   });
 
   it("puts nothing else under any tab, so the bar is not shown on the sign-in page or a page that was not found", () => {
-    for (const other of ["/signin", "/no-such-page", "/tenants", "/tenants/", "/activity/extra", "/morex", "/settings/x", "/api/health"]) {
+    for (const other of ["/signin", "/no-such-page", "/tenants", "/tenants/", "/activity/extra", "/morex", "/settings/x", "/setup/x", "/diagnostics/x", "/api/health"]) {
       expect(tabForPath(other), other).toBeNull();
     }
     expect(tabForPath(null)).toBeNull();
@@ -105,6 +107,8 @@ describe("tabForPath", () => {
   it("ignores a trailing slash", () => {
     expect(tabForPath("/more/")).toBe("more");
     expect(tabForPath("/activity/")).toBe("activity");
+    expect(tabForPath("/setup/")).toBe("more");
+    expect(tabForPath("/diagnostics/")).toBe("more");
   });
 });
 

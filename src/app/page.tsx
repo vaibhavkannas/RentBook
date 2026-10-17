@@ -11,7 +11,7 @@ import { describeDifference, progressPercent } from "@/lib/rent-difference";
 import { getViewer } from "@/lib/server/auth-guard";
 import { getSheetsContext } from "@/lib/server/context";
 import { loadMonthView } from "@/lib/server/freshness";
-import { problemMessage } from "@/lib/server/problem";
+import { problemMessage, setupHrefFor } from "@/lib/server/problem";
 
 // A Google call gives up after 10 seconds; the whole request is cut off after 15.
 export const maxDuration = 15;
@@ -30,10 +30,12 @@ export default async function Home({
 
   let view: MonthView | null = null;
   let problem: string | null = null;
+  let setupHref: string | undefined;
   try {
     view = await loadMonthView(getSheetsContext(), month, viewer.email);
   } catch (error) {
     problem = problemMessage(error, viewer);
+    setupHref = setupHrefFor(error, viewer, ymKey(month));
   }
 
   const title = formatMonthTitle(month);
@@ -46,7 +48,7 @@ export default async function Home({
   return (
     <Page>
       <MonthFrame monthKey={ymKey(month)} currentKey={ymKey(currentYm(now))}>
-        {problem && <LoadProblem message={problem} retryHref={`/?month=${ymKey(month)}`} />}
+        {problem && <LoadProblem message={problem} retryHref={`/?month=${ymKey(month)}`} setupHref={setupHref} />}
 
         {view && (
           <>

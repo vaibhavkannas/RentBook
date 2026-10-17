@@ -112,6 +112,7 @@ describe("proxy matcher", () => {
     "/more",
     "/more?month=2026-10",
     "/setup",
+    "/diagnostics",
     "/tenants/p1",
     "/no-such-page",
     "/api-notes",

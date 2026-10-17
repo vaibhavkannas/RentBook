@@ -15,6 +15,21 @@ import pkg from "../../../package.json";
 
 // This page reads no Sheet, so it sets no time limit of its own (see tests/server/max-duration.test.ts).
 
+/** A row of the owner's that leads to another screen: its name, what it is for, and an arrow. */
+function MoreLink({ href, title, hint }: { href: string; title: string; hint: string }) {
+  return (
+    <Link href={href} className={cx(CARD, "press mt-3 flex min-h-11 items-center justify-between gap-3")}>
+      <span>
+        <span className="block font-medium">{title}</span>
+        <span className="block text-sm text-muted">{hint}</span>
+      </span>
+      <span aria-hidden="true" className="text-xl text-muted">
+        ›
+      </span>
+    </Link>
+  );
+}
+
 export default async function MorePage({
   searchParams,
 }: {
@@ -41,18 +56,23 @@ export default async function MorePage({
       </Card>
 
       {viewer.isOwner && (
-        <Link
-          href={withMonth("/settings", month)}
-          className={cx(CARD, "press mt-3 flex min-h-11 items-center justify-between gap-3")}
-        >
-          <span>
-            <span className="block font-medium">Portion settings</span>
-            <span className="block text-sm text-muted">Payments per cycle and the hike at each new cycle</span>
-          </span>
-          <span aria-hidden="true" className="text-xl text-muted">
-            ›
-          </span>
-        </Link>
+        <>
+          <MoreLink
+            href={withMonth("/settings", month)}
+            title="Portion settings"
+            hint="Cycles, hikes, and adding or switching off portions"
+          />
+          <MoreLink
+            href={withMonth("/setup", month)}
+            title="Set up"
+            hint="Check each part of the connection to your Sheet"
+          />
+          <MoreLink
+            href={withMonth("/diagnostics", month)}
+            title="Diagnostics"
+            hint="How the app and your Sheet are doing"
+          />
+        </>
       )}
 
       <form
