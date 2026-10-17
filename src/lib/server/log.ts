@@ -26,6 +26,12 @@ export type LogFields = {
 
 const MAX_MESSAGE_LENGTH = 500;
 
+/** When this module was loaded: the time the counts of `problemCounts` start from. */
+const COUNTING_SINCE = new Date().toISOString();
+
+/** How many warn and error lines have been written since, by code (or by event when a line has none). Maps, so a code such as `__proto__` is a plain name. */
+const COUNTS: Record<"warn" | "error", Map<string, number>> = { warn: new Map(), error: new Map() };
+
 const text = (value: unknown): string | undefined => (typeof value === "string" && value !== "" ? value : undefined);
 
 /**
@@ -53,8 +59,27 @@ export function logEvent(level: LogLevel, event: string, fields: LogFields = {})
         : message,
     viewer: viewer?.trim().toLowerCase(),
   };
+  if (level !== "info") {
+    const counts = COUNTS[level];
+    const key = line.code ?? event;
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
   // JSON.stringify leaves out the fields that are undefined and writes a line break inside a string as \n.
   console[level](JSON.stringify(line));
+}
+
+/**
+ * What has gone wrong on this server instance since it started: the warn lines and the error lines written so far,
+ * counted by code (the event when a line has no code). Info lines are people's own mistakes, so they are not counted.
+ * Only numbers and names, never a message. Each server instance counts for itself and starts again from zero when it
+ * restarts, so this says how this instance has been doing, not the whole app. The answer is a copy.
+ */
+export function problemCounts(): { since: string; warn: Record<string, number>; error: Record<string, number> } {
+  return {
+    since: COUNTING_SINCE,
+    warn: Object.fromEntries(COUNTS.warn),
+    error: Object.fromEntries(COUNTS.error),
+  };
 }
 
 /** What a request id may look like: Vercel's (`iad1::sfo1::abcde-1760592600000-0123456789ab`) and our own UUIDs. */

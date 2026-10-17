@@ -73,7 +73,10 @@ export function parseAllowedEmails(env: Record<string, string | undefined>): str
 }
 
 /** The longest title Google allows a tab. */
-const MAX_TAB_NAME_LENGTH = 100;
+export const MAX_TAB_NAME_LENGTH = 100;
+
+/** What the Schedule tab is called when SCHEDULE_TAB is not set. */
+export const DEFAULT_SCHEDULE_TAB = "Schedule";
 
 /** A tab name from the environment: trimmed, `fallback` when blank, a config error (naming the variable) when it is too long. */
 function tabName(env: Record<string, string | undefined>, variable: string, fallback: string): string {
@@ -93,7 +96,7 @@ export function readEnv(env: Record<string, string | undefined>): AppEnv {
     throw configError(`Missing environment variables: ${missing.join(", ")}.`);
   }
   const tabs = {
-    schedule: tabName(env, "SCHEDULE_TAB", "Schedule"),
+    schedule: tabName(env, "SCHEDULE_TAB", DEFAULT_SCHEDULE_TAB),
     settings: tabName(env, "SETTINGS_TAB", DEFAULT_TAB_NAMES.settings),
     log: tabName(env, "LOG_TAB", DEFAULT_TAB_NAMES.log),
     tenants: tabName(env, "TENANTS_TAB", DEFAULT_TAB_NAMES.tenants),

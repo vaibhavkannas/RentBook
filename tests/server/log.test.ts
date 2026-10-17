@@ -204,3 +204,95 @@ describe("errorLogFields", () => {
     expect(errorLogFields(undefined, "x")).toEqual({ message: "x (unknown error)." });
   });
 });
+
+describe("problemCounts", () => {
+  /** A copy of the log module with nothing counted yet: the counts live in the module, and start when it loads. */
+  async function freshLog() {
+    vi.resetModules();
+    return import("@/lib/server/log");
+  }
+
+  it("starts with nothing counted, and says when it started (the time the module loaded)", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-10-16T05:30:00.000Z"));
+    const log = await freshLog();
+    vi.setSystemTime(new Date("2026-10-16T09:00:00.000Z"));
+    expect(log.problemCounts()).toEqual({ since: "2026-10-16T05:30:00.000Z", warn: {}, error: {} });
+  });
+
+  it("counts each warn line and each error line, by its code, or by its event when it has no code", async () => {
+    const log = await freshLog();
+    log.logEvent("warn", "api-error", { code: "rate-limited" });
+    log.logEvent("warn", "api-error", { code: "rate-limited", route: "/api/payments" });
+    log.logEvent("warn", "api-error", { code: "unavailable" });
+    log.logEvent("warn", "payments-log-header-taken", { message: "A cell holds other text." });
+    log.logEvent("error", "api-error", { code: "config" });
+    log.logEvent("error", "page-load-failed", { message: "A page could not read the Sheet." });
+    log.logEvent("error", "page-load-failed");
+    expect(log.problemCounts()).toMatchObject({
+      warn: { "rate-limited": 2, unavailable: 1, "payments-log-header-taken": 1 },
+      error: { config: 1, "page-load-failed": 2 },
+    });
+  });
+
+  it("keeps the two levels apart: the same code as a warning and as an error is counted twice, once in each", async () => {
+    const log = await freshLog();
+    log.logEvent("warn", "x", { code: "shared" });
+    log.logEvent("error", "x", { code: "shared" });
+    log.logEvent("error", "x", { code: "shared" });
+    expect(log.problemCounts()).toMatchObject({ warn: { shared: 1 }, error: { shared: 2 } });
+  });
+
+  it("does not count info lines, which are a person's own mistakes and nothing to fix", async () => {
+    const log = await freshLog();
+    log.logEvent("info", "api-error", { code: "validation" });
+    log.logEvent("info", "api-error", { code: "conflict" });
+    log.logEvent("info", "something-happened");
+    expect(log.problemCounts()).toMatchObject({ warn: {}, error: {} });
+  });
+
+  it("counts by the event when the code is not text, as the line itself would leave it out", async () => {
+    const log = await freshLog();
+    log.logEvent("error", "odd-code", { code: 500 } as never);
+    log.logEvent("error", "odd-code", { code: "" });
+    expect(log.problemCounts().error).toEqual({ "odd-code": 2 });
+  });
+
+  it("changes nothing about what is printed", async () => {
+    const log = await freshLog();
+    log.logEvent("warn", "api-error", { code: "rate-limited", requestId: "req-1" });
+    log.logEvent("error", "api-error", { code: "config", message: "Fix it." });
+    expect(logs.warn).toHaveBeenCalledTimes(1);
+    expect(logs.error).toHaveBeenCalledTimes(1);
+    expect(logs.info).not.toHaveBeenCalled();
+    const [warnLine] = loggedLines(logs.warn);
+    expect(Object.keys(warnLine)).toEqual(["ts", "level", "event", "requestId", "code"]);
+    const [errorLine] = loggedLines(logs.error);
+    expect(Object.keys(errorLine)).toEqual(["ts", "level", "event", "code", "message"]);
+  });
+
+  it("answers with copies, so a caller cannot change the counts", async () => {
+    const log = await freshLog();
+    log.logEvent("error", "x", { code: "config" });
+    const first = log.problemCounts();
+    first.error.config = 99;
+    first.warn.extra = 1;
+    expect(log.problemCounts()).toMatchObject({ warn: {}, error: { config: 1 } });
+  });
+
+  it("treats a code such as __proto__ as an ordinary name", async () => {
+    const log = await freshLog();
+    log.logEvent("warn", "x", { code: "__proto__" });
+    log.logEvent("warn", "x", { code: "constructor" });
+    const counts = log.problemCounts();
+    expect(Object.keys(counts.warn).sort()).toEqual(["__proto__", "constructor"]);
+    expect(Object.getOwnPropertyDescriptor(counts.warn, "__proto__")?.value).toBe(1);
+    expect(counts.warn.constructor).toBe(1);
+  });
+
+  it("counts lines from every caller of logEvent, since they all go through it", async () => {
+    const log = await freshLog();
+    log.logEvent("error", "sheet-connection-problem", log.errorLogFields(new Error("x"), "A page could not read the Sheet"));
+    expect(log.problemCounts().error).toEqual({ "sheet-connection-problem": 1 });
+  });
+});
