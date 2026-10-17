@@ -14,8 +14,8 @@ import {
 } from "@/lib/sheets/portion-plan";
 import { getMonthView, loadSnapshot, type SheetsContext } from "@/lib/sheets/service";
 import { readSettings, SETTINGS_TAB } from "@/lib/sheets/settings-store";
-import { parseA1 } from "../support/a1";
 import { FakeGateway } from "../support/fake-gateway";
+import { changedCells, expectOnlyPlanned } from "../support/grid-diff";
 import {
   baseSchedule,
   monthCell,
@@ -59,48 +59,6 @@ async function applied(fake: FakeGateway, writes: CellWrite[]): Promise<FakeGate
 }
 
 const ctxOf = (fake: FakeGateway): SheetsContext => ({ gateway: fake, scheduleTab: "Schedule", totalHeader: TOTAL_HEADER });
-
-const blank = (value: unknown) => (value === undefined || value === null || value === "" ? "" : value);
-
-/** The cells (A1 style) of `tab` that hold something else in `after` than in `before`, blank cells counting as equal. */
-function changedCells(before: FakeGateway, after: FakeGateway, tab: string): string[] {
-  const a = before.tabs.get(tab) ?? [];
-  const b = after.tabs.get(tab) ?? [];
-  const out: string[] = [];
-  for (let r = 0; r < Math.max(a.length, b.length); r++) {
-    const width = Math.max(a[r]?.length ?? 0, b[r]?.length ?? 0);
-    for (let c = 0; c < width; c++) {
-      if (!Object.is(blank(a[r]?.[c]), blank(b[r]?.[c]))) out.push(`${colLetter(c)}${r + 1}`);
-    }
-  }
-  return out;
-}
-
-/** Every cell a plan writes, with the value it writes there. */
-function plannedCells(writes: CellWrite[], tab: string): Map<string, unknown> {
-  const cells = new Map<string, unknown>();
-  for (const write of writes.filter((candidate) => candidate.tab === tab)) {
-    const start = parseA1(write.a1);
-    write.values.forEach((values, dr) =>
-      values.forEach((value, dc) => cells.set(`${colLetter(start.startCol + dc)}${start.startRow + dr}`, value)),
-    );
-  }
-  return cells;
-}
-
-/** The plan changes exactly what it says: nothing outside its cells, and each of its cells holds what it writes. */
-function expectOnlyPlanned(before: FakeGateway, after: FakeGateway, writes: CellWrite[]) {
-  for (const tab of ["Schedule", SETTINGS_TAB]) {
-    const planned = plannedCells(writes, tab);
-    const changed = changedCells(before, after, tab);
-    expect(changed.filter((address) => !planned.has(address))).toEqual([]);
-    for (const [address, value] of planned) {
-      const [, letters, row] = /^([A-Z]+)(\d+)$/.exec(address)!;
-      const col = [...letters].reduce((n, char) => n * 26 + char.charCodeAt(0) - 64, 0) - 1;
-      expect(blank(after.tabs.get(tab)?.[Number(row) - 1]?.[col])).toEqual(blank(value));
-    }
-  }
-}
 
 /** What a planner refuses with: `run` may be async (it reads the Sheet first), and it must refuse. */
 async function refusal(run: () => unknown): Promise<AppError> {

@@ -135,14 +135,30 @@ function settingsKeys(settings: unknown[][]): Set<string> {
   return keys;
 }
 
-/** The smallest `p{k}` that no row of Settings column A and no id in `retired` has, ignoring case and the spaces around an id. */
-function newId(settings: unknown[][], retired: readonly string[]): string {
-  const used = new Set(retired.map((id) => id.trim().toLowerCase()));
+/** The ids in column A of the Settings rows below the header, trimmed and in lower case: what a new id must differ from. */
+function idsInUse(settings: unknown[][]): Set<string> {
+  const used = new Set<string>();
   for (let at = 1; at < Math.min(settings.length, LAST_SETTINGS_ROW); at++) {
     const cell = settings[at]?.[0];
     if (!isBlankCell(cell)) used.add(String(cell).trim().toLowerCase());
   }
+  return used;
+}
+
+/** True when a row of Settings column A already holds `id` (ignoring case and the spaces around it). */
+export const settingsHaveId = (settings: unknown[][], id: string) => idsInUse(settings).has(id.trim().toLowerCase());
+
+/** The smallest `p{k}` that no row of Settings column A and no id in `retired` has. */
+function newId(settings: unknown[][], retired: readonly string[]): string {
+  const used = idsInUse(settings);
+  for (const id of retired) used.add(id.trim().toLowerCase());
   for (let k = 1; ; k++) if (!used.has(`p${k}`)) return `p${k}`;
+}
+
+/** True when the cells A to Z of a Settings row (1-based) are all empty: nothing there, not even spaces. */
+export function settingsRowIsFree(settings: unknown[][], sheetRow: number): boolean {
+  const row = settings[sheetRow - 1] ?? [];
+  return Array.from({ length: SETTINGS_WIDTH }, (_, col) => row[col]).every(isEmpty);
 }
 
 type Placement = { names: [string, string, string]; columns: [number, number, number]; adopted: boolean };
@@ -207,8 +223,7 @@ function placeHeaders(input: PlanInput, header: { index: number; cells: unknown[
 function freeSettingsRow(input: PlanInput, rows: PortionRow[]): number {
   const lastPortionRow = rows.reduce((most, row) => Math.max(most, row.sheetRow), 1);
   for (let sheetRow = lastPortionRow + 1; sheetRow <= LAST_SETTINGS_ROW; sheetRow++) {
-    const row = input.settings[sheetRow - 1] ?? [];
-    if (Array.from({ length: SETTINGS_WIDTH }, (_, col) => row[col]).every(isEmpty)) return sheetRow;
+    if (settingsRowIsFree(input.settings, sheetRow)) return sheetRow;
   }
   throw validation(
     `The Settings tab has no free row up to row ${LAST_SETTINGS_ROW} for a new portion. Clear an unused row, then try again.`,
