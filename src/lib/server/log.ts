@@ -8,7 +8,8 @@ export type LogLevel = "info" | "warn" | "error";
 
 /**
  * The only fields a line can carry. Nothing else reaches the log: a request or response body, a token, a tenant's
- * name and a phone number are not here, and a caller that passes one by mistake has it dropped (see `logEvent`).
+ * name and a phone number are not fields here, and one passed as its own field by mistake is dropped (see
+ * `logEvent`). Free text in `message` is not checked: keeping names and numbers out of it is the caller's job.
  */
 export type LogFields = {
   /** Ties the line to the answer the browser got (see `requestIdFrom`). */

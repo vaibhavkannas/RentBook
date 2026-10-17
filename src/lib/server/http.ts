@@ -50,17 +50,18 @@ async function currentViewer(): Promise<Viewer | null> {
  * Runs a route handler body and turns its result or error into JSON.
  * Success: { ok: true, ...result }. Failure: { ok: false, error: { code, message, details? }, requestId }.
  * Every failure is logged as one line (see log.ts) with the request id that the answer carries, so a report of
- * "it failed" can be found in the log. The id is the x-vercel-id of `request`, or a new one.
+ * "it failed" can be found in the log. The id is the x-vercel-id of `request`, or a new one. The request is required,
+ * so that a route cannot leave out the id and the path from its log line.
  * Unknown errors are logged and shown as a generic message. A config error (the connection to the Sheet) is
  * logged in full, and only the owner is shown its detail: everyone else is told to ask the owner.
  */
-export async function handle(run: () => Promise<Record<string, unknown>>, request?: Request): Promise<Response> {
+export async function handle(run: () => Promise<Record<string, unknown>>, request: Request): Promise<Response> {
   try {
     const result = await run();
     return Response.json({ ok: true, ...result });
   } catch (error) {
-    const requestId = requestIdFrom(request?.headers.get("x-vercel-id"));
-    const route = request ? new URL(request.url).pathname : undefined;
+    const requestId = requestIdFrom(request.headers.get("x-vercel-id"));
+    const route = new URL(request.url).pathname;
     if (error instanceof AppError) {
       let message = error.message;
       let viewer: Viewer | null = null;

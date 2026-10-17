@@ -21,6 +21,9 @@ import { assertJsonSameOrigin, handle, MAX_BODY_BYTES, parseBody, readJsonBody }
 import { logRetryBody, paymentBody, settingsBody, undoBody } from "@/lib/server/schemas";
 import { captureLogs, loggedLines, type LogSpies } from "../support/logs";
 
+/** Any request: handle() needs one for its log line, and most tests do not care which. */
+const anyRequest = () => new Request("http://localhost/api/example", { method: "POST" });
+
 // handle() logs every error it answers, so the log is held back for the whole file and read where a test cares.
 let logs: LogSpies;
 beforeEach(() => {
@@ -33,8 +36,15 @@ afterEach(() => {
 });
 
 describe("handle", () => {
+  it("needs the request, so that a new route cannot lose the request id and the route in its log line", () => {
+    // Checked by the type check (npm run typecheck): the directive is an error when handle takes no request.
+    // @ts-expect-error handle() takes the request as its second argument
+    const withoutRequest = () => handle(async () => ({}));
+    expect(withoutRequest).toBeTypeOf("function");
+  });
+
   it("wraps a result with ok: true", async () => {
-    const res = await handle(async () => ({ value: 1 }));
+    const res = await handle(async () => ({ value: 1 }), anyRequest());
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ ok: true, value: 1 });
   });
@@ -51,7 +61,7 @@ describe("handle", () => {
   ])("maps %s to status %i", async (error, status, code) => {
     const res = await handle(async () => {
       throw error;
-    });
+    }, anyRequest());
     expect(res.status).toBe(status);
     const body = await res.json();
     expect(body.ok).toBe(false);
@@ -62,27 +72,27 @@ describe("handle", () => {
   it("includes conflict details", async () => {
     const res = await handle(async () => {
       throw conflict("dup", { existingAmount: 5 });
-    });
+    }, anyRequest());
     expect((await res.json()).error.details).toEqual({ existingAmount: 5 });
   });
 
   it("asks the browser to wait 30 seconds before trying again, for a rate-limited answer only", async () => {
     const limited = await handle(async () => {
       throw rateLimited();
-    });
+    }, anyRequest());
     expect(limited.headers.get("Retry-After")).toBe("30");
     for (const error of [unavailable(), configError("setup"), validation("bad")]) {
       const res = await handle(async () => {
         throw error;
-      });
+      }, anyRequest());
       expect(res.headers.get("Retry-After")).toBeNull();
     }
   });
 
   it("says in plain words that Google is limiting requests or not responding", async () => {
-    const limited = await (await handle(async () => { throw rateLimited(); })).json();
+    const limited = await (await handle(async () => { throw rateLimited(); }, anyRequest())).json();
     expect(limited.error.message).toBe("Google is limiting requests right now. Wait a minute and try again.");
-    const down = await (await handle(async () => { throw unavailable(); })).json();
+    const down = await (await handle(async () => { throw unavailable(); }, anyRequest())).json();
     expect(down.error.message).toBe("Google isn't responding. Try again in a minute.");
   });
 
@@ -90,7 +100,7 @@ describe("handle", () => {
     const log = vi.spyOn(console, "error").mockImplementation(() => {});
     const res = await handle(async () => {
       throw new Error("secret stack detail");
-    });
+    }, anyRequest());
     expect(res.status).toBe(500);
     expect(JSON.stringify(await res.json())).not.toContain("secret");
     expect(log).toHaveBeenCalled();
@@ -104,7 +114,7 @@ describe("handle: a Sheet connection problem", () => {
   const run = () =>
     handle(async () => {
       throw configError(DETAIL);
-    });
+    }, anyRequest());
 
   it("gives the owner the detail", async () => {
     getViewer.mockResolvedValue({ email: "owner@example.com", isOwner: true });
@@ -136,14 +146,14 @@ describe("handle: a Sheet connection problem", () => {
   it("does not look at the viewer for any other error", async () => {
     await handle(async () => {
       throw sheetStructure("moved");
-    });
+    }, anyRequest());
     expect(getViewer).not.toHaveBeenCalled();
   });
 });
 
 describe("handle: the log and the request id", () => {
   const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
-  const fail = (error: unknown, request?: Request) =>
+  const fail = (error: unknown, request: Request = anyRequest()) =>
     handle(async () => {
       throw error;
     }, request);
@@ -219,13 +229,13 @@ describe("handle: the log and the request id", () => {
     expect(theLine().route).toBe("/api/payments/undo");
   });
 
-  it("logs no route when it was not given the request", async () => {
+  it("always logs the route and a request id, because the request is required", async () => {
     await fail(validation("bad"));
-    expect(theLine()).not.toHaveProperty("route");
+    expect(theLine()).toMatchObject({ route: "/api/example", requestId: expect.any(String) });
   });
 
   it("logs a success as nothing and leaves the id out of the body", async () => {
-    const res = await handle(async () => ({ value: 1 }));
+    const res = await handle(async () => ({ value: 1 }), anyRequest());
     expect(await res.json()).toEqual({ ok: true, value: 1 });
     expect(logs.info).not.toHaveBeenCalled();
     expect(logs.warn).not.toHaveBeenCalled();
@@ -279,7 +289,7 @@ describe("handle: a status the error carries", () => {
   it("uses it in place of the code's usual status", async () => {
     const res = await handle(async () => {
       throw new AppError("validation", "too big", undefined, 413);
-    });
+    }, anyRequest());
     expect(res.status).toBe(413);
     expect((await res.json()).error).toMatchObject({ code: "validation", message: "too big" });
   });
@@ -292,7 +302,7 @@ describe("handle: a status the error carries", () => {
     ] as const) {
       const res = await handle(async () => {
         throw error;
-      });
+      }, anyRequest());
       expect(res.status).toBe(status);
       expect((await res.json()).error.code).toBe(code);
     }
@@ -311,7 +321,7 @@ async function refusal(request: Request) {
   const res = await handle(async () => {
     assertJsonSameOrigin(request);
     return {};
-  });
+  }, anyRequest());
   return res.ok ? null : { status: res.status, code: (await res.json()).error.code };
 }
 

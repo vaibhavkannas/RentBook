@@ -19,7 +19,7 @@ import type {
 import { addMonths, compareYm, ymKey } from "@/lib/domain/year-month";
 import { AppError, conflict, sheetStructure, validation } from "@/lib/errors";
 import { formatMonthTitle } from "@/lib/format";
-import { describeError, errorLogFields, logEvent } from "@/lib/server/log";
+import { errorLogFields, logEvent } from "@/lib/server/log";
 import { colLetter } from "./a1";
 import { text } from "./cells";
 import type { SheetsGateway } from "./gateway";
@@ -620,10 +620,11 @@ async function appendLogRow(
       await gateway.appendRow(LOG_TAB, row);
       return true;
     } catch (error) {
-      logEvent("error", "payments-log-append-failed", {
-        code: error instanceof AppError ? error.code : undefined,
-        message: `Payments Log: try ${attempt} of ${LOG_ATTEMPTS} did not add the row (${describeError(error)}).`,
-      });
+      logEvent(
+        "error",
+        "payments-log-append-failed",
+        errorLogFields(error, `Payments Log: try ${attempt} of ${LOG_ATTEMPTS} did not add the row`),
+      );
       const cannotHaveLanded = error instanceof AppError && error.code === "rate-limited";
       if (!cannotHaveLanded || attempt === LOG_ATTEMPTS) return false;
       const wait = Math.min(retryDelayMs * attempt, LOG_MAX_WAIT_MS);

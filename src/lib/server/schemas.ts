@@ -81,8 +81,8 @@ export const tenancyBody = z
   .object({
     portionId: z.string().min(1).max(20),
     tenant: z.string().max(MAX_TEXT, "Tenant name is too long."),
-    id: z.string().min(1).optional(),
-    expectedUpdatedAt: z.string().optional(),
+    id: z.string().min(1).max(MAX_TEXT).optional(),
+    expectedUpdatedAt: z.string().max(MAX_TEXT).optional(),
     fields: tenancyFieldsSchema,
   })
   .refine((body) => body.id === undefined || body.expectedUpdatedAt !== undefined, {
@@ -100,8 +100,8 @@ export const tenancyBody = z
   .transform((body) => (body.id === undefined ? { ...body, tenant: body.tenant.trim() } : body));
 
 export const moveOutBody = z.object({
-  id: z.string().min(1),
-  expectedUpdatedAt: z.string(),
+  id: z.string().min(1).max(MAX_TEXT),
+  expectedUpdatedAt: z.string().max(MAX_TEXT),
   moveOut: isoDay("Move-out date"),
   advanceStatus: z.enum(ADVANCE_STATUSES).nullable().optional(),
   refund: z.number().nullable().optional(),

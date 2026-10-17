@@ -152,6 +152,13 @@ describe("tenancyBody", () => {
     expect(problem(tenancyBody, { ...tenancy, fields: { moveIn: "" } })).toBe("fields.moveIn: Move-in date is required.");
   });
 
+  it("takes the id and expectedUpdatedAt a person was shown, up to 200 characters, and refuses a longer one", () => {
+    const edit = { ...tenancy, id: "t-1", expectedUpdatedAt: "2026-10-01T00:00:00.000Z" };
+    expect(problem(tenancyBody, { ...edit, id: "t".repeat(200), expectedUpdatedAt: "x".repeat(200) })).toBeNull();
+    expect(problem(tenancyBody, { ...edit, id: "t".repeat(201) })).toMatch(/^id: /);
+    expect(problem(tenancyBody, { ...edit, expectedUpdatedAt: "x".repeat(201) })).toMatch(/^expectedUpdatedAt: /);
+  });
+
   it("still needs expectedUpdatedAt when an id is given", () => {
     expect(problem(tenancyBody, { ...tenancy, id: "t-1" })).toBe(
       "expectedUpdatedAt: expectedUpdatedAt is required when id is given",
@@ -160,6 +167,12 @@ describe("tenancyBody", () => {
 });
 
 describe("moveOutBody", () => {
+  it("takes the id and expectedUpdatedAt a person was shown, up to 200 characters, and refuses a longer one", () => {
+    expect(problem(moveOutBody, { ...moveOut, id: "t".repeat(200), expectedUpdatedAt: "x".repeat(200) })).toBeNull();
+    expect(problem(moveOutBody, { ...moveOut, id: "t".repeat(201) })).toMatch(/^id: /);
+    expect(problem(moveOutBody, { ...moveOut, expectedUpdatedAt: "x".repeat(201) })).toMatch(/^expectedUpdatedAt: /);
+  });
+
   it("takes a move-out date from 2000 to 2100", () => {
     expect(problem(moveOutBody, moveOut)).toBeNull();
     expect(problem(moveOutBody, { ...moveOut, moveOut: "2101-01-01" })).toBe(

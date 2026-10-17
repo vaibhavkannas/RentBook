@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { AppError, configError, rateLimited, unavailable } from "@/lib/errors";
+import { AppError, configError, conflict, rateLimited, unavailable } from "@/lib/errors";
 import type { CellWrite, ValueRender } from "@/lib/sheets/gateway";
 import {
   getMonthView,
@@ -283,6 +283,16 @@ describe("a Payments Log row is added again only after a refusal that cannot hav
         expect(Object.keys(line).sort()).toEqual(["code", "event", "level", "message", "ts"]);
       }
       expect(lines[1].message).toMatch(/try 2 of 3/);
+    });
+
+    it("logs the code of an error of ours as its own field, and not a conflict's text, which can name a tenant", async () => {
+      const { fake, ctx } = await ready();
+      fake.appendFailures = [conflict("Asha Verma has already moved out.", { tenant: "Asha Verma" })];
+      await pay(ctx, { portionId: "p1" });
+      const [line] = loggedLines(logs.error);
+      expect(line).toMatchObject({ level: "error", event: "payments-log-append-failed", code: "conflict" });
+      expect(String(line.message)).toMatch(/^Payments Log: try 1 of 3 did not add the row \(/);
+      expect(logs.error.mock.calls.flat().join(" ")).not.toContain("Asha");
     });
 
     it("leaves out the code for an error that is not one of ours", async () => {
