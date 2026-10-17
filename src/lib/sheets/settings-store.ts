@@ -23,6 +23,7 @@ export const SETTINGS_HEADERS = [
   "Amount header",
   "Cycle length",
   "Hike %",
+  "Active",
 ];
 
 export const LOG_HEADERS = [
@@ -45,8 +46,26 @@ export const DEFAULT_PORTION_NAMES = [
   "Third floor, hall and kitchen",
 ];
 
-/** The Settings cells the app reads: a header and up to 49 portions, columns A to G. */
-export const SETTINGS_RANGE = "A1:G50";
+/** The Settings cells the app reads: a header and up to 49 portions, columns A to H. */
+export const SETTINGS_RANGE = "A1:H50";
+
+/** The 0-based column of the Active setting (H) and the header that says a Settings tab has one. A tab whose H1 holds anything else has none. */
+export const ACTIVE_COLUMN = 7;
+export const ACTIVE_HEADER = SETTINGS_HEADERS[ACTIVE_COLUMN];
+
+/** What an Active cell says to switch a portion off (a checkbox that is unticked reads false). Anything else, blank included, is on. */
+const OFF_FLAGS = new Set(["no", "inactive", "off", "false"]);
+/** What the app counts as a deliberate "on" when it has to tell a flag from other text: it writes Yes itself. */
+const ON_FLAGS = new Set(["yes", "active", "on", "true"]);
+
+/** True for an Active cell that switches its portion off: no, inactive, off or false, in any case and spacing. */
+export const isOffFlag = (cell: unknown) => OFF_FLAGS.has(headerKey(cell));
+
+/** True for an Active cell that is a flag: one of the off flags, or yes, active, on or true. */
+export const isActiveFlag = (cell: unknown) => OFF_FLAGS.has(headerKey(cell)) || ON_FLAGS.has(headerKey(cell));
+
+/** True when the Settings tab's header row has an Active column (H1 reads Active, by the looser header rule). */
+export const hasActiveColumn = (values: unknown[][]) => headerKey(values[0]?.[ACTIVE_COLUMN]) === headerKey(ACTIVE_HEADER);
 
 export const DEFAULT_CYCLE_LENGTH = 11;
 export const DEFAULT_HIKE_PERCENT = 5;
@@ -323,6 +342,8 @@ const PORTION_ID = /^[A-Za-z0-9_-]{1,20}$/;
  */
 function parseSettingsRows(values: unknown[][]): SettingsRow[] {
   const portions: SettingsRow[] = [];
+  // Column H is read only when H1 says Active: a Settings tab without that header is read exactly as it always was.
+  const hasActive = hasActiveColumn(values);
   // The first row to use each id (compared in lower case), and the id as it is typed there: two portions with one id
   // would share a card, a URL and a write.
   const idRows = new Map<string, { row: number; id: string }>();
@@ -370,6 +391,7 @@ function parseSettingsRows(values: unknown[][]): SettingsRow[] {
         amountHeader: String(row[4] ?? ""),
         cycleLength: typeof cycle === "number" ? cycle : null,
         hikePercent: typeof hike === "number" ? hike : DEFAULT_HIKE_PERCENT,
+        ...(hasActive && isOffFlag(row[ACTIVE_COLUMN]) ? { inactive: true } : {}),
       },
     });
   });

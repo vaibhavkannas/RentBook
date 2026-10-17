@@ -46,7 +46,7 @@ describe("loadSnapshot: one read of the Sheet", () => {
     expect(asked).toEqual([
       [
         [
-          { tab: SETTINGS_TAB, a1: "A1:G50" },
+          { tab: SETTINGS_TAB, a1: "A1:H50" },
           { tab: "Schedule", a1: "A1:ZZ" },
           { tab: TENANTS_TAB, a1: "A1:O" },
         ],

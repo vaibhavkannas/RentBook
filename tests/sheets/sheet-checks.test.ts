@@ -7,7 +7,7 @@ import { ensureTabs, LOG_HEADERS, LOG_TAB, SETTINGS_HEADERS, SETTINGS_RANGE, SET
 import { TENANT_HEADERS, TENANTS_RANGE, TENANTS_TAB } from "@/lib/sheets/tenants-store";
 import { captureLogs, loggedLines, type LogSpies } from "../support/logs";
 import { FakeGateway } from "../support/fake-gateway";
-import { baseSchedule, monthCell, scheduleRow, settingsGrid } from "../support/fixtures";
+import { baseSchedule, monthCell, scheduleRow, scheduleWithoutPortion, settingsGrid, settingsGridWithActive } from "../support/fixtures";
 
 // The read-only check of the owner's Sheet behind the Set up page and Diagnostics: one answer for each part of the
 // connection, with what was found and what to do, and a few counts and times. It reads three times and writes never.
@@ -595,6 +595,38 @@ describe("the Settings tab (step 5)", () => {
     expect(byId(checks, "settings")).toMatchObject({ status: "ok", detail: "1 portion, with its Tenant, Count and Amount columns." });
     expect(facts.portionsOn).toBe(1);
     expect(facts.portionsOff).toBe(0);
+  });
+
+  it("counts the portions that are on and the ones switched off, and says how many are off", async () => {
+    const { checks, facts } = await run(sheet({ [SETTINGS_TAB]: settingsGridWithActive({ p2: "No", p4: "off" }) }));
+    expect(facts.portionsOn).toBe(3);
+    expect(facts.portionsOff).toBe(2);
+    expect(byId(checks, "settings")).toMatchObject({
+      status: "ok",
+      detail: "3 portions on, each with its Tenant, Count and Amount columns. 2 switched off.",
+    });
+  });
+
+  it("is fine with the columns of a portion that is switched off deleted from the Schedule, and still counts it", async () => {
+    const fake = sheet({ Schedule: scheduleWithoutPortion(baseSchedule(), "p4"), [SETTINGS_TAB]: settingsGridWithActive({ p4: "No" }) });
+    const { checks, facts } = await run(fake);
+    expect(byId(checks, "settings")).toMatchObject({
+      status: "ok",
+      detail: "4 portions on, each with its Tenant, Count and Amount columns. 1 switched off.",
+    });
+    expect(facts).toMatchObject({ portionsOn: 4, portionsOff: 1 });
+  });
+
+  it("still fails for a portion that is on whose columns were deleted", async () => {
+    const fake = sheet({ Schedule: scheduleWithoutPortion(baseSchedule(), "p4"), [SETTINGS_TAB]: settingsGridWithActive() });
+    expect(byId((await run(fake)).checks, "settings")).toMatchObject({ status: "fail" });
+  });
+
+  it("counts none off for a Settings tab with no Active column, as before", async () => {
+    const grid = settingsGrid().map((row) => row.slice(0, 7)); // the owner's: seven headers, H1 blank
+    grid[2][7] = "No";
+    const { facts } = await run(sheet({ [SETTINGS_TAB]: grid }));
+    expect(facts).toMatchObject({ portionsOn: 5, portionsOff: 0 });
   });
 
   it("is not created yet on a fresh Sheet, and says how many portions it would start with", async () => {

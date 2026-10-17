@@ -73,11 +73,13 @@ describe("LAYOUT_RULES", () => {
     expect(text).toContain("ZZ");
   });
 
-  it("says Settings is in columns A to G, rows 2 to 50, as the app reads it", () => {
-    expect(SETTINGS_RANGE).toBe("A1:G50");
+  it("says Settings is in columns A to G, rows 2 to 50, and that column H, Active, switches a portion off, as the app reads it", () => {
+    expect(SETTINGS_RANGE).toBe("A1:H50");
     const text = rule("Settings tab");
     expect(text).toContain("columns A to G");
     expect(text).toContain("rows 2 to 50");
+    expect(text).toContain("column H, headed Active");
+    expect(text).toMatch(/switched off \(No\)/);
   });
 
   it("says the Payments Log is used by column position, A to I, and that a heading already in H or I stays", () => {

@@ -8,6 +8,7 @@ import {
   monthCell,
   PORTIONS,
   scheduleRow,
+  scheduleWithoutPortion,
   TOTAL_HEADER,
 } from "../support/fixtures";
 
@@ -460,5 +461,47 @@ describe("parseSchedule: header matching", () => {
     const sheet = baseSchedule();
     (sheet[2] as string[])[0] = "Mon\u200bth";
     expect(parseSchedule(sheet, PORTIONS, TOTAL_HEADER).layout.monthCol).toBe(0);
+  });
+});
+
+describe("parseSchedule: a portion that is switched off", () => {
+  const off = (id: string) => PORTIONS.map((portion) => (portion.id === id ? { ...portion, inactive: true } : portion));
+
+  it("is skipped when its three headers are gone: no columns and no entries, and the others keep their cells", () => {
+    const { layout, rows } = parseSchedule(scheduleWithoutPortion(baseSchedule(), "p4"), off("p4"), TOTAL_HEADER);
+    expect([...layout.portionCols.keys()]).toEqual(["p1", "p2", "p3", "p5"]);
+    expect(layout.portionCols.get("p5")).toEqual({ tenant: 10, count: 11, amount: 12 });
+    expect(layout.totalCol).toBe(13);
+    expect(rows[1].entries.has("p4")).toBe(false);
+    expect(rows[1].entries.get("p5")).toEqual({ tenant: "Esha", count: 1, amount: 5100 });
+    expect(rows[1].entries.get("p1")).toEqual({ tenant: "Asha", count: 3, amount: 5450 });
+  });
+
+  it("is read like any other portion while its columns are still there", () => {
+    const grid = baseSchedule();
+    grid[4] = scheduleRow(monthCell("text", 2026, 9), [["Asha", 3, 5450], ["Bala", 11, 12700], ["Chitra", 5, 9000], ["Dev", 2, 7000], ["Esha", 1, 5100]], 5);
+    const { layout, rows } = parseSchedule(grid, off("p4"), TOTAL_HEADER);
+    expect(layout.portionCols.get("p4")).toEqual({ tenant: 10, count: 11, amount: 12 });
+    expect(rows[1].entries.get("p4")).toEqual({ tenant: "Dev", count: 2, amount: 7000 });
+  });
+
+  it("is still an error when only some of its headers are gone", () => {
+    const grid = baseSchedule();
+    (grid[2] as string[])[12] = "Rent";
+    expect(() => parseSchedule(grid, off("p4"), TOTAL_HEADER)).toThrow(/Header "Amount4" was not found/);
+  });
+
+  it("is still an error when its header appears twice", () => {
+    const grid = baseSchedule();
+    (grid[2] as string[])[17] = "Tenant4";
+    expect(() => parseSchedule(grid, off("p4"), TOTAL_HEADER)).toThrow(/Header "Tenant4" appears more than once/);
+  });
+
+  it("does not excuse a portion that is on: gone headers are an error", () => {
+    expect(() => parseSchedule(scheduleWithoutPortion(baseSchedule(), "p4"), PORTIONS, TOTAL_HEADER)).toThrow(/Header "Tenant4" was not found/);
+  });
+
+  it("does not excuse another portion whose headers are gone when only this one is off", () => {
+    expect(() => parseSchedule(scheduleWithoutPortion(baseSchedule(), "p3"), off("p4"), TOTAL_HEADER)).toThrow(/was not found/);
   });
 });

@@ -104,6 +104,32 @@ beforeEach(() => {
   mocks.getPortionTenants.mockResolvedValue(data());
 });
 
+describe("the tenant details page for a portion that is switched off", () => {
+  const OFF_NOTICE = "This portion is switched off. Its history stays here.";
+
+  it("says so in a notice, and shows everything else as for any portion", async () => {
+    mocks.getPortionTenants.mockResolvedValue(data({ portion: { ...PORTION, inactive: true } }));
+    const html = await render();
+    expect(html).toContain(OFF_NOTICE);
+    expect(html).toContain("Current tenancy");
+    expect(html).toContain("Past tenants");
+  });
+
+  it("works for a portion with no current tenancy, a past tenant and Add details", async () => {
+    mocks.getPortionTenants.mockResolvedValue(
+      data({ portion: { ...PORTION, inactive: true }, current: null, past: [tenancy({ moveOut: "2026-09-30" })] }),
+    );
+    const html = await render();
+    expect(html).toContain(OFF_NOTICE);
+    expect(html).toContain("Add details");
+    expect(html).toContain("Asha");
+  });
+
+  it("says nothing about it for a portion that is on", async () => {
+    expect(await render()).not.toContain("switched off");
+  });
+});
+
 describe("the tenant details page", () => {
   it("sends a person who is not signed in to the sign-in page", async () => {
     mocks.getViewer.mockResolvedValue(null);

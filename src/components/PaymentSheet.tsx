@@ -337,7 +337,8 @@ export default function PaymentSheet({
                     <option value="" disabled>
                       Choose a portion
                     </option>
-                    {cards.map((c) => (
+                    {/* A switched-off portion has a card only for its history; it takes no new tenant. */}
+                    {cards.filter((c) => !c.inactive).map((c) => (
                       <option key={c.portionId} value={c.portionId}>
                         {isVacantCard(c) ? `${c.name} (vacant)` : c.name}
                       </option>

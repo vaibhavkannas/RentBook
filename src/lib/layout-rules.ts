@@ -28,7 +28,7 @@ export const LAYOUT_RULES: readonly { topic: string; text: string }[] = [
   },
   {
     topic: "Settings tab",
-    text: `${BRAND.name}'s own tab. The headers are in row 1 of columns A to G and the portions are in rows 2 to 50. Each portion has its own id (letters, numbers, - and _), and the Tenant, Count and Amount header texts must match the Schedule's header row. A note typed under the table is ignored.`,
+    text: `${BRAND.name}'s own tab. The headers are in row 1 of columns A to G, and column H, headed Active, says which portions are switched off (No). The portions are in rows 2 to 50. Each portion has its own id (letters, numbers, - and _), and the Tenant, Count and Amount header texts must match the Schedule's header row. A note typed under the table is ignored.`,
   },
   {
     topic: "Payments Log tab",

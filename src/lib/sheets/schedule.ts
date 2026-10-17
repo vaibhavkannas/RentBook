@@ -15,7 +15,10 @@ export type ScheduleLayout = {
   monthCol: number;
   /** The monthly total column, or null when the app was told of none (no TOTAL_HEADER): then no total is ever written. */
   totalCol: number | null;
-  /** By portion id. A Map, because ids are typed by hand and `__proto__` or `constructor` must be plain ids. */
+  /**
+   * By portion id. A Map, because ids are typed by hand and `__proto__` or `constructor` must be plain ids. A switched-off portion
+   * whose columns were deleted has no entry here, and no entries in any row either.
+   */
   portionCols: Map<string, { tenant: number; count: number; amount: number }>;
   /** The style of the bottom-most month cell: used only to write a new month row, never to read. */
   codec: MonthCodec;
@@ -58,7 +61,10 @@ export function shorten(text: string): string {
   return plain.length > MESSAGE_CELL_LENGTH ? `${plain.slice(0, MESSAGE_CELL_LENGTH)}...` : plain;
 }
 
-/** The Tenant, Count and Amount columns of a portion. Every portion given to parseSchedule has them, or the parse is refused. */
+/**
+ * The Tenant, Count and Amount columns of a portion. Every portion given to parseSchedule has them, or the parse is refused,
+ * except a switched-off portion whose columns were deleted.
+ */
 export function columnsOf(layout: ScheduleLayout, portionId: string) {
   const cols = layout.portionCols.get(portionId);
   if (!cols) throw sheetStructure(`The Schedule tab has no columns for the portion "${portionId}".`);
@@ -117,6 +123,17 @@ export function parseSchedule(
 
   const portionCols: ScheduleLayout["portionCols"] = new Map();
   for (const portion of portions) {
+    // A portion that is switched off may have had its columns deleted (its history is then the owner's to keep elsewhere): with
+    // all three headers gone it has no columns and no entries. Some of them gone is still a mistake, and so is a portion that is on.
+    if (
+      portion.inactive &&
+      [portion.tenantHeader, portion.countHeader, portion.amountHeader].every((name) => {
+        const found = findHeader(headers, name);
+        return "problem" in found && found.problem === "missing";
+      })
+    ) {
+      continue;
+    }
     portionCols.set(portion.id, {
       tenant: findColumn(headers, portion.tenantHeader, headerRow, "settings"),
       count: findColumn(headers, portion.countHeader, headerRow, "settings"),

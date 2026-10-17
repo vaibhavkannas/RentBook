@@ -153,6 +153,12 @@ export default async function TenantsPage({
         {scheduleTenant === null ? "No tenant recorded yet." : `Tenant in the Schedule: ${scheduleTenant}`}
       </p>
 
+      {portion.inactive && (
+        <Notice tone="warn" className="mt-3">
+          This portion is switched off. Its history stays here.
+        </Notice>
+      )}
+
       {vacantSince && <p className="mt-2 text-sm font-medium">{vacantSinceNote(vacantSince, today)}</p>}
 
       <Card as="section" aria-labelledby="current-heading" className="mt-4">

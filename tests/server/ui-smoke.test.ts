@@ -456,3 +456,46 @@ describe("the tenant details loading screen", () => {
     expect(out.match(/animate-pulse/g)!.length).toBe(out.match(/motion-reduce:animate-none/g)!.length);
   });
 });
+
+describe("a portion that is switched off", () => {
+  const paidOff = () =>
+    card({ status: "paid", entry: { tenant: "Dev", count: 2, amount: 7000 }, next: null, rentReference: 7000, rentDifference: 0, inactive: true });
+
+  it("says so on its card, in muted text, and still offers Edit amount and Undo", () => {
+    const out = board([paidOff()]);
+    expect(out).toContain("Switched off in Portion settings.");
+    expect(out).toContain("Edit amount");
+    expect(out).toContain("Undo");
+    expect(out).toMatch(/<p class="[^"]*text-muted[^"]*">Switched off in Portion settings\.<\/p>/);
+  });
+
+  it("says nothing about it on a card that is on", () => {
+    expect(board([card({ status: "paid", entry: { tenant: "Dev", count: 2, amount: 7000 }, next: null })])).not.toContain("Switched off");
+  });
+
+  it("keeps every target of a board with a switched-off card large enough and pressable", () => {
+    const out = board([paidOff(), card({ portionId: "p2", name: "First floor" })]);
+    expect(smallTargets(out)).toEqual([]);
+    expect(unpressedTargets(out)).toEqual([]);
+  });
+
+  it("is never offered in the New tenant list, though its card is on the screen", () => {
+    const out = html(
+      createElement(
+        ToastProvider,
+        null,
+        createElement(PaymentSheet, {
+          mode: "new-tenant",
+          monthKey: "2026-10",
+          monthLabel: "October 2026",
+          cards: [card({ portionId: "p1", name: "Ground floor" }), card({ ...paidOff(), portionId: "p2", name: "Back room" })],
+          initialPortionId: null,
+          defaultDate: "2026-10-05",
+          onClose: () => {},
+        }),
+      ),
+    );
+    expect(out).toContain("Ground floor");
+    expect(out).not.toContain("Back room");
+  });
+});

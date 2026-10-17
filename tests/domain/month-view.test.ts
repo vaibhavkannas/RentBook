@@ -685,3 +685,54 @@ describe("vacant cards", () => {
     });
   });
 });
+
+describe("deriveMonthView with a portion that is switched off", () => {
+  const entry = (tenant: string, count: number, amount: number) => ({ tenant, count, amount });
+  const rowOf = (month: number, rowNumber: number, p1: ReturnType<typeof entry> | null, p2: ReturnType<typeof entry> | null) => ({
+    rowNumber,
+    month: { year: 2026, month },
+    entries: new Map([["p1", p1], ["p2", p2]]),
+  });
+  const history = [
+    rowOf(8, 3, entry("Asha", 1, 5000), entry("Dev", 1, 7000)),
+    rowOf(9, 4, entry("Asha", 2, 5000), entry("Dev", 2, 7000)),
+    rowOf(10, 5, entry("Asha", 3, 5000), null),
+  ];
+  const portions = [{ ...PORTIONS[0] }, { ...PORTIONS[1], inactive: true }];
+
+  it("has no card for it in a month where it has no entry, so nothing is due for it", () => {
+    const view = deriveMonthView(history, portions, { year: 2026, month: 10 });
+    expect(view.cards.map((c) => c.portionId)).toEqual(["p1"]);
+    expect(view.due).toBe(5000);
+    expect(view.received).toBe(5000);
+    expect(deriveMonthView(history, portions, { year: 2026, month: 11 }).cards.map((c) => c.portionId)).toEqual(["p1"]);
+  });
+
+  it("has a paid card for it, marked switched off, in a month where it has an entry", () => {
+    const view = deriveMonthView(history, portions, { year: 2026, month: 9 });
+    expect(view.cards.map((c) => c.portionId)).toEqual(["p1", "p2"]);
+    expect(card(view, "p2")).toMatchObject({
+      status: "paid",
+      inactive: true,
+      entry: { tenant: "Dev", count: 2, amount: 7000 },
+      rentReference: 7000,
+      rentDifference: 0,
+      vacancy: null,
+    });
+    expect(card(view, "p1")).not.toHaveProperty("inactive");
+    expect(view.received).toBe(12000);
+    expect(view.due).toBe(12000);
+    expect(view.paidCount).toBe(2);
+  });
+
+  it("blocks the undo of an entry that a later month follows, as for any portion", () => {
+    const view = deriveMonthView(history, portions, { year: 2026, month: 8 });
+    expect(card(view, "p2").undoBlockedReason).toBe(LATER_ENTRY_REASON);
+  });
+
+  it("gives every card of a Sheet with nothing switched off exactly the cards it gave before (no inactive key)", () => {
+    const view = deriveMonthView(rows, PORTIONS, { year: 2026, month: 10 });
+    expect(view.cards.every((c) => !("inactive" in c))).toBe(true);
+    expect(view.cards).toHaveLength(5);
+  });
+});

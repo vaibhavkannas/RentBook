@@ -84,6 +84,8 @@ export default function PortionBoard({ monthKey, monthLabel, cards, defaultDate 
                   </p>
                 )}
 
+                {card.inactive && <p className="mt-1 text-sm text-muted">Switched off in Portion settings.</p>}
+
                 {card.status === "vacant" && (
                   <Link
                     href={tenantsPagePath(card.portionId, monthKey)}

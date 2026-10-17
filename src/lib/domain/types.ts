@@ -11,6 +11,12 @@ export type PortionConfig = {
   /** Payments per cycle. null means the count never resets. */
   cycleLength: number | null;
   hikePercent: number;
+  /**
+   * True when the owner switched the portion off (Settings column H, "Active", reads no). Absent, not false, for a portion that is
+   * on, so a Sheet with no Active column reads exactly as it always has. A switched-off portion keeps its history: it is on the
+   * month screen only in a month it has an entry for, and no new entry is logged for it.
+   */
+  inactive?: boolean;
 };
 
 export type PortionEntry = { tenant: string; count: number; amount: number };
@@ -70,6 +76,11 @@ export type PortionCard = {
    * so that a card built by hand (a test's) still compiles.
    */
   vacancy?: Vacancy | null;
+  /**
+   * True on the card of a portion that is switched off (it is on the screen only in a month it has an entry for). Absent on every
+   * other card.
+   */
+  inactive?: boolean;
 };
 
 export type MonthView = {

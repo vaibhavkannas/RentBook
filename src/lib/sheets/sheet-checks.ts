@@ -123,6 +123,10 @@ function blankFacts(): SheetFacts {
 
 const plural = (count: number, one: string, many: string) => `${count} ${count === 1 ? one : many}`;
 
+/** The Settings check's words: the portions that are on, each with its columns, and how many are switched off (none said when none are). */
+const portionsText = (on: number, off: number) =>
+  `${on === 1 ? "1 portion" : `${on} portions`}${off === 0 ? "" : " on"}, ${on === 1 ? "with its" : "each with its"} Tenant, Count and Amount columns.${off === 0 ? "" : ` ${off} switched off.`}`;
+
 /** What an AppError says, which is already in words for the owner. Anything else is not ours to explain. */
 function message(error: unknown): string | null {
   return error instanceof AppError ? error.message : null;
@@ -385,8 +389,10 @@ export async function checkSheet(
       settingsCheck = make("settings", "fail", foundAs("settings", read.problem), FIX);
     } else {
       portions = read.value;
-      facts.portionsOn = portions.length;
-      facts.portionsOff = 0;
+      const off = portions.filter((portion) => portion.inactive).length;
+      const on = portions.length - off;
+      facts.portionsOn = on;
+      facts.portionsOff = off;
       if (view === null) {
         settingsCheck = make("settings", "skip", WAITING);
       } else {
@@ -410,12 +416,7 @@ export async function checkSheet(
           settingsCheck = make(
             "settings",
             "ok",
-            foundAs(
-              "settings",
-              portions.length === 1
-                ? "1 portion, with its Tenant, Count and Amount columns."
-                : `${portions.length} portions, each with its Tenant, Count and Amount columns.`,
-            ),
+            foundAs("settings", portionsText(on, off)),
           );
         }
       }

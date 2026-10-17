@@ -98,3 +98,33 @@ export function baseSchedule(style: MonthStyle = "text"): unknown[][] {
     ),
   ];
 }
+
+/**
+ * The Settings grid with an Active column: H1 reads "Active" and `flags` gives the H cell of each portion by id (a
+ * portion that is not named keeps a blank H cell, which means on).
+ */
+export function settingsGridWithActive(flags: Record<string, unknown> = {}): unknown[][] {
+  const grid = settingsGrid();
+  grid[0][7] = "Active";
+  PORTIONS.forEach((portion, index) => {
+    if (portion.id in flags) grid[index + 1][7] = flags[portion.id];
+  });
+  return grid;
+}
+
+/**
+ * `schedule` with the three columns of portion `id` deleted, as the owner would delete them in the Sheet, and
+ * every total formula rewritten to add up the amounts that are left (Sheets would leave a #REF! in it).
+ */
+export function scheduleWithoutPortion(schedule: unknown[][], id: string): unknown[][] {
+  const at = PORTIONS.findIndex((portion) => portion.id === id);
+  const first = 1 + 3 * at;
+  const letters = (col: number) => String.fromCharCode(65 + col);
+  const amountCols = PORTIONS.filter((_, index) => index !== at).map((_, index) => 1 + 3 * index + 2);
+  return schedule.map((row, index) => {
+    const cells = row.length > first ? [...row.slice(0, first), ...row.slice(first + 3)] : [...row];
+    return cells.map((cell) =>
+      typeof cell === "string" && cell.startsWith("=") ? `=${amountCols.map((col) => `${letters(col)}${index + 1}`).join("+")}` : cell,
+    );
+  });
+}

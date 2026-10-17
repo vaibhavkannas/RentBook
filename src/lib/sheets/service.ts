@@ -221,18 +221,16 @@ async function ensureMonthRow(
     );
   }
 
-  const { layout, portions } = loaded;
+  const { layout } = loaded;
   const newRow = layout.lastDataRow + 1;
 
   // Blank every value the copy would carry over (portion cells, a typed total, notes,
   // columns of portions missing from Settings); keep only formulas and the Month cell.
   const source =
     (await ctx.gateway.getValues(ctx.scheduleTab, `A${layout.lastDataRow}:ZZ${layout.lastDataRow}`, "FORMULA"))[0] ?? [];
+  // Only the portions that have columns: a switched-off portion whose columns were deleted has none to blank.
   const clearCols = new Set(
-    portions.flatMap((p) => {
-      const cols = columnsOf(layout, p.id);
-      return [cols.tenant, cols.count, cols.amount];
-    }),
+    [...layout.portionCols.values()].flatMap((cols) => [cols.tenant, cols.count, cols.amount]),
   );
   source.forEach((cell, col) => {
     const isFormula = typeof cell === "string" && cell.startsWith("=");
@@ -399,6 +397,10 @@ async function logPaymentUnchecked(
         `${portion.name} for ${formatMonthTitle(input.month)} was changed by someone else. ${RELOAD_HINT}`,
       );
     }
+  }
+  // A switched-off portion takes no new rent (its entries can still be edited and undone), whoever the tenant would be.
+  if (portion.inactive && !existing) {
+    throw conflict(`${portion.name} is switched off in Portion settings. Switch it back on to log rent for it.`);
   }
   // A portion whose last tenant has moved out has nobody to take this month's rent from: a plain log would carry the
   // leaver's name and count on. A new tenant is how it starts again, and that is not refused.
