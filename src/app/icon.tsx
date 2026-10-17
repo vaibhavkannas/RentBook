@@ -1,9 +1,21 @@
 import { ImageResponse } from "next/og";
+import { BRAND } from "@/lib/brand";
+import { brandMarkSvg } from "@/lib/brand-mark";
 
-export const size = { width: 512, height: 512 };
-export const contentType = "image/png";
+// The browser-tab and "any" icons: an accent rounded square, transparent outside its corners, with the brand mark.
+// Next serves them as /icon/32, /icon/192 and /icon/512 (the manifest lists the last two).
+const SIDES = [32, 192, 512] as const;
 
-export default function Icon() {
+export function generateImageMetadata() {
+  return SIDES.map((side) => ({
+    id: String(side),
+    size: { width: side, height: side },
+    contentType: "image/png",
+  }));
+}
+
+export default async function Icon({ id }: { id: Promise<string | number> }) {
+  const side = Number(await id);
   return new ImageResponse(
     (
       <div
@@ -13,15 +25,13 @@ export default function Icon() {
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          background: "#1f5f4a",
-          color: "#ffffff",
-          fontSize: 300,
-          fontWeight: 700,
+          background: BRAND.colors.accent,
+          borderRadius: Math.round(side * 0.22),
         }}
       >
-        ₹
+        {brandMarkSvg({ size: side, stroke: BRAND.colors.accentInk })}
       </div>
     ),
-    size,
+    { width: side, height: side },
   );
 }

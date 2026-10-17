@@ -28,10 +28,11 @@ export function proxy(request: NextRequest) {
 export const config = {
   matcher: [
     {
-      // Every path except the API, Next's own files, the icons, the manifest, robots.txt and /.well-known: none of
-      // them is a page, so none needs a nonce. A link prefetch is skipped too: it brings no page to run scripts.
+      // Every path except the API, Next's own files, the icons (/icon, /icon/<id>, /apple-icon, /apple-icon/<id>),
+      // the manifest, robots.txt and /.well-known: none of them is a page, so none needs a nonce. A link prefetch is
+      // skipped too: it brings no page to run scripts.
       source:
-        "/((?!(?:api|_next/static|_next/image|\\.well-known)(?:/|$)|(?:favicon\\.ico|icon|apple-icon|manifest\\.webmanifest|robots\\.txt)$).*)",
+        "/((?!(?:api|_next/static|_next/image|\\.well-known)(?:/|$)|(?:favicon\\.ico|manifest\\.webmanifest|robots\\.txt)$|(?:icon|apple-icon)(?:/[^/]+)?$).*)",
       missing: [
         { type: "header", key: "next-router-prefetch" },
         { type: "header", key: "purpose", value: "prefetch" },
