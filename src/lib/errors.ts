@@ -80,8 +80,13 @@ export const CONNECTION_NEEDS_ATTENTION = "The Sheet connection needs attention.
 export const messageFor = (error: AppError, isOwner: boolean) =>
   error.code === "config" && !isOwner ? CONNECTION_NEEDS_ATTENTION : error.message;
 
-/** A tab the app needs is not in the Sheet: it was deleted or renamed. The owner can put it back. */
+/**
+ * A tab the app needs is not in the Sheet: it was deleted or renamed. The owner can put it back. The tab is also in
+ * the error's details, so what sits between the app and Google (named-tabs.ts) can tell it from any other failure.
+ */
 export const tabMissing = (tab: string) =>
-  sheetStructure(
+  new AppError(
+    "sheet-structure",
     `The tab "${tab}" was not found in your Sheet. Restore it from File > Version history or rename it back.`,
+    { tab },
   );

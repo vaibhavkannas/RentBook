@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   crossOriginRequest,
   PAGE_OUT_OF_DATE_MESSAGE,
+  tabMissing,
   unknownPortion,
   unsupportedMediaType,
   validation,
@@ -45,5 +46,16 @@ describe("the messages that tell a person to bring the screen up to date", () =>
     );
     expect(crossOriginRequest().message).toBe(`That request didn't come from RentBook's own page. ${hint}`);
     expect(unsupportedMediaType().message).toBe(`That request couldn't be read. ${hint}`);
+  });
+});
+
+describe("tabMissing", () => {
+  it("says which tab in words, and carries it in its details so a wrapper can notice it", () => {
+    const error = tabMissing("RentBook Tenants");
+    expect(error.code).toBe("sheet-structure");
+    expect(error.message).toBe(
+      'The tab "RentBook Tenants" was not found in your Sheet. Restore it from File > Version history or rename it back.',
+    );
+    expect(error.details).toEqual({ tab: "RentBook Tenants" });
   });
 });

@@ -1,10 +1,15 @@
 import "server-only";
 import { configError } from "@/lib/errors";
+import { DEFAULT_TAB_NAMES, tabNamesProblem } from "@/lib/sheets/named-tabs";
 
 export type AppEnv = {
   serviceAccountJson: string;
   sheetId: string;
   scheduleTab: string;
+  /** The names of the app's own tabs in the owner's Sheet (SETTINGS_TAB, LOG_TAB, TENANTS_TAB): "Settings", "Payments Log" and "Tenants" unless set. */
+  settingsTab: string;
+  logTab: string;
+  tenantsTab: string;
   /** The header of the Schedule's monthly total column, or null when TOTAL_HEADER is not set: then no total is written. */
   totalHeader: string | null;
   /** Lower-cased, without duplicates (Gmail dot and plus variants count as one). The first address is the owner. */
@@ -67,6 +72,18 @@ export function parseAllowedEmails(env: Record<string, string | undefined>): str
   });
 }
 
+/** The longest title Google allows a tab. */
+const MAX_TAB_NAME_LENGTH = 100;
+
+/** A tab name from the environment: trimmed, `fallback` when blank, a config error (naming the variable) when it is too long. */
+function tabName(env: Record<string, string | undefined>, variable: string, fallback: string): string {
+  const name = env[variable]?.trim() || fallback;
+  if (name.length > MAX_TAB_NAME_LENGTH) {
+    throw configError(`${variable} is too long: a tab name can have at most ${MAX_TAB_NAME_LENGTH} characters.`);
+  }
+  return name;
+}
+
 /** Reads and checks the environment. Lists every missing variable at once. */
 export function readEnv(env: Record<string, string | undefined>): AppEnv {
   const missing: string[] = REQUIRED.filter((name) => !env[name]?.trim());
@@ -75,10 +92,21 @@ export function readEnv(env: Record<string, string | undefined>): AppEnv {
   if (missing.length > 0) {
     throw configError(`Missing environment variables: ${missing.join(", ")}.`);
   }
+  const tabs = {
+    schedule: tabName(env, "SCHEDULE_TAB", "Schedule"),
+    settings: tabName(env, "SETTINGS_TAB", DEFAULT_TAB_NAMES.settings),
+    log: tabName(env, "LOG_TAB", DEFAULT_TAB_NAMES.log),
+    tenants: tabName(env, "TENANTS_TAB", DEFAULT_TAB_NAMES.tenants),
+  };
+  const tabsProblem = tabNamesProblem(tabs);
+  if (tabsProblem !== null) throw configError(tabsProblem);
   return {
     serviceAccountJson: env.GOOGLE_SERVICE_ACCOUNT_JSON!.trim(),
     sheetId: env.SHEET_ID!.trim(),
-    scheduleTab: env.SCHEDULE_TAB?.trim() || "Schedule",
+    scheduleTab: tabs.schedule,
+    settingsTab: tabs.settings,
+    logTab: tabs.log,
+    tenantsTab: tabs.tenants,
     totalHeader: env.TOTAL_HEADER?.trim() || null,
     allowedEmails,
   };

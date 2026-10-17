@@ -81,6 +81,58 @@ describe("readEnv", () => {
     expect(readEnv({ ...base, TOTAL_HEADER: "  Per Month " }).totalHeader).toBe("Per Month");
   });
 
+  it("names the app's own tabs Settings, Payments Log and Tenants unless told otherwise", () => {
+    expect(readEnv(base)).toMatchObject({ scheduleTab: "Schedule", settingsTab: "Settings", logTab: "Payments Log", tenantsTab: "Tenants" });
+  });
+
+  it("reads SETTINGS_TAB, LOG_TAB and TENANTS_TAB, trimmed", () => {
+    expect(readEnv({ ...base, SETTINGS_TAB: " Rent Settings ", LOG_TAB: "Rent Log", TENANTS_TAB: "  RentBook Tenants" })).toMatchObject({
+      settingsTab: "Rent Settings",
+      logTab: "Rent Log",
+      tenantsTab: "RentBook Tenants",
+    });
+  });
+
+  it("takes a blank tab name as not set", () => {
+    expect(readEnv({ ...base, SETTINGS_TAB: "", LOG_TAB: "   ", TENANTS_TAB: "\t" })).toMatchObject({
+      settingsTab: "Settings",
+      logTab: "Payments Log",
+      tenantsTab: "Tenants",
+    });
+  });
+
+  it("accepts a tab name of 100 characters and refuses one of 101, naming the variable", () => {
+    expect(readEnv({ ...base, TENANTS_TAB: "t".repeat(100) }).tenantsTab).toBe("t".repeat(100));
+    for (const name of ["SCHEDULE_TAB", "SETTINGS_TAB", "LOG_TAB", "TENANTS_TAB"]) {
+      expect(() => readEnv({ ...base, [name]: "t".repeat(101) })).toThrow(
+        `${name} is too long: a tab name can have at most 100 characters.`,
+      );
+    }
+  });
+
+  it("refuses two of the four tab names that name the same tab, in any case or spacing", () => {
+    const said = "SCHEDULE_TAB, SETTINGS_TAB, LOG_TAB and TENANTS_TAB must each name a different tab.";
+    expect(() => readEnv({ ...base, TENANTS_TAB: "Schedule" })).toThrow(said);
+    expect(() => readEnv({ ...base, SCHEDULE_TAB: "Settings" })).toThrow(said);
+    expect(() => readEnv({ ...base, LOG_TAB: "  tenants " })).toThrow(said);
+    expect(() => readEnv({ ...base, SETTINGS_TAB: "Payments\u00a0 Log" })).toThrow(said);
+    expect(() => readEnv({ ...base, SCHEDULE_TAB: "Rent", SETTINGS_TAB: "rent" })).toThrow(said);
+  });
+
+  it("is a config error, so only the owner reads it", () => {
+    expect(() => readEnv({ ...base, TENANTS_TAB: "Schedule" })).toThrow(expect.objectContaining({ code: "config" }));
+  });
+
+  it("refuses a Schedule named like an app tab that was given another name", () => {
+    expect(() => readEnv({ ...base, SCHEDULE_TAB: "Tenants", TENANTS_TAB: "RentBook Tenants" })).toThrow(
+      /SCHEDULE_TAB can't be "Tenants"/,
+    );
+  });
+
+  it("lists missing variables before it looks at tab names", () => {
+    expect(() => readEnv({ SHEET_ID: "abc", TENANTS_TAB: "Schedule" })).toThrow(/Missing environment variables/);
+  });
+
   it("treats blank values as missing", () => {
     expect(() => readEnv({ ...base, SHEET_ID: "   " })).toThrow(/SHEET_ID/);
   });
