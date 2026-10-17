@@ -289,3 +289,21 @@ export async function closeTenancyRow(
     },
   ]);
 }
+
+/**
+ * Opens a closed tenancy again by writing only its Move-out date (blank), Updated by and Updated at cells (columns M to O),
+ * with one call, like `closeTenancyRow`. Every other cell of the row is left exactly as it is in the Sheet.
+ */
+export async function reopenTenancyRow(
+  gateway: SheetsGateway,
+  rowNumber: number,
+  reopen: { updatedBy: string; updatedAt: string },
+): Promise<void> {
+  await gateway.updateValues([
+    {
+      tab: TENANTS_TAB,
+      a1: `${MOVE_OUT_COLUMN}${rowNumber}:${LAST_COLUMN}${rowNumber}`,
+      values: [["", reopen.updatedBy, reopen.updatedAt]],
+    },
+  ]);
+}

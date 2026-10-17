@@ -37,7 +37,7 @@ import {
   type SettingsUpdate,
 } from "./settings-store";
 import { createSnapshotCache, type SnapshotCache } from "./snapshot-cache";
-import { checkNewTenancy, recordNewTenant } from "./tenancy-writes";
+import { checkNewTenancy, recordNewTenant, reopenClosedByRequest } from "./tenancy-writes";
 import { parseTenancies, readTenancies, TENANTS_RANGE, TENANTS_TAB } from "./tenants-store";
 import { withWriteLock } from "./write-lock";
 
@@ -503,7 +503,7 @@ async function logPaymentUnchecked(
       await recordNewTenant(
         ctx.gateway,
         tenancies,
-        { portionId: portion.id, newTenancy, dateReceived: input.dateReceived },
+        { portionId: portion.id, tenant: newTenant, newTenancy, dateReceived: input.dateReceived },
         { now: options.now, updatedBy: options.loggedBy },
       );
       result.tenancyWritten = true;
@@ -593,6 +593,7 @@ async function undoPaymentUnchecked(
     cells.map(({ col, value }) => ({ tab: ctx.scheduleTab, a1: at(col), values: [[value]] })),
   );
   await confirmWritten(ctx, monthRow.rowNumber, cells);
+  await reopenAfterUndo(ctx, loaded, portion, input.month, existing, options);
 
   const logRow: LogRow = [
     options.now.toISOString(),
@@ -607,6 +608,71 @@ async function undoPaymentUnchecked(
   ];
   const logWritten = await appendLogRow(ctx.gateway, logRow, options.retryDelayMs ?? 400);
   return { removed: existing, logWritten, logRow };
+}
+
+/**
+ * The Payments Log row that logged this entry as a first payment (a "Logged" row for the month, portion, tenant and payment
+ * 1, the newest if there are several): the moment and person of the request that made the entry. Null when the log has none
+ * (the row never saved, or the portion was renamed since).
+ */
+async function loggedRequestOf(
+  ctx: SheetsContext,
+  portion: PortionConfig,
+  month: YearMonth,
+  entry: PortionEntry,
+): Promise<{ savedAt: string; loggedBy: string } | null> {
+  const rows = await ctx.gateway.getValues(LOG_TAB, "A1:I", "UNFORMATTED_VALUE");
+  for (let index = rows.length - 1; index > 0; index--) {
+    const row = rows[index];
+    if (
+      text(row[8]) === "Logged" &&
+      text(row[1]) === ymKey(month) &&
+      text(row[2]) === portion.name &&
+      text(row[3]) === entry.tenant &&
+      row[5] === entry.count
+    ) {
+      return { savedAt: text(row[0]), loggedBy: text(row[7]) };
+    }
+  }
+  return null;
+}
+
+/**
+ * A New tenant closes the portion's open tenancy on the day the rent was received. Undoing that first payment must take it
+ * back, or the closed row would read as a move-out nobody recorded and the earlier tenant's rent would disappear from the
+ * months after. Only a payment 1 can have been a New tenant, and only a portion with a closed tenancy can have had one
+ * closed, so an ordinary undo reads and writes nothing more. The closed rows are found by the stamp of the request that made
+ * this entry (see closedByRequest) and opened again. The Schedule is already undone, so a failure here is logged and the undo
+ * still stands, as a failed tenancy write after a payment does.
+ */
+async function reopenAfterUndo(
+  ctx: SheetsContext,
+  loaded: Snapshot,
+  portion: PortionConfig,
+  month: YearMonth,
+  removed: PortionEntry,
+  options: LogPaymentOptions,
+): Promise<void> {
+  if (removed.count !== 1 || !loaded.tenancies.some((t) => t.portionId === portion.id && t.moveOut !== "")) return;
+  try {
+    const request = await loggedRequestOf(ctx, portion, month, removed);
+    if (request === null) return;
+    // Read the Tenants tab again right before writing to it: the rows to open are found where they are now.
+    const tenancies = await readTenancies(ctx.gateway);
+    const result = await reopenClosedByRequest(
+      ctx.gateway,
+      tenancies,
+      { portionId: portion.id, request },
+      { now: options.now, updatedBy: options.loggedBy },
+    );
+    if (result.notConfirmed > 0) {
+      logEvent("warn", "tenancy-reopen-not-confirmed", {
+        message: `The payment was undone and ${result.notConfirmed} tenancy row(s) were written to be opened again, but a read back did not show it`,
+      });
+    }
+  } catch (error) {
+    logEvent("error", "tenancy-reopen-failed", errorLogFields(error, "The payment was undone, but the tenancy it closed was not opened again"));
+  }
 }
 
 /** At most this many tries to add one Payments Log row in a request. */

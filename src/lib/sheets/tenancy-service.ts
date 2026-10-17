@@ -159,7 +159,7 @@ async function createTenancy(
   const tenancy = await recordNewTenant(
     ctx.gateway,
     snapshot.tenancies,
-    { portionId: input.portionId, newTenancy: checked, dateReceived: checked.fields.moveIn },
+    { portionId: input.portionId, tenant: checked.tenant, newTenancy: checked, dateReceived: checked.fields.moveIn },
     stamp,
   );
   // A new tenancy was given, so recordNewTenant returns it as it is stored.

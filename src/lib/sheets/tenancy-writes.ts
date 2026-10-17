@@ -11,7 +11,7 @@ import { isValidIsoDay } from "@/lib/domain/year-month";
 import { conflict } from "@/lib/errors";
 import { RELOAD_HINT, reloadThen } from "@/lib/recovery-hint";
 import type { SheetsGateway } from "./gateway";
-import { appendTenancy, closeTenancyRow, readTenancies } from "./tenants-store";
+import { appendTenancy, closeTenancyRow, readTenancies, reopenTenancyRow } from "./tenants-store";
 
 /**
  * The tenancy write steps that `saveTenancy` (tenancy-service.ts) and `logPayment` (service.ts) share.
@@ -110,17 +110,23 @@ async function closeTenancy(
  * move rows (a blank row inside the Tenants tab). A previous tenancy that is no longer there, or that someone
  * has closed in the meantime, is skipped. Each is closed no earlier than its own move-in date.
  *
+ * An open tenancy of the same tenant name as the new tenant (`tenant`, compared as the vacancy rule compares names) is NOT
+ * closed: it is the same person starting a count again, not a tenant who left, and a closed row of that name would read as
+ * a move-out that nobody recorded and make the portion vacant. Only a different name means the old tenant left.
+ *
  * Returns the new tenancy as it is stored now, or null when no details were given. Closes nothing and refuses
  * with a conflict when the row that was just appended cannot be found again.
  */
 export async function recordNewTenant(
   gateway: SheetsGateway,
   tenancies: Tenancy[],
-  input: { portionId: string; newTenancy: NewTenancy | undefined; dateReceived: string },
+  input: { portionId: string; tenant: string; newTenancy: NewTenancy | undefined; dateReceived: string },
   stamp: WriteStamp,
 ): Promise<Tenancy | null> {
   const previousIds = new Set(
-    tenancies.filter((t) => t.portionId === input.portionId && t.moveOut === "").map((t) => t.id),
+    tenancies
+      .filter((t) => t.portionId === input.portionId && t.moveOut === "" && !sameTenantName(t.tenant, input.tenant))
+      .map((t) => t.id),
   );
   const added = input.newTenancy
     ? await appendNewTenancy(gateway, tenancies, input.newTenancy, stamp)
@@ -140,4 +146,53 @@ export async function recordNewTenant(
     await closeTenancy(gateway, open, closingDay(open.moveIn, newMoveIn), stamp);
   }
   return created ?? null;
+}
+
+/**
+ * The portion's closed tenancies that a New tenant request closed: the ones stamped with the moment and the person of that
+ * request's Payments Log row (`closeTenancyRow` writes the request's own time and person in Updated at and Updated by,
+ * and so does the log row). A move-out the owner recorded, an edit, or a row typed by hand never carries both, so those are
+ * never taken for one.
+ */
+export function closedByRequest(
+  tenancies: Tenancy[],
+  portionId: string,
+  request: { savedAt: string; loggedBy: string },
+): Tenancy[] {
+  return tenancies.filter(
+    (t) =>
+      t.portionId === portionId &&
+      t.moveOut !== "" &&
+      request.savedAt !== "" &&
+      t.updatedAt === request.savedAt &&
+      t.updatedBy === request.loggedBy,
+  );
+}
+
+/**
+ * Undoing a New tenant's first payment takes back what it did to the Tenants tab: the tenancies that request closed are
+ * opened again (their Move-out date is cleared; Updated by and Updated at say who undid it and when). Without this the
+ * closed rows would read as a move-out, and the portion's earlier tenant, still the tenant in the Schedule, would show as
+ * vacant. Nothing is opened while the portion has an open tenancy (a New tenant with details added one), and nothing that
+ * a Move out closed. `tenancies` is a fresh read. The rows are read back after the write; the answer says how many were
+ * opened and how many did not show the change, for the caller to log.
+ */
+export async function reopenClosedByRequest(
+  gateway: SheetsGateway,
+  tenancies: Tenancy[],
+  input: { portionId: string; request: { savedAt: string; loggedBy: string } },
+  stamp: WriteStamp,
+): Promise<{ reopened: number; notConfirmed: number }> {
+  if (currentTenancy(tenancies, input.portionId) !== null) return { reopened: 0, notConfirmed: 0 };
+  const closed = closedByRequest(tenancies, input.portionId, input.request);
+  if (closed.length === 0) return { reopened: 0, notConfirmed: 0 };
+  for (const t of closed) {
+    await reopenTenancyRow(gateway, t.rowNumber, { updatedBy: stamp.updatedBy, updatedAt: stamp.now.toISOString() });
+  }
+  const fresh = await readTenancies(gateway);
+  const notConfirmed = closed.filter((t) => {
+    const now = fresh.find((candidate) => candidate.rowNumber === t.rowNumber && candidate.id === t.id);
+    return now === undefined || now.moveOut !== "";
+  }).length;
+  return { reopened: closed.length - notConfirmed, notConfirmed };
 }
