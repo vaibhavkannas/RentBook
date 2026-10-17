@@ -85,7 +85,7 @@ npm run recon
 
 On Windows PowerShell, use `npm.cmd` in place of `npm`, and run it from the project folder. On a company laptop you may also need the certificate setting below. See "Windows and company-network problems".
 
-Before the first save, open Portion settings in the app and set each portion's cycle length (or tick "Count never resets") and hike percent. The app cannot edit a payment count, so a wrong setting here writes a wrong count. Do the same again after you switch to the live Sheet, because it gets its own fresh `Settings` tab with default values.
+Before the first save, open More and then Portion settings in the app and set each portion's cycle length (or tick "Count never resets") and hike percent. The app cannot edit a payment count, so a wrong setting here writes a wrong count. Do the same again after you switch to the live Sheet, because it gets its own fresh `Settings` tab with default values.
 
 ## Windows and company-network problems
 

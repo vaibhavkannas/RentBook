@@ -36,8 +36,8 @@ const item = (overrides: Partial<ActivityItem> = {}): ActivityItem => ({
   ...overrides,
 });
 
-async function render(): Promise<string> {
-  const page = (await ActivityPage()) as ReactElement;
+async function render(searchParams?: Record<string, string | string[] | undefined>): Promise<string> {
+  const page = (await ActivityPage(searchParams ? { searchParams: Promise.resolve(searchParams) } : {})) as ReactElement;
   return renderToStaticMarkup(createElement(() => page));
 }
 
@@ -85,5 +85,14 @@ describe("the Activity page", () => {
   it("says nothing has been logged yet when there are no entries", async () => {
     mocks.readActivity.mockResolvedValue([]);
     expect(await render()).toContain("Nothing has been logged yet.");
+  });
+
+  it("keeps the month in its Try again link when the Payments Log cannot be read", async () => {
+    mocks.readActivity.mockRejectedValue(new Error("down"));
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    expect(await render({ month: "2026-10" })).toMatch(/<a [^>]*href="\/activity\?month=2026-10"[^>]*>Try again<\/a>/);
+    expect(await render()).toMatch(/<a [^>]*href="\/activity"[^>]*>Try again<\/a>/);
+    expect(await render({ month: "garbage" })).toMatch(/<a [^>]*href="\/activity"[^>]*>Try again<\/a>/);
+    log.mockRestore();
   });
 });

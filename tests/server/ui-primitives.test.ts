@@ -376,6 +376,12 @@ describe("PageHeader", () => {
     expect(html(createElement(PageHeader, { title: "Tenant", back }))).toMatch(/<a [^>]*href="\/"/);
   });
 
+  it("is a header, not an unnamed navigation landmark, with or without an arrow", () => {
+    expect(html(createElement(PageHeader, { title: "Tenant", back }))).toMatch(/^<header class="[^"]*">/);
+    expect(html(createElement(PageHeader, { title: "More" }))).toMatch(/^<header class="[^"]*">/);
+    expect(html(createElement(PageHeader, { title: null, back }))).not.toContain("<nav");
+  });
+
   it("is only the title when there is nowhere to go back to", () => {
     const out = html(createElement(PageHeader, { title: "More" }));
     expect(out).toContain('<h1 class="text-lg font-semibold">More</h1>');

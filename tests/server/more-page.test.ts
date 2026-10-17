@@ -103,7 +103,7 @@ describe("the More page", () => {
   it("ends with the brand mark, the name and the version", async () => {
     const html = await render();
     const text = visibleText(html);
-    expect(text).toContain(`${BRAND.name} Version ${pkg.version}`);
+    expect(text).toContain(`${BRAND.name} · Version ${pkg.version}`);
     expect(html).toMatch(/<svg [^>]*aria-hidden="true"/);
     expect(html.indexOf(`Version ${pkg.version}`)).toBeGreaterThan(html.indexOf("Sign out"));
   });

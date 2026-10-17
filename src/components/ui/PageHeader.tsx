@@ -15,11 +15,11 @@ export function PageHeader({ title, back }: Props) {
     title === null ? <Skeleton className="h-6 w-40" /> : <h1 className="text-lg font-semibold">{title}</h1>;
   if (!back) return <header className="flex min-h-11 items-center gap-2">{heading}</header>;
   return (
-    <nav className="flex min-h-11 items-center gap-2">
+    <header className="flex min-h-11 items-center gap-2">
       <Suspense fallback={<BackLinkFallback href={back.href} label={back.label} />}>
         <BackLink href={back.href} label={back.label} />
       </Suspense>
       {heading}
-    </nav>
+    </header>
   );
 }

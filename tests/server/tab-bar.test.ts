@@ -15,6 +15,7 @@ vi.mock("next/navigation", () => ({
   useRouter: () => ({ back: vi.fn(), replace: vi.fn(), push: vi.fn(), refresh: vi.fn() }),
 }));
 
+import BackRefresh from "@/components/BackRefresh";
 import TabBar, { TabBarFallback } from "@/components/TabBar";
 
 const html = (element: Parameters<typeof renderToStaticMarkup>[0]) => renderToStaticMarkup(element);
@@ -104,6 +105,12 @@ describe("TabBar", () => {
     }
   });
 
+  it("draws a link's focus ring inside the link, because the first and last links touch the edge of the screen", () => {
+    for (const link of links(bar("/"))) {
+      expect(link.markup).toMatch(/class="[^"]*\bfocus-visible:-outline-offset-2\b/);
+    }
+  });
+
   it("keeps the links inside the phone column, so on a wide screen they do not spread across it", () => {
     expect(bar("/")).toMatch(/<div class="[^"]*\bmax-w-md\b[^"]*\bmx-auto\b|<div class="[^"]*\bmx-auto\b[^"]*\bmax-w-md\b/);
   });
@@ -175,6 +182,10 @@ describe("the TabBar source", () => {
     expect(hook).toMatch(/scrollTo\(/);
   });
 
+  it("says it is going back before it goes, so the screen it lands on is loaded again", () => {
+    expect(hook).toMatch(/expectBack\(href\);\s*router\.back\(\);/);
+  });
+
   it("touches the history only through the router, never through window.history itself", () => {
     expect(code).not.toContain("history.");
     expect(hook).not.toContain("history.");
@@ -194,9 +205,54 @@ describe("globals.css for the tab bar", () => {
     );
   });
 
+  it("hides the bar on a touch screen while a text field, a select or a text area has focus, so the keyboard has the room", () => {
+    const rule = /@media \(pointer: coarse\)\s*\{[\s\S]*?body:has\(([^{}]*)\)\s*nav\[aria-label="Main"\]\s*\{\s*visibility:\s*hidden;\s*transition:\s*none;\s*\}\s*\}/.exec(css);
+    expect(rule, "a coarse-pointer rule that hides nav[aria-label=Main]").not.toBeNull();
+    const condition = rule![1];
+    expect(condition).toMatch(/\binput:not\([^)]*\):focus/);
+    expect(condition).toMatch(/\bselect:focus/);
+    expect(condition).toMatch(/\btextarea:focus/);
+    // a tick box, a radio button and a button-like input open no keyboard
+    for (const type of ["checkbox", "radio", "button", "submit"]) expect(condition).toContain(`[type="${type}"]`);
+  });
+
+  it("brings the bar back only after a moment, so it cannot appear under the finger that is tapping a button", () => {
+    // Tapping Save blurs the field first, which would show the bar at once, over the button at the bottom of the
+    // visible area, and the tap would land on the bar. visibility changes after a delay; display cannot be delayed.
+    expect(css).toMatch(
+      /@media \(pointer: coarse\)\s*\{\s*nav\[aria-label="Main"\]\s*\{\s*transition:\s*visibility 0s linear 400ms;\s*\}/,
+    );
+    expect(css).not.toMatch(/nav\[aria-label="Main"\]\s*\{\s*display:\s*none/);
+  });
+
+  it("names the bar the way TabBar marks it, so the rule finds it", () => {
+    nav.pathname = "/";
+    expect(bar("/")).toContain('<nav aria-label="Main"');
+  });
+
   it("makes a page's bottom padding clear the bar, the home indicator and 1.5rem more", () => {
     expect(css).toMatch(
       /@utility pb-tabbar\s*\{\s*padding-bottom:\s*calc\(var\(--tabbar-h\) \+ env\(safe-area-inset-bottom\) \+ 1\.5rem\);\s*\}/,
     );
+  });
+});
+
+describe("BackRefresh", () => {
+  const layout = withoutComments(source("src/app/layout.tsx"));
+  const code = withoutComments(source("src/components/BackRefresh.tsx"));
+
+  it("is in the root layout, which a back does not unmount, and renders nothing", () => {
+    expect(layout).toMatch(/import BackRefresh from "@\/components\/BackRefresh"/);
+    expect(layout.match(/<BackRefresh \/>/g)).toHaveLength(1);
+    expect(code).toMatch(/return null;/);
+  });
+
+  it("loads the screen again, through the router, when back-refresh says the screen a tap went back to is showing", () => {
+    expect(code).toMatch(/useEffect\(\(\) => \{\s*if \(takeBackRefresh\(pathname\)\) router\.refresh\(\);\s*\}, \[pathname, router\]\);/);
+  });
+
+  it("renders as nothing at all", () => {
+    nav.pathname = "/";
+    expect(html(createElement(BackRefresh))).toBe("");
   });
 });

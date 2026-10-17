@@ -68,6 +68,25 @@ describe("the settings loading screen", () => {
   it("shows two cards, one for each of the portions it stands in for", () => {
     expect(out.match(new RegExp(`class="${CARD}`, "g"))).toHaveLength(2);
   });
+
+  it("lays each card out like the real one: a name field, the cycle and hike fields side by side, and the tick box row", () => {
+    const cards = out.split(`class="${CARD} space-y-2"`).slice(1);
+    expect(cards).toHaveLength(2);
+    for (const card of cards) {
+      expect(card).toContain("grid grid-cols-2 gap-3");
+      // each field has a 20 px label bar over its control
+      expect(card.match(/\bh-5\b/g)!.length).toBeGreaterThanOrEqual(3);
+      // the "Count never resets" row is at least 44 px tall, with a 20 px box
+      expect(card).toMatch(/min-h-11/);
+      expect(card).toMatch(/\bsize-5\b/);
+    }
+    // three 48 px controls in each card (name, cycle length, hike), and the 48 px Save button after them
+    expect(out.match(/\bh-12\b/g)).toHaveLength(2 * 3 + 1);
+  });
+
+  it("ends with a placeholder for the Save settings button, 48 px tall and as wide as the cards", () => {
+    expect(out).toMatch(/<div aria-hidden="true" class="[^"]*\bh-12\b[^"]*\bw-full\b[^"]*"><\/div><\/div><\/main>$/);
+  });
 });
 
 describe("the tenant details loading screen", () => {

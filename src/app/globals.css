@@ -100,6 +100,42 @@ html.sheet-open body {
   padding-bottom: env(safe-area-inset-bottom);
 }
 
+/*
+ * On a touch screen the keyboard takes about half the height (the viewport resizes with it: interactiveWidget in the root
+ * layout), and the fixed tab bar would sit on top of it and take 64 px of what is left. So the bar is hidden while a
+ * field that opens the keyboard has focus, and is back when focus leaves. A tick box, a radio button and the button-like
+ * inputs open no keyboard, so they do not count. The pages keep their bottom padding, so the last field can still be
+ * scrolled clear.
+ *
+ * The bar is hidden with `visibility`, not `display`, and comes back 400 ms after focus leaves. Tapping a button (Save)
+ * blurs the field first, and the button is often at the bottom of the visible area, where the bar would reappear: the
+ * tap would end on the bar and the button would never be pressed. A visibility change can be delayed; display cannot.
+ */
+@media (pointer: coarse) {
+  nav[aria-label="Main"] {
+    transition: visibility 0s linear 400ms;
+  }
+
+  body:has(
+      input:not(
+          [type="checkbox"],
+          [type="radio"],
+          [type="button"],
+          [type="submit"],
+          [type="reset"],
+          [type="range"],
+          [type="file"],
+          [type="color"]
+        ):focus,
+      select:focus,
+      textarea:focus
+    )
+    nav[aria-label="Main"] {
+    visibility: hidden;
+    transition: none;
+  }
+}
+
 /* Bottom padding for a page with the tab bar: clears the bar, the home indicator and 1.5rem more. */
 @utility pb-tabbar {
   padding-bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom) + 1.5rem);

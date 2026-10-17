@@ -69,8 +69,9 @@ export default async function MorePage({
 
       <p className="mt-8 flex items-center justify-center gap-2 text-sm text-muted">
         <BrandMark size={20} />
-        <span>{BRAND.name}</span>
-        <span>Version {pkg.version}</span>
+        <span>
+          {BRAND.name} · Version {pkg.version}
+        </span>
       </p>
     </Page>
   );

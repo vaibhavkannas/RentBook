@@ -31,8 +31,8 @@ const portions: PortionConfig[] = [
   { id: "p1", name: "Ground floor", tenantHeader: "Tenant", countHeader: "Count", amountHeader: "Amount", cycleLength: 11, hikePercent: 5 },
 ];
 
-async function render(): Promise<string> {
-  const page = (await SettingsPage()) as ReactElement;
+async function render(searchParams?: Record<string, string | string[] | undefined>): Promise<string> {
+  const page = (await SettingsPage(searchParams ? { searchParams: Promise.resolve(searchParams) } : {})) as ReactElement;
   return renderToStaticMarkup(createElement(() => page));
 }
 
@@ -68,5 +68,13 @@ describe("the portion settings page", () => {
     const html = await render();
     expect(html).toContain("Settings for Ground floor");
     expect(html).toContain("Save settings");
+  });
+
+  it("keeps the month in its Try again link when the Settings tab cannot be read", async () => {
+    mocks.getSettings.mockRejectedValue(new Error("down"));
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    expect(await render({ month: "2026-10" })).toMatch(/<a [^>]*href="\/settings\?month=2026-10"[^>]*>Try again<\/a>/);
+    expect(await render()).toMatch(/<a [^>]*href="\/settings"[^>]*>Try again<\/a>/);
+    log.mockRestore();
   });
 });

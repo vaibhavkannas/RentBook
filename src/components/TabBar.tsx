@@ -68,7 +68,8 @@ function TabBarView({ month }: { month: string | null }) {
               aria-current={current ? "page" : undefined}
               onNavigate={(event) => onNavigate(href, event)}
               className={cx(
-                "press relative flex min-h-16 flex-1 flex-col items-center justify-center gap-0.5 text-xs font-medium",
+                // The ring is drawn inside the link: the first and the last touch the edge of the screen, which would clip it.
+                "press relative flex min-h-16 flex-1 flex-col items-center justify-center gap-0.5 text-xs font-medium focus-visible:-outline-offset-2",
                 current ? "text-accent" : "text-muted",
               )}
             >

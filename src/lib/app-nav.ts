@@ -66,6 +66,11 @@ function parts(url: string): { path: string; month: string | null } {
   return { path: plain(parsed.pathname), month: monthParam(parsed.searchParams.get("month")) };
 }
 
+/** The path of an address (a whole URL, or a path with its query), without a trailing slash. */
+export function hrefPath(url: string): string {
+  return parts(url).path;
+}
+
 export type NavAction = "none" | "back" | "push" | "replace";
 
 /**

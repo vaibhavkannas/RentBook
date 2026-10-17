@@ -4,6 +4,7 @@ import { Card } from "@/components/ui/Card";
 import { Page } from "@/components/ui/Page";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Pill } from "@/components/ui/Pill";
+import { monthParam, withMonth } from "@/lib/app-nav";
 import { formatMonthKey, formatRupees, formatSavedAt } from "@/lib/format";
 import { getViewer } from "@/lib/server/auth-guard";
 import { getSheetsContext } from "@/lib/server/context";
@@ -21,9 +22,15 @@ const PILL_TONE: Record<NonNullable<ActivityItem["action"]>, PillTone> = {
   Undone: "danger",
 };
 
-export default async function ActivityPage() {
+export default async function ActivityPage({
+  searchParams,
+}: {
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
+} = {}) {
   const viewer = await getViewer();
   if (!viewer) redirect("/signin");
+  // The month the person was looking at: Try again keeps it, so the tab bar and the way back still lead to it.
+  const month = monthParam((await searchParams)?.month);
 
   let items: ActivityItem[] | null = null;
   let problem: string | null = null;
@@ -37,7 +44,7 @@ export default async function ActivityPage() {
     <Page>
       <PageHeader title="Activity" />
 
-      {problem && <LoadProblem message={problem} retryHref="/activity" />}
+      {problem && <LoadProblem message={problem} retryHref={withMonth("/activity", month)} />}
 
       {items && items.length === 0 && (
         <p className="mt-6 text-center text-sm text-muted">Nothing has been logged yet.</p>

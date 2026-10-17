@@ -27,4 +27,10 @@ describe("not-found page", () => {
     const html = renderToStaticMarkup(await NotFound());
     expect(html).toMatch(/<a [^>]*class="[^"]*\bmin-h-11\b/);
   });
+
+  it("is centred in the whole screen, as before: a page that was not found has no tab bar, so no room is kept for one", async () => {
+    const html = renderToStaticMarkup(await NotFound());
+    expect(html).toMatch(/^<main class="mx-auto flex min-h-dvh max-w-md flex-col justify-center px-4">/);
+    expect(html).not.toContain("pb-tabbar");
+  });
 });
