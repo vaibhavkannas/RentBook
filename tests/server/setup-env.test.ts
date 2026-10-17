@@ -46,11 +46,11 @@ describe("envChecks, as a whole", () => {
       ["csp-report-only", 1, "CSP_REPORT_ONLY"],
       ["service-account", 2, "GOOGLE_SERVICE_ACCOUNT_JSON"],
       ["sheet-id", 3, "SHEET_ID"],
-      ["schedule-tab", 4, "SCHEDULE_TAB"],
+      ["schedule-tab-name", 4, "SCHEDULE_TAB"],
       ["total-header", 4, "TOTAL_HEADER"],
-      ["settings-tab", 5, "SETTINGS_TAB"],
-      ["log-tab", 5, "LOG_TAB"],
-      ["tenants-tab", 5, "TENANTS_TAB"],
+      ["settings-tab-name", 5, "SETTINGS_TAB"],
+      ["log-tab-name", 5, "LOG_TAB"],
+      ["tenants-tab-name", 5, "TENANTS_TAB"],
     ]);
   });
 
@@ -338,10 +338,10 @@ describe("SHEET_ID (step 3)", () => {
 
 describe("the tab and total settings (steps 4 and 5)", () => {
   it.each([
-    ["schedule-tab", "SCHEDULE_TAB", "Schedule"],
-    ["settings-tab", "SETTINGS_TAB", "Settings"],
-    ["log-tab", "LOG_TAB", "Payments Log"],
-    ["tenants-tab", "TENANTS_TAB", "Tenants"],
+    ["schedule-tab-name", "SCHEDULE_TAB", "Schedule"],
+    ["settings-tab-name", "SETTINGS_TAB", "Settings"],
+    ["log-tab-name", "LOG_TAB", "Payments Log"],
+    ["tenants-tab-name", "TENANTS_TAB", "Tenants"],
   ])("%s says which name is used when %s is not set", (id, name, fallback) => {
     for (const value of [undefined, "", "  "]) {
       expect(one(id, { [name]: value })).toMatchObject({ status: "ok", detail: `Not set, so "${fallback}" is used.` });
@@ -361,37 +361,37 @@ describe("the tab and total settings (steps 4 and 5)", () => {
 
   it("fails the two tab settings that name the same tab, in any case or spacing", () => {
     const env = { SETTINGS_TAB: "Rent  Data", LOG_TAB: " rent data " };
-    for (const id of ["settings-tab", "log-tab"]) {
+    for (const id of ["settings-tab-name", "log-tab-name"]) {
       expect(one(id, env), id).toMatchObject({
         status: "fail",
         detail: "Two names the same.",
         fix: "Give each a different tab.",
       });
     }
-    expect(one("tenants-tab", env).status).toBe("ok");
-    expect(one("schedule-tab", env).status).toBe("ok");
+    expect(one("tenants-tab-name", env).status).toBe("ok");
+    expect(one("schedule-tab-name", env).status).toBe("ok");
   });
 
   it("counts the name a tab has when its setting is left out: the Schedule tab named Tenants clashes with the Tenants tab", () => {
     const env = { SCHEDULE_TAB: "tenants" };
-    expect(one("schedule-tab", env)).toMatchObject({ status: "fail", detail: "Two names the same." });
-    expect(one("tenants-tab", env)).toMatchObject({ status: "fail", detail: "Two names the same." });
+    expect(one("schedule-tab-name", env)).toMatchObject({ status: "fail", detail: "Two names the same." });
+    expect(one("tenants-tab-name", env)).toMatchObject({ status: "fail", detail: "Two names the same." });
   });
 
   it("fails a Schedule tab named like one of the app's own tabs that has been given another name", () => {
-    const found = one("schedule-tab", { SCHEDULE_TAB: "Tenants", TENANTS_TAB: "Renters" });
+    const found = one("schedule-tab-name", { SCHEDULE_TAB: "Tenants", TENANTS_TAB: "Renters" });
     expect(found.status).toBe("fail");
     expect(found.detail).toContain('"Tenants"');
     expect(found.fix).toBeTruthy();
-    expect(one("tenants-tab", { SCHEDULE_TAB: "Tenants", TENANTS_TAB: "Renters" }).status).toBe("ok");
+    expect(one("tenants-tab-name", { SCHEDULE_TAB: "Tenants", TENANTS_TAB: "Renters" }).status).toBe("ok");
   });
 
   it("fails a tab name longer than a tab can have", () => {
     for (const [id, name] of [
-      ["schedule-tab", "SCHEDULE_TAB"],
-      ["settings-tab", "SETTINGS_TAB"],
-      ["log-tab", "LOG_TAB"],
-      ["tenants-tab", "TENANTS_TAB"],
+      ["schedule-tab-name", "SCHEDULE_TAB"],
+      ["settings-tab-name", "SETTINGS_TAB"],
+      ["log-tab-name", "LOG_TAB"],
+      ["tenants-tab-name", "TENANTS_TAB"],
     ]) {
       expect(one(id, { [name]: "x".repeat(101) }), id).toMatchObject({
         status: "fail",

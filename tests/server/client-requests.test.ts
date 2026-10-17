@@ -23,6 +23,7 @@ describe("the components that send requests to the server", () => {
     expect(TALKING).toEqual([
       "MoveOutForm.tsx",
       "PaymentSheet.tsx",
+      "PrepareSheet.tsx",
       "SettingsForm.tsx",
       "TenancyForm.tsx",
       "UndoSheet.tsx",

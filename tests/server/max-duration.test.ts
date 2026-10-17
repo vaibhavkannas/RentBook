@@ -31,10 +31,12 @@ describe("maxDuration", () => {
       "api/payments/route.ts",
       "api/payments/undo/route.ts",
       "api/settings/route.ts",
+      "api/setup/prepare/route.ts",
       "api/tenancies/move-out/route.ts",
       "api/tenancies/route.ts",
       "page.tsx",
       "settings/page.tsx",
+      "setup/page.tsx",
       "tenants/[portionId]/page.tsx",
     ]);
   });

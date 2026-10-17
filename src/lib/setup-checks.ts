@@ -69,3 +69,9 @@ const PILLS: Record<CheckStatus, { tone: PillTone; label: string }> = {
 export function statusPill(status: CheckStatus): { tone: PillTone; label: string } {
   return PILLS[status];
 }
+
+/** "A", "A and B", "A, B and C": names in a sentence. */
+export function listWords(items: readonly string[]): string {
+  if (items.length <= 1) return items.join("");
+  return `${items.slice(0, -1).join(", ")} and ${items[items.length - 1]}`;
+}

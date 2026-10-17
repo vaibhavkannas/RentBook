@@ -178,10 +178,10 @@ function sheetIdCheck(env: Env): Check {
 type TabSetting = { id: string; step: 4 | 5; name: string; fallback: string };
 
 const TAB_SETTINGS: TabSetting[] = [
-  { id: "schedule-tab", step: 4, name: "SCHEDULE_TAB", fallback: DEFAULT_SCHEDULE_TAB },
-  { id: "settings-tab", step: 5, name: "SETTINGS_TAB", fallback: DEFAULT_TAB_NAMES.settings },
-  { id: "log-tab", step: 5, name: "LOG_TAB", fallback: DEFAULT_TAB_NAMES.log },
-  { id: "tenants-tab", step: 5, name: "TENANTS_TAB", fallback: DEFAULT_TAB_NAMES.tenants },
+  { id: "schedule-tab-name", step: 4, name: "SCHEDULE_TAB", fallback: DEFAULT_SCHEDULE_TAB },
+  { id: "settings-tab-name", step: 5, name: "SETTINGS_TAB", fallback: DEFAULT_TAB_NAMES.settings },
+  { id: "log-tab-name", step: 5, name: "LOG_TAB", fallback: DEFAULT_TAB_NAMES.log },
+  { id: "tenants-tab-name", step: 5, name: "TENANTS_TAB", fallback: DEFAULT_TAB_NAMES.tenants },
 ];
 
 /** The name a tab setting gives its tab: what is set (trimmed), or the default. */

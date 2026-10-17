@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { BRAND } from "@/lib/brand";
 import {
   headline,
+  listWords,
   SETUP_STEPS,
   statusPill,
   stepStatus,
@@ -102,5 +103,14 @@ describe("statusPill", () => {
     ["skip", "neutral", "Waiting"],
   ] as const)("shows %s as a %s pill that says %s", (status, tone, label) => {
     expect(statusPill(status)).toEqual({ tone, label });
+  });
+});
+
+describe("listWords", () => {
+  it("writes names into a sentence", () => {
+    expect(listWords([])).toBe("");
+    expect(listWords(["Settings"])).toBe("Settings");
+    expect(listWords(["Settings", "Tenants"])).toBe("Settings and Tenants");
+    expect(listWords(["Settings", "Payments Log", "Tenants"])).toBe("Settings, Payments Log and Tenants");
   });
 });

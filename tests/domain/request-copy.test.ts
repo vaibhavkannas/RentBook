@@ -4,6 +4,7 @@ import {
   apiErrorMessage,
   OFFLINE_MESSAGE,
   PAYMENT_NO_CONFIRMATION,
+  PREPARE_NO_CONFIRMATION,
   SIGNED_OUT_MESSAGE,
   SLOW_HINT_MESSAGE,
   SLOW_HINT_MS,
@@ -36,7 +37,7 @@ describe("the texts for a request that got no answer", () => {
   });
 
   it("every text that sends a person to bring the screen up to date uses the one recovery phrase", () => {
-    for (const text of [TIMEOUT_MESSAGE, PAYMENT_NO_CONFIRMATION, UNDO_NO_CONFIRMATION]) {
+    for (const text of [TIMEOUT_MESSAGE, PAYMENT_NO_CONFIRMATION, UNDO_NO_CONFIRMATION, PREPARE_NO_CONFIRMATION]) {
       expect(text.toLowerCase()).toContain(RELOAD_STEP);
       expect(text).not.toMatch(/refresh|reload/i);
     }
@@ -97,5 +98,13 @@ describe("the hint for a slow save", () => {
   it("shows after 8 seconds, and says Google can take a few seconds", () => {
     expect(SLOW_HINT_MS).toBe(8_000);
     expect(SLOW_HINT_MESSAGE).toBe("Still working. Google can take a few seconds.");
+  });
+});
+
+describe("the text for a Prepare my Sheet that got no answer", () => {
+  it("says it could not confirm the Sheet was prepared, and what to do", () => {
+    expect(PREPARE_NO_CONFIRMATION).toBe(
+      "Couldn't confirm that your Sheet was prepared. Check your connection. Tap another tab at the bottom of the screen and come back, then check Set up.",
+    );
   });
 });

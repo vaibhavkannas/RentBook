@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ZodType } from "zod";
-import { moveOutBody, paymentBody, settingsBody, tenancyBody } from "@/lib/server/schemas";
+import { moveOutBody, paymentBody, prepareBody, settingsBody, tenancyBody } from "@/lib/server/schemas";
 
 /** The first problem a schema finds with `value`, as "path: message", or null when it is fine. */
 function problem(schema: ZodType, value: unknown): string | null {
@@ -218,5 +218,17 @@ describe("settingsBody", () => {
     expect(problem(settingsBody, named("Ground\nfloor"))).toBe(
       "portions.0.name: Portion name cannot have line breaks or other control characters.",
     );
+  });
+});
+
+describe("prepareBody", () => {
+  it("is an empty object: Prepare my Sheet sends nothing but the request", () => {
+    expect(problem(prepareBody, {})).toBeNull();
+  });
+
+  it("refuses anything else, so a request that is not the page's own is not acted on", () => {
+    for (const body of [null, [], "x", 5, { extra: 1 }, { created: ["Tenants"] }]) {
+      expect(problem(prepareBody, body), JSON.stringify(body)).not.toBeNull();
+    }
   });
 });

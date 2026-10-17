@@ -1,4 +1,5 @@
 import { formatRupees } from "@/lib/format";
+import { listWords } from "@/lib/setup-checks";
 
 /**
  * What the toast says after a save. The portion comes first where there are several cards on the screen, then what
@@ -24,6 +25,11 @@ export function newTenantToastText(portion: string, tenant: string, amount: numb
 }
 
 export const SETTINGS_SAVED_TOAST = "Settings saved";
+
+/** After Prepare my Sheet: the tabs it made, as the owner names them, or that none was needed. */
+export function prepareToastText(created: readonly string[]): string {
+  return created.length === 0 ? "Nothing needed creating." : `Your Sheet is ready: created ${listWords(created)}.`;
+}
 
 /** After tenancy details were added or edited. */
 export const DETAILS_SAVED_TOAST = "Details saved";

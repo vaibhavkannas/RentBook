@@ -11,6 +11,7 @@ import {
   newTenantToastText,
   paymentToasts,
   paymentToastText,
+  prepareToastText,
   replaceToastText,
   SETTINGS_SAVED_TOAST,
 } from "@/lib/toast-copy";
@@ -152,5 +153,18 @@ describe("logEntryState", () => {
     [true, true, "unconfirmed"],
   ] as const)("a retry on offer: %s, the last retry got no answer: %s, is %s", (retryOffered, noAnswer, state) => {
     expect(logEntryState(retryOffered, noAnswer)).toBe(state);
+  });
+});
+
+describe("the toast after Prepare my Sheet", () => {
+  it("names the tabs it created, as the owner names them", () => {
+    expect(prepareToastText(["Tenants"])).toBe("Your Sheet is ready: created Tenants.");
+    expect(prepareToastText(["Settings", "Payments Log", "Tenants"])).toBe(
+      "Your Sheet is ready: created Settings, Payments Log and Tenants.",
+    );
+  });
+
+  it("says nothing needed creating when it made no tab", () => {
+    expect(prepareToastText([])).toBe("Nothing needed creating.");
   });
 });

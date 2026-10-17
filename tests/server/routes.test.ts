@@ -14,6 +14,7 @@ const retryLogRow = vi.hoisted(() =>
 const markWritten = vi.hoisted(() => vi.fn(async () => undefined));
 const saveTenancy = vi.hoisted(() => vi.fn());
 const moveOutTenancy = vi.hoisted(() => vi.fn());
+const prepareSheet = vi.hoisted(() => vi.fn<(...args: unknown[]) => Promise<{ created: string[] }>>(async () => ({ created: ["Tenants"] })));
 
 vi.mock("@/auth", () => ({ auth }));
 // getViewer waits for a request with connection(), which Next refuses outside a request: the routes run here without one.
@@ -27,13 +28,14 @@ vi.mock("@/lib/sheets/service", async (importOriginal) => ({
   undoPayment,
   retryLogRow,
 }));
+vi.mock("@/lib/sheets/prepare", () => ({ prepareSheet }));
 vi.mock("@/lib/sheets/tenancy-service", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/sheets/tenancy-service")>()),
   saveTenancy,
   moveOutTenancy,
 }));
 
-import { conflict, configError, rateLimited, unavailable, validation } from "@/lib/errors";
+import { AppError, conflict, configError, rateLimited, unavailable, validation } from "@/lib/errors";
 import { captureLogs, loggedLines, type LogSpies } from "../support/logs";
 import { createRetryToken, RETRY_TOKEN_MAX_AGE_MS } from "@/lib/server/retry-token";
 import { POST as postRetry } from "@/app/api/payments/log-retry/route";
@@ -41,6 +43,7 @@ import { POST as postPayment } from "@/app/api/payments/route";
 import { POST as postUndo } from "@/app/api/payments/undo/route";
 import { POST as postMoveOut } from "@/app/api/tenancies/move-out/route";
 import { POST as postTenancy } from "@/app/api/tenancies/route";
+import { POST as postPrepare } from "@/app/api/setup/prepare/route";
 import { PUT as putSettings } from "@/app/api/settings/route";
 
 const settingsRequest = () =>
@@ -74,6 +77,7 @@ beforeEach(() => {
   markWritten.mockClear();
   saveTenancy.mockReset();
   moveOutTenancy.mockReset();
+  prepareSheet.mockClear();
 });
 afterEach(() => {
   for (const spy of Object.values(logs)) spy.mockRestore();
@@ -120,6 +124,76 @@ describe("PUT /api/settings", () => {
     signedInAs("owner@example.com");
     await putSettings(settingsRequest());
     expect(markWritten.mock.calls).toEqual([["owner@example.com"]]);
+  });
+});
+
+describe("POST /api/setup/prepare", () => {
+  const prepareRequest = (body: unknown = {}) =>
+    new Request("http://localhost/api/setup/prepare", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+
+  it("rejects a visitor who is not signed in, and an address that is not on the list", async () => {
+    for (const email of [null, "stranger@example.com"]) {
+      signedInAs(email);
+      const res = await postPrepare(prepareRequest());
+      expect(res.status).toBe(401);
+    }
+    expect(prepareSheet).not.toHaveBeenCalled();
+  });
+
+  it("rejects a listed member who is not the owner", async () => {
+    signedInAs("member@example.com");
+    const res = await postPrepare(prepareRequest());
+    expect(res.status).toBe(403);
+    expect((await res.json()).error.code).toBe("forbidden");
+    expect(prepareSheet).not.toHaveBeenCalled();
+    expect(markWritten).not.toHaveBeenCalled();
+  });
+
+  it("lets the owner prepare the Sheet, and answers with the tabs it made", async () => {
+    signedInAs("Owner@Example.com");
+    prepareSheet.mockResolvedValueOnce({ created: ["Settings", "Tenants"] });
+    const res = await postPrepare(prepareRequest());
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ ok: true, created: ["Settings", "Tenants"] });
+    expect(prepareSheet).toHaveBeenCalledOnce();
+  });
+
+  it("marks the write time after a success, so the owner's next page is read fresh, and not when it is refused", async () => {
+    signedInAs("member@example.com");
+    await postPrepare(prepareRequest());
+    expect(markWritten).not.toHaveBeenCalled();
+    signedInAs("owner@example.com");
+    await postPrepare(prepareRequest());
+    expect(markWritten.mock.calls).toEqual([["owner@example.com"]]);
+  });
+
+  it("does not mark the write time when the Sheet refuses, and tells the owner why", async () => {
+    signedInAs("owner@example.com");
+    prepareSheet.mockRejectedValueOnce(new AppError("sheet-structure", "The Settings tab is missing."));
+    const res = await postPrepare(prepareRequest());
+    expect(res.status).toBe(422);
+    expect((await res.json()).error.message).toBe("The Settings tab is missing.");
+    expect(markWritten).not.toHaveBeenCalled();
+  });
+
+  it("marks the write time after a conflict, as every write does", async () => {
+    signedInAs("owner@example.com");
+    prepareSheet.mockRejectedValueOnce(conflict("Your Sheet may not be fully prepared."));
+    expect((await postPrepare(prepareRequest())).status).toBe(409);
+    expect(markWritten).toHaveBeenCalledOnce();
+  });
+
+  it("takes an empty request and nothing else", async () => {
+    signedInAs("owner@example.com");
+    for (const body of [{ created: ["Tenants"] }, [], null, "x"]) {
+      const res = await postPrepare(prepareRequest(body));
+      expect(res.status, JSON.stringify(body)).toBe(400);
+    }
+    expect(prepareSheet).not.toHaveBeenCalled();
   });
 });
 
@@ -949,8 +1023,9 @@ describe("request integrity on every route", () => {
     ["POST /api/tenancies", postTenancy, "POST", "http://localhost/api/tenancies"],
     ["POST /api/tenancies/move-out", postMoveOut, "POST", "http://localhost/api/tenancies/move-out"],
     ["PUT /api/settings", putSettings, "PUT", "http://localhost/api/settings"],
+    ["POST /api/setup/prepare", postPrepare, "POST", "http://localhost/api/setup/prepare"],
   ];
-  const SERVICES = [saveSettings, logPayment, undoPayment, retryLogRow, saveTenancy, moveOutTenancy];
+  const SERVICES = [saveSettings, logPayment, undoPayment, retryLogRow, saveTenancy, moveOutTenancy, prepareSheet];
 
   const make = (method: string, url: string, headers: Record<string, string>, body: string) =>
     new Request(url, { method, headers, body });

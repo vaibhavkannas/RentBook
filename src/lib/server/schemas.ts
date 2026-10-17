@@ -40,6 +40,9 @@ export const paymentBody = z.object({
   tenancy: tenancyFieldsSchema.optional(),
 });
 
+/** Prepare my Sheet sends no details: it is one request, from the owner, to make the tabs. */
+export const prepareBody = z.object({}).strict();
+
 export const undoBody = z.object({
   month: monthString,
   portionId: z.string().min(1).max(20),

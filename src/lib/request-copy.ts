@@ -17,6 +17,9 @@ export const PAYMENT_NO_CONFIRMATION = `Couldn't confirm that the save went thro
 
 export const UNDO_NO_CONFIRMATION = `Couldn't confirm that the undo went through. Check your connection. ${reloadThen("check before trying again")}`;
 
+/** Prepare my Sheet: the answer never arrived, so some of the tabs may or may not have been made. */
+export const PREPARE_NO_CONFIRMATION = `Couldn't confirm that your Sheet was prepared. Check your connection. ${reloadThen("check Set up")}`;
+
 export const SETTINGS_NO_CONFIRMATION = "Couldn't reach the server. Try again.";
 
 export const SIGNED_OUT_MESSAGE = `You've been signed out. ${SIGN_IN_HINT}`;
