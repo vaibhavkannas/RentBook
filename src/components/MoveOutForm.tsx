@@ -34,6 +34,8 @@ type Props = {
   portionId: string;
   /** The page is showing the changed-just-now notice, so a save that goes through has to take it away. */
   noticeShown?: boolean;
+  /** The month the page was opened from. A move to another address keeps it, so the arrow back still leads there. */
+  monthKey?: string | null;
 };
 
 const OUTCOMES: Array<{ value: AdvanceStatus; label: string }> = [
@@ -50,7 +52,7 @@ const OUTCOMES: Array<{ value: AdvanceStatus; label: string }> = [
  * when the form was opened. The `target` and `initial` props can change later (router.refresh() delivers newer
  * ones), but they are only used when the form is opened, so a save never mixes a newer token with older values.
  */
-export default function MoveOutForm({ target, initial, tenant, portionId, noticeShown = false }: Props) {
+export default function MoveOutForm({ target, initial, tenant, portionId, noticeShown = false, monthKey = null }: Props) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState(() => startDraft(target, initial));
@@ -84,7 +86,7 @@ export default function MoveOutForm({ target, initial, tenant, portionId, notice
     const body = await postJson<TenancyApiBody>("/api/tenancies/move-out", request.body);
     if (body?.ok) {
       // The refreshed page shows the tenancy as a past one and replaces this form. Until then it stays disabled.
-      applyPageMove(router, pageAfterSave(portionId, noticeShown));
+      applyPageMove(router, pageAfterSave(portionId, noticeShown, monthKey));
       return;
     }
     setBusy(false);
@@ -93,7 +95,7 @@ export default function MoveOutForm({ target, initial, tenant, portionId, notice
       // The page behind the form is out of date. Open it again: it loads what is in the Sheet now and shows the
       // changed-just-now notice itself, so the notice does not go away when the page replaces this form. The form
       // closes, so that opening it again starts from the fresh page.
-      applyPageMove(router, pageAfterConflict(portionId, noticeShown));
+      applyPageMove(router, pageAfterConflict(portionId, noticeShown, monthKey));
       setOpen(false);
       return;
     }

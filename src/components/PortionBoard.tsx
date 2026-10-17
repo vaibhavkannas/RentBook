@@ -10,6 +10,7 @@ import { formatRupees } from "@/lib/format";
 import { sheetKey } from "@/lib/month-nav";
 import { cardDifferenceText } from "@/lib/rent-difference";
 import { tenancyChips } from "@/lib/tenancy-chips";
+import { tenantsPagePath } from "@/lib/tenancy-response";
 import type { PillTone } from "@/lib/ui-classes";
 import PaymentSheet, { type SheetMode } from "./PaymentSheet";
 import UndoSheet from "./UndoSheet";
@@ -95,7 +96,7 @@ export default function PortionBoard({ monthKey, monthLabel, cards, defaultDate 
                           </Pill>
                         ))}
                       <Link
-                        href={`/tenants/${encodeURIComponent(card.portionId)}`}
+                        href={tenantsPagePath(card.portionId, monthKey)}
                         aria-label={`${card.tenancy ? "Details" : "Add details"} for ${card.name}`}
                         className="inline-flex min-h-11 min-w-11 items-center text-sm text-muted underline"
                       >

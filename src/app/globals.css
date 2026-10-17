@@ -28,6 +28,8 @@
   --danger-ink: #8f2a1f;
   --overlay: rgb(0 0 0 / 0.4);
   --focus: var(--accent);
+  /* The height of the tab bar, without the home indicator below it. */
+  --tabbar-h: 4rem;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -90,6 +92,17 @@ html.sheet-open body {
 /* Bottom padding for a sheet: clears the home indicator, and is never less than the usual 1.25rem. */
 @utility pb-safe {
   padding-bottom: max(1.25rem, env(safe-area-inset-bottom));
+}
+
+/* The tab bar: its height plus the home indicator, and its links kept above the indicator. */
+@utility h-tabbar {
+  height: calc(var(--tabbar-h) + env(safe-area-inset-bottom));
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+/* Bottom padding for a page with the tab bar: clears the bar, the home indicator and 1.5rem more. */
+@utility pb-tabbar {
+  padding-bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom) + 1.5rem);
 }
 
 /* A little press feedback for buttons and links: the control shrinks while it is held down. */

@@ -17,7 +17,9 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("next/navigation", () => ({
   redirect: mocks.redirect,
-  useRouter: () => ({ replace: vi.fn(), push: vi.fn(), refresh: vi.fn() }),
+  useRouter: () => ({ replace: vi.fn(), push: vi.fn(), refresh: vi.fn(), back: vi.fn() }),
+  usePathname: () => "/",
+  useSearchParams: () => new URLSearchParams(),
 }));
 vi.mock("@/auth", () => ({ signOut: vi.fn() }));
 vi.mock("@/lib/server/auth-guard", () => ({ getViewer: mocks.getViewer }));
@@ -81,6 +83,23 @@ describe("the home page", () => {
     const html = await render();
     expect(html).toContain("The Schedule tab has no Month header.");
     expect(summary(html)).toBe("");
+  });
+});
+
+describe("the home page without a footer", () => {
+  it("no longer carries who is signed in, the Activity and settings links or Sign out: the tab bar and More have them", async () => {
+    mocks.getViewer.mockResolvedValue({ email: "owner@example.com", isOwner: true });
+    const html = await render();
+    expect(html).not.toContain("Signed in as");
+    expect(html).not.toContain("owner@example.com");
+    expect(html).not.toContain("Sign out");
+    expect(html).not.toContain("Portion settings");
+    expect(html).not.toContain('href="/activity"');
+    expect(html).not.toContain("<footer");
+  });
+
+  it("leaves room for the tab bar under the last card", async () => {
+    expect(await render()).toMatch(/^<main class="[^"]*\bpb-tabbar\b/);
   });
 });
 

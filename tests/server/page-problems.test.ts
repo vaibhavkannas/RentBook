@@ -20,7 +20,9 @@ vi.mock("next/navigation", () => ({
   notFound: () => {
     throw new Error("not-found");
   },
-  useRouter: () => ({ replace: vi.fn(), push: vi.fn(), refresh: vi.fn() }),
+  useRouter: () => ({ replace: vi.fn(), push: vi.fn(), refresh: vi.fn(), back: vi.fn() }),
+  usePathname: () => "/",
+  useSearchParams: () => new URLSearchParams(),
 }));
 vi.mock("@/auth", () => ({ signOut: vi.fn() }));
 vi.mock("@/lib/server/auth-guard", () => ({ getViewer: mocks.getViewer }));

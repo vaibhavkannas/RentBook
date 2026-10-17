@@ -35,7 +35,7 @@ export default async function ActivityPage() {
 
   return (
     <Page>
-      <PageHeader title="Activity" back={{ href: "/", label: "Back to month" }} />
+      <PageHeader title="Activity" />
 
       {problem && <LoadProblem message={problem} retryHref="/activity" />}
 

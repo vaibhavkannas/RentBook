@@ -109,6 +109,8 @@ describe("proxy matcher", () => {
     "/signin",
     "/settings",
     "/activity",
+    "/more",
+    "/more?month=2026-10",
     "/tenants/p1",
     "/no-such-page",
     "/api-notes",

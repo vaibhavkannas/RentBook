@@ -1,12 +1,16 @@
-import { createElement, type ReactElement } from "react";
+import { readFileSync } from "node:fs";
+import { createElement, isValidElement, type ReactElement, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Tenancy } from "@/lib/domain/tenancy";
 import { AppError, sheetStructure, validation } from "@/lib/errors";
 import type { PortionTenants } from "@/lib/sheets/tenancy-service";
+import { withoutComments } from "../support/source-scan";
 
 // A smoke test of the tenant details page: it renders every state the page has, with the data layer
 // replaced. The forms are client components; here they render their first (server) output only.
+
+const nav = vi.hoisted(() => ({ search: "" }));
 
 const mocks = vi.hoisted(() => ({
   getViewer: vi.fn(),
@@ -22,7 +26,9 @@ const mocks = vi.hoisted(() => ({
 vi.mock("next/navigation", () => ({
   redirect: mocks.redirect,
   notFound: mocks.notFound,
-  useRouter: () => ({ refresh: vi.fn() }),
+  useRouter: () => ({ refresh: vi.fn(), back: vi.fn(), replace: vi.fn(), push: vi.fn() }),
+  usePathname: () => "/tenants/p1",
+  useSearchParams: () => new URLSearchParams(nav.search),
 }));
 vi.mock("@/lib/server/auth-guard", () => ({ getViewer: mocks.getViewer }));
 vi.mock("@/lib/server/context", () => ({ getSheetsContext: () => ({}) }));
@@ -30,6 +36,8 @@ vi.mock("@/lib/server/freshness", () => ({ readWrittenAt: async () => undefined 
 vi.mock("@/lib/sheets/tenancy-service", () => ({ getPortionTenants: mocks.getPortionTenants }));
 
 import TenantsPage from "@/app/tenants/[portionId]/page";
+import MoveOutForm from "@/components/MoveOutForm";
+import TenancyForm from "@/components/TenancyForm";
 
 const PORTION = {
   id: "p1",
@@ -75,8 +83,23 @@ async function render(portionId = "p1", searchParams: Record<string, string | st
   return renderToStaticMarkup(createElement(() => page));
 }
 
+/** Every element in the tree the page returns, before anything is rendered: its props are what the page passes on. */
+function elements(node: ReactNode): ReactElement<Record<string, unknown>>[] {
+  if (Array.isArray(node)) return node.flatMap(elements);
+  if (!isValidElement(node)) return [];
+  const props = node.props as Record<string, unknown>;
+  return [node as ReactElement<Record<string, unknown>>, ...elements(props.children as ReactNode)];
+}
+
+async function tree(searchParams: Record<string, string | string[] | undefined> = {}) {
+  return elements(
+    (await TenantsPage({ params: Promise.resolve({ portionId: "p1" }), searchParams: Promise.resolve(searchParams) })) as ReactElement,
+  );
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
+  nav.search = "";
   mocks.getViewer.mockResolvedValue({ email: "member@example.com", isOwner: false });
   mocks.getPortionTenants.mockResolvedValue(data());
 });
@@ -260,5 +283,61 @@ describe("the tenant details page", () => {
     // (A connection problem, code "config", is shown to a member only as "ask the owner": see page-problems.test.ts.)
     mocks.getPortionTenants.mockRejectedValue(new AppError("sheet-structure", "Missing settings."));
     expect(await render()).toContain("Missing settings.");
+  });
+});
+
+describe("the tenant details page and the month it was opened from", () => {
+  it("has an arrow back to the month screen that carries the month of the address", async () => {
+    nav.search = "month=2026-10";
+    const html = await render("p1", { month: "2026-10" });
+    expect(html).toMatch(/<a [^>]*href="\/\?month=2026-10"[^>]*>‹<\/a>/);
+    expect(html).toContain('aria-label="Back to month"');
+  });
+
+  it("has an arrow back to plain / when it was opened with no month", async () => {
+    expect(await render()).toMatch(/<a [^>]*href="\/"[^>]*>‹<\/a>/);
+  });
+
+  it("gives both forms the month, so a save or a conflict keeps it in the address", async () => {
+    const found = await tree({ month: "2026-10" });
+    expect(found.find((element) => element.type === TenancyForm)?.props.monthKey).toBe("2026-10");
+    expect(found.find((element) => element.type === MoveOutForm)?.props.monthKey).toBe("2026-10");
+  });
+
+  it("gives the Add details form the month too", async () => {
+    mocks.getPortionTenants.mockResolvedValue(data({ current: null }));
+    const found = await tree({ month: "2026-09" });
+    expect(found.find((element) => element.type === TenancyForm)?.props.monthKey).toBe("2026-09");
+  });
+
+  it("passes no month when the address has none, or has one that is not a month", async () => {
+    for (const searchParams of [{}, { month: "garbage" }, { month: ["nope", "2026-10"] }]) {
+      const found = await tree(searchParams);
+      expect(found.find((element) => element.type === TenancyForm)?.props.monthKey ?? null, JSON.stringify(searchParams)).toBeNull();
+      expect(found.find((element) => element.type === MoveOutForm)?.props.monthKey ?? null).toBeNull();
+    }
+  });
+
+  it("keeps the month in the Try again link when the Sheet cannot be read", async () => {
+    mocks.getPortionTenants.mockRejectedValue(sheetStructure("The Tenants tab must have the headers."));
+    expect(await render("p1", { month: "2026-10" })).toContain('href="/tenants/p1?month=2026-10"');
+    expect(await render("p1")).toContain('href="/tenants/p1"');
+  });
+
+  it("keeps the month in the Try again link when the Tenants tab cannot be used", async () => {
+    mocks.getPortionTenants.mockResolvedValue(data({ current: null, tenantsProblem: "Put the header back." }));
+    expect(await render("p1", { month: "2026-10" })).toContain('href="/tenants/p1?month=2026-10"');
+  });
+});
+
+describe("the tenant forms and the month", () => {
+  const code = (name: string) =>
+    withoutComments(readFileSync(new URL(`../../src/components/${name}.tsx`, import.meta.url), "utf8"));
+
+  it.each(["TenancyForm", "MoveOutForm"])("%s takes the month and hands it to the page moves after a save and a conflict", (name) => {
+    const source = code(name);
+    expect(source).toMatch(/monthKey\??:\s*string \| null/);
+    expect(source).toMatch(/pageAfterSave\([^)]*monthKey\)/);
+    expect(source).toMatch(/pageAfterConflict\([^)]*monthKey\)/);
   });
 });

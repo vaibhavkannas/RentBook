@@ -28,7 +28,7 @@ export default async function SettingsPage() {
 
   return (
     <Page>
-      <PageHeader title="Portion settings" back={{ href: "/", label: "Back to month" }} />
+      <PageHeader title="Portion settings" back={{ href: "/more", label: "Back to More" }} />
 
       {problem && <LoadProblem message={problem} retryHref="/settings" />}
       {portions && <SettingsForm portions={portions} />}

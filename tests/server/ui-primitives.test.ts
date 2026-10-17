@@ -1,6 +1,7 @@
+import { readFileSync } from "node:fs";
 import { createElement, type ComponentProps, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { BrandMark } from "@/components/ui/BrandMark";
 import { Button, ButtonLink } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -23,11 +24,26 @@ import {
   pillClasses,
   SKELETON_BAR,
 } from "@/lib/ui-classes";
+import { withoutComments } from "../support/source-scan";
+
+const nav = vi.hoisted(() => ({ pathname: "/tenants/p1", search: "" }));
+
+vi.mock("next/navigation", () => ({
+  usePathname: () => nav.pathname,
+  useSearchParams: () => new URLSearchParams(nav.search),
+  useRouter: () => ({ back: vi.fn(), replace: vi.fn(), push: vi.fn(), refresh: vi.fn() }),
+}));
+
+beforeEach(() => {
+  nav.pathname = "/tenants/p1";
+  nav.search = "";
+});
 
 // The shared pieces, rendered the way the server renders them: what a person (or a screen reader) finds before
 // anything is tapped. The class strings themselves are tested in tests/domain/ui-classes.test.ts.
 
-const html = (element: Parameters<typeof renderToStaticMarkup>[0]) => renderToStaticMarkup(element);const field = (props: ComponentProps<typeof Field>, control: ReactNode) => createElement(Field, props, control);
+const html = (element: Parameters<typeof renderToStaticMarkup>[0]) => renderToStaticMarkup(element);
+const field = (props: ComponentProps<typeof Field>, control: ReactNode) => createElement(Field, props, control);
 const attr = (markup: string, name: string) => new RegExp(`\\s${name}="([^"]*)"`).exec(markup)?.[1];
 
 describe("BrandMark", () => {
@@ -314,15 +330,20 @@ describe("EmptyState", () => {
 });
 
 describe("Page", () => {
-  it("is the phone column: centred, at most 28rem wide, with a 16 px gutter", () => {
-    expect(html(createElement(Page, null, "x"))).toBe('<main class="mx-auto min-h-dvh max-w-md px-4 pb-10 pt-4">x</main>');
+  it("is the phone column: centred, at most 28rem wide, with a 16 px gutter and room for the tab bar", () => {
+    expect(html(createElement(Page, null, "x"))).toBe('<main class="mx-auto min-h-dvh max-w-md px-4 pt-4 pb-tabbar">x</main>');
+  });
+
+  it("says when there is no tab bar (the sign-in page), and keeps the old bottom padding then", () => {
+    expect(html(createElement(Page, { tabBar: false }, "x"))).toBe('<main class="mx-auto min-h-dvh max-w-md px-4 pb-10 pt-4">x</main>');
   });
 
   it("can centre its content, for the sign-in and error pages", () => {
-    const out = html(createElement(Page, { center: true }, "x"));
+    const out = html(createElement(Page, { center: true, tabBar: false }, "x"));
     expect(out).toContain("flex min-h-dvh max-w-md flex-col justify-center");
     expect(out).not.toContain("pb-10");
     expect(out).not.toContain("pt-4");
+    expect(html(createElement(Page, { center: true }, "x"))).toContain("pb-tabbar");
   });
 
   it("passes other attributes on, such as aria-busy", () => {
@@ -331,24 +352,55 @@ describe("Page", () => {
 });
 
 describe("PageHeader", () => {
+  const back = { href: "/", label: "Back to month" };
+
   it("shows the title, and a back link at least 44 px square that names where it goes", () => {
-    const out = html(createElement(PageHeader, { title: "Activity", back: { href: "/", label: "Back to month" } }));
+    const out = html(createElement(PageHeader, { title: "Activity", back }));
     expect(out).toContain('<h1 class="text-lg font-semibold">Activity</h1>');
     expect(out).toMatch(/<a [^>]*href="\/"[^>]*>‹<\/a>/);
     expect(out).toContain('aria-label="Back to month"');
     expect(out).toContain(`class="${iconButtonClasses()}"`);
   });
 
-  it("shows a placeholder bar where the title will be, for a loading screen", () => {
-    const out = html(createElement(PageHeader, { title: null, back: { href: "/", label: "Back to month" } }));
-    expect(out).not.toContain("<h1");
-    expect(out).toContain(`<div aria-hidden="true" class="${SKELETON_BAR} h-6 w-40"></div>`);
-    expect(out).toContain('aria-label="Back to month"');
+  it("has its back link carry the month the address has, so the arrow leads to the month that was showing", () => {
+    nav.search = "month=2026-10";
+    expect(html(createElement(PageHeader, { title: "Tenant", back }))).toMatch(/<a [^>]*href="\/\?month=2026-10"/);
+    expect(html(createElement(PageHeader, { title: "Portion settings", back: { href: "/more", label: "Back to More" } }))).toMatch(
+      /<a [^>]*href="\/more\?month=2026-10"[^>]*aria-label="Back to More"|<a [^>]*aria-label="Back to More"[^>]*href="\/more\?month=2026-10"/,
+    );
+  });
+
+  it("links to the plain address when the address has no month", () => {
+    expect(html(createElement(PageHeader, { title: "Tenant", back }))).toMatch(/<a [^>]*href="\/"/);
+    nav.search = "month=garbage";
+    expect(html(createElement(PageHeader, { title: "Tenant", back }))).toMatch(/<a [^>]*href="\/"/);
   });
 
   it("is only the title when there is nowhere to go back to", () => {
     const out = html(createElement(PageHeader, { title: "More" }));
     expect(out).toContain('<h1 class="text-lg font-semibold">More</h1>');
     expect(out).not.toContain("<a");
+  });
+
+  it("shows a placeholder bar where the title will be, for a loading screen", () => {
+    const out = html(createElement(PageHeader, { title: null, back }));
+    expect(out).not.toContain("<h1");
+    expect(out).toContain(`<div aria-hidden="true" class="${SKELETON_BAR} h-6 w-40"></div>`);
+    expect(out).toContain('aria-label="Back to month"');
+  });
+});
+
+describe("the back link's source", () => {
+  const code = withoutComments(readFileSync(new URL("../../src/components/ui/BackLink.tsx", import.meta.url), "utf8"));
+  const header = withoutComments(readFileSync(new URL("../../src/components/ui/PageHeader.tsx", import.meta.url), "utf8"));
+
+  it("is drawn inside Suspense, with the same link without the month as its fallback", () => {
+    expect(header).toMatch(/<Suspense fallback=\{<BackLinkFallback [^>]*\/>\}>\s*<BackLink /);
+  });
+
+  it("lets navAction decide what a tap does, like the tab bar", () => {
+    expect(code).toMatch(/useAppNavigate\(\)/);
+    expect(code).toMatch(/onNavigate=\{/);
+    expect(code).toMatch(/useSearchParams\(\)/);
   });
 });

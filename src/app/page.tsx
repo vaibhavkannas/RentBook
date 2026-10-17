@@ -1,6 +1,4 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
-import { signOut } from "@/auth";
 import ExitGuard from "@/components/ExitGuard";
 import LoadProblem from "@/components/LoadProblem";
 import MonthFrame from "@/components/MonthFrame";
@@ -88,32 +86,6 @@ export default async function Home({
       </MonthFrame>
 
       <ExitGuard />
-
-      <footer className="mt-6 space-y-1 text-sm">
-        <p className="break-words text-muted">Signed in as {viewer.email}</p>
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <Link href="/activity" className="grid min-h-11 place-items-center text-muted underline">
-              Activity
-            </Link>
-            {viewer.isOwner && (
-              <Link href="/settings" className="grid min-h-11 place-items-center text-muted underline">
-                Portion settings
-              </Link>
-            )}
-          </div>
-          <form
-            action={async () => {
-              "use server";
-              await signOut({ redirectTo: "/signin" });
-            }}
-          >
-            <button type="submit" className="min-h-11 text-muted underline">
-              Sign out
-            </button>
-          </form>
-        </div>
-      </footer>
     </Page>
   );
 }

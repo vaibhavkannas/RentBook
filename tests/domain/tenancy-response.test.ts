@@ -52,6 +52,39 @@ describe("the address of the tenant details page", () => {
   });
 });
 
+describe("the address of the tenant details page, with the month it was opened from", () => {
+  it("carries the month, so the arrow back leads to the month that was showing", () => {
+    expect(tenantsPagePath("p1", "2026-10")).toBe("/tenants/p1?month=2026-10");
+    expect(tenantsPagePath("first floor/2", "2026-09")).toBe("/tenants/first%20floor%2F2?month=2026-09");
+    expect(changedPagePath("p1", "2026-10")).toBe("/tenants/p1?changed=1&month=2026-10");
+  });
+
+  it("is the same as before without a month, or with one that is not a month", () => {
+    expect(tenantsPagePath("p1", null)).toBe("/tenants/p1");
+    expect(tenantsPagePath("p1", undefined)).toBe("/tenants/p1");
+    expect(tenantsPagePath("p1", "nope")).toBe("/tenants/p1");
+    expect(changedPagePath("p1", null)).toBe("/tenants/p1?changed=1");
+  });
+
+  it("is kept by the move after a conflict", () => {
+    expect(pageAfterConflict("p1", false, "2026-10")).toEqual({
+      kind: "replace",
+      url: "/tenants/p1?changed=1&month=2026-10",
+      scroll: true,
+    });
+    expect(pageAfterConflict("p1", true, "2026-10")).toEqual({ kind: "refresh" });
+  });
+
+  it("is kept by the move after a save that has to take the notice away", () => {
+    expect(pageAfterSave("p1", true, "2026-10")).toEqual({
+      kind: "replace",
+      url: "/tenants/p1?month=2026-10",
+      scroll: false,
+    });
+    expect(pageAfterSave("p1", false, "2026-10")).toEqual({ kind: "refresh" });
+  });
+});
+
 describe("showChangedNotice", () => {
   it("shows the notice only when the address says changed=1", () => {
     expect(showChangedNotice({ changed: "1" })).toBe(true);

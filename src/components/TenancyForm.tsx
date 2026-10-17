@@ -28,6 +28,8 @@ type Props = {
   initial: TenancyFormText;
   /** The page is showing the changed-just-now notice, so a save that goes through has to take it away. */
   noticeShown?: boolean;
+  /** The month the page was opened from. A move to another address keeps it, so the arrow back still leads there. */
+  monthKey?: string | null;
 };
 
 /**
@@ -38,7 +40,7 @@ type Props = {
  * was opened. The `target` and `initial` props can change later (router.refresh() delivers newer ones), but
  * they are only used when a form is opened, so a save never mixes a newer token with older values.
  */
-export default function TenancyForm({ target, initial, noticeShown = false }: Props) {
+export default function TenancyForm({ target, initial, noticeShown = false, monthKey = null }: Props) {
   const router = useRouter();
   const editing = target.mode === "edit";
   const [open, setOpen] = useState(!editing);
@@ -72,7 +74,7 @@ export default function TenancyForm({ target, initial, noticeShown = false }: Pr
     setError(null);
     const body = await postJson<TenancyApiBody>("/api/tenancies", request.body);
     if (body?.ok) {
-      applyPageMove(router, pageAfterSave(target.portionId, noticeShown));
+      applyPageMove(router, pageAfterSave(target.portionId, noticeShown, monthKey));
       setSaved(true);
       // An edit form closes. A create form stays disabled until the refreshed page replaces it.
       if (editing) {
@@ -87,7 +89,7 @@ export default function TenancyForm({ target, initial, noticeShown = false }: Pr
       // The page behind the form is out of date. Open it again: it loads what is in the Sheet now and shows the
       // changed-just-now notice itself, so the notice does not go away when the page replaces this form. An edit
       // form closes, so that opening it again starts from the fresh page.
-      applyPageMove(router, pageAfterConflict(target.portionId, noticeShown));
+      applyPageMove(router, pageAfterConflict(target.portionId, noticeShown, monthKey));
       if (editing) setOpen(false);
       return;
     }

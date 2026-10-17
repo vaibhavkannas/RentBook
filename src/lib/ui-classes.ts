@@ -85,7 +85,12 @@ export const SKELETON_BAR = "rounded-chip bg-line animate-pulse motion-reduce:an
 
 /**
  * The single phone column, with a 16 px gutter. `center` is for the sign-in and error pages: their content sits in
- * the middle of the whole screen, so they have no vertical padding to push it off centre.
+ * the middle of the whole screen, so they have no vertical padding to push it off centre. `tabBar` leaves room under
+ * the page for the tab bar (pb-tabbar); a page without the bar (the sign-in page) keeps the usual 2.5rem.
  */
-export const pageClasses = (center: boolean) =>
-  center ? "mx-auto flex min-h-dvh max-w-md flex-col justify-center px-4" : "mx-auto min-h-dvh max-w-md px-4 pb-10 pt-4";
+export const pageClasses = (center: boolean, tabBar = true) =>
+  center
+    ? cx("mx-auto flex min-h-dvh max-w-md flex-col justify-center px-4", tabBar && "pb-tabbar")
+    : tabBar
+      ? "mx-auto min-h-dvh max-w-md px-4 pt-4 pb-tabbar"
+      : "mx-auto min-h-dvh max-w-md px-4 pb-10 pt-4";

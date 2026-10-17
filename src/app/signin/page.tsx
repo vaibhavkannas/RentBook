@@ -28,7 +28,7 @@ export default async function SignInPage({
   const { error } = await searchParams;
 
   return (
-    <Page center>
+    <Page center tabBar={false}>
       <BrandMark size={56} className="text-accent" />
       <h1 className="mt-4 text-2xl font-semibold tracking-tight">{BRAND.name}</h1>
       <p className="mt-1 text-muted">{BRAND.tagline}</p>

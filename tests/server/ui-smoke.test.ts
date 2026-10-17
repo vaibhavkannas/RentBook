@@ -1,12 +1,18 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { PortionCard } from "@/lib/domain/types";
 
 // Smoke tests for the client components: their first render, as the server produces it. They check what a
 // person (or a screen reader) finds on the page before anything is clicked. The logic is tested elsewhere.
 
-vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
+const nav = vi.hoisted(() => ({ pathname: "/tenants/p1", search: "" }));
+
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ refresh: vi.fn(), back: vi.fn(), replace: vi.fn(), push: vi.fn() }),
+  usePathname: () => nav.pathname,
+  useSearchParams: () => new URLSearchParams(nav.search),
+}));
 
 import TenantsLoading from "@/app/tenants/[portionId]/loading";
 import ExitGuard from "@/components/ExitGuard";
@@ -51,12 +57,17 @@ function board(cards: PortionCard[]) {
   );
 }
 
+beforeEach(() => {
+  nav.pathname = "/tenants/p1";
+  nav.search = "";
+});
+
 describe("PortionBoard", () => {
   it("shows the chips and a Details link on a card whose tenant has details", () => {
     const out = board([card({ tenancy: SUMMARY })]);
     expect(out).toContain("Advance ₹ 20,000 held");
     expect(out).toContain("Agreement ends 15 Mar 2027");
-    expect(out).toContain('href="/tenants/p1"');
+    expect(out).toContain('href="/tenants/p1?month=2026-10"');
     expect(out).toContain('aria-label="Details for Ground floor"');
     expect(out).not.toContain("Add details");
   });
@@ -64,7 +75,7 @@ describe("PortionBoard", () => {
   it("shows only an Add details link when the tenant has no details", () => {
     const out = board([card({ tenancy: null })]);
     expect(out).toContain('aria-label="Add details for Ground floor"');
-    expect(out).toContain('href="/tenants/p1"');
+    expect(out).toContain('href="/tenants/p1?month=2026-10"');
     expect(out).not.toContain("Advance");
     expect(out).not.toContain("Agreement ends");
   });
@@ -82,7 +93,7 @@ describe("PortionBoard", () => {
       next: null,
       tenancy: SUMMARY,
     });
-    expect(board([paid])).toContain('href="/tenants/p1"');
+    expect(board([paid])).toContain('href="/tenants/p1?month=2026-10"');
   });
 
   it("shows neither chips nor a link on a card with no tenant", () => {
@@ -90,6 +101,17 @@ describe("PortionBoard", () => {
     expect(out).toContain("No tenant recorded yet.");
     expect(out).not.toContain("/tenants/");
     expect(out).not.toContain("details");
+  });
+
+  it("carries the month the card is shown in, so the tenant page can lead back to it", () => {
+    const other = html(
+      createElement(PortionBoard, { monthKey: "2026-09", monthLabel: "September 2026", cards: [card()], defaultDate: "2026-09-05" }),
+    );
+    expect(other).toContain('href="/tenants/p1?month=2026-09"');
+    expect(other).not.toContain("2026-10");
+    // a portion id is encoded in the path, and the month comes after it
+    const encoded = board([card({ portionId: "first floor/2" })]);
+    expect(encoded).toContain('href="/tenants/first%20floor%2F2?month=2026-10"');
   });
 
   it("keeps the amount line's spacing below the details row", () => {
@@ -325,8 +347,11 @@ describe("MoveOutForm", () => {
 describe("the tenant details loading screen", () => {
   const out = html(createElement(TenantsLoading));
 
-  it("has a working back link and says what is loading", () => {
+  it("has a working back link that carries the month in the address, and says what is loading", () => {
     expect(out).toContain('href="/"');
+    nav.search = "month=2026-10";
+    expect(html(createElement(TenantsLoading))).toContain('href="/?month=2026-10"');
+    nav.search = "";
     expect(out).toContain('aria-label="Back to month"');
     expect(out).toContain("Loading tenant details");
     expect(out).toContain('aria-busy="true"');

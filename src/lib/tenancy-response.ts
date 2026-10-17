@@ -1,3 +1,5 @@
+import { withMonth } from "@/lib/app-nav";
+
 /** How the tenant forms describe a save that did not succeed. Pure, so the wording can be tested. */
 
 /**
@@ -27,14 +29,17 @@ export function saveFailure(body: TenancyApiBody | null): { message: string; ref
   return { message: error?.message ?? "Something went wrong. Try again.", refresh: false };
 }
 
-/** The address of a portion's tenant details page. */
-export function tenantsPagePath(portionId: string): string {
-  return `/tenants/${encodeURIComponent(portionId)}`;
+/**
+ * The address of a portion's tenant details page. `monthKey` is the month the person opened it from: the page keeps it
+ * in its address, so that its arrow back leads to that month again.
+ */
+export function tenantsPagePath(portionId: string, monthKey?: string | null): string {
+  return withMonth(`/tenants/${encodeURIComponent(portionId)}`, monthKey);
 }
 
 /** The same page, asking it to show TENANCY_CONFLICT_MESSAGE. A normal visit has no such part. */
-export function changedPagePath(portionId: string): string {
-  return `${tenantsPagePath(portionId)}?changed=1`;
+export function changedPagePath(portionId: string, monthKey?: string | null): string {
+  return withMonth(`/tenants/${encodeURIComponent(portionId)}?changed=1`, monthKey);
 }
 
 /** Whether the page was opened after a conflict. `searchParams` is what Next gives the page, once awaited. */
@@ -52,19 +57,19 @@ export type PageMove =
  * After a conflict the page is opened again with the notice (scrolled to the top, where the notice is). When the
  * notice is already showing, loading the page again is enough.
  */
-export function pageAfterConflict(portionId: string, noticeShown: boolean): PageMove {
+export function pageAfterConflict(portionId: string, noticeShown: boolean, monthKey?: string | null): PageMove {
   return noticeShown
     ? { kind: "refresh" }
-    : { kind: "replace", url: changedPagePath(portionId), scroll: true };
+    : { kind: "replace", url: changedPagePath(portionId, monthKey), scroll: true };
 }
 
 /**
  * After a save went through the page is loaded again. When the conflict notice is showing, the plain address is
  * opened instead, so the notice goes away; the page stays where it is.
  */
-export function pageAfterSave(portionId: string, noticeShown: boolean): PageMove {
+export function pageAfterSave(portionId: string, noticeShown: boolean, monthKey?: string | null): PageMove {
   return noticeShown
-    ? { kind: "replace", url: tenantsPagePath(portionId), scroll: false }
+    ? { kind: "replace", url: tenantsPagePath(portionId, monthKey), scroll: false }
     : { kind: "refresh" };
 }
 

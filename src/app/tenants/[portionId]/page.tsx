@@ -7,6 +7,7 @@ import { Card } from "@/components/ui/Card";
 import { Notice } from "@/components/ui/Notice";
 import { Page } from "@/components/ui/Page";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { monthParam } from "@/lib/app-nav";
 import { todayIso } from "@/lib/domain/year-month";
 import { AppError } from "@/lib/errors";
 import { formatDay } from "@/lib/format";
@@ -16,7 +17,7 @@ import { readWrittenAt } from "@/lib/server/freshness";
 import { problemMessage } from "@/lib/server/problem";
 import { getPortionTenants, type PortionTenants } from "@/lib/sheets/tenancy-service";
 import { emptyMoveOutForm, emptyTenancyForm, tenancyFormText } from "@/lib/tenancy-input";
-import { showChangedNotice, TENANCY_CONFLICT_MESSAGE } from "@/lib/tenancy-response";
+import { showChangedNotice, tenantsPagePath, TENANCY_CONFLICT_MESSAGE } from "@/lib/tenancy-response";
 import {
   addDetailsHint,
   advanceOutcome,
@@ -72,7 +73,10 @@ export default async function TenantsPage({
   const { portionId } = await params;
   // A form that met a conflict opens this page again with ?changed=1, so the notice is the page's own and stays
   // until the next normal visit or save. A normal visit never has it.
-  const changed = showChangedNotice(await searchParams);
+  const search = await searchParams;
+  const changed = showChangedNotice(search);
+  // The month the person opened this page from: the forms keep it in the address, and the arrow back leads to it.
+  const monthKey = monthParam(search?.month);
 
   let data: PortionTenants | null = null;
   let problem: string | null = null;
@@ -95,7 +99,7 @@ export default async function TenantsPage({
     return (
       <Page>
         <Header title="Tenant details" />
-        <LoadProblem message={problem ?? "Couldn't reach Google Sheets. Try again."} retryHref={`/tenants/${encodeURIComponent(portionId)}`} />
+        <LoadProblem message={problem ?? "Couldn't reach Google Sheets. Try again."} retryHref={tenantsPagePath(portionId, monthKey)} />
       </Page>
     );
   }
@@ -110,7 +114,7 @@ export default async function TenantsPage({
         <LoadProblem
           title="Can't show the tenant details"
           message={`${tenantsProblem} Put the header back, then try again. Logging rent and the other pages still work.`}
-          retryHref={`/tenants/${encodeURIComponent(portion.id)}`}
+          retryHref={tenantsPagePath(portion.id, monthKey)}
         />
       </Page>
     );
@@ -167,6 +171,7 @@ export default async function TenantsPage({
               }}
               initial={tenancyFormText(current)}
               noticeShown={changed}
+              monthKey={monthKey}
             />
           </>
         ) : scheduleTenant === null ? (
@@ -183,6 +188,7 @@ export default async function TenantsPage({
               target={{ mode: "create", portionId: portion.id, tenant: scheduleTenant }}
               initial={emptyTenancyForm(today)}
               noticeShown={changed}
+              monthKey={monthKey}
             />
           </>
         )}
@@ -201,6 +207,7 @@ export default async function TenantsPage({
             tenant={current.tenant}
             portionId={portion.id}
             noticeShown={changed}
+            monthKey={monthKey}
             target={{
               id: current.id,
               expectedUpdatedAt: current.updatedAt,
