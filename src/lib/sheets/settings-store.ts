@@ -294,7 +294,7 @@ export async function updateSettings(
   updates: SettingsUpdate[],
 ): Promise<void> {
   const current = await readSettingsRows(gateway);
-  const writes = updates.map((update) => {
+  const writes = updates.map((update, index) => {
     const found = current.find((entry) => entry.portion.id === update.id);
     if (!found) throw unknownPortion();
     const name = cleanText(update.name, "Portion name", { max: MAX_NAME_LENGTH, required: true });
@@ -302,10 +302,11 @@ export async function updateSettings(
       update.cycleLength !== null &&
       !(Number.isInteger(update.cycleLength) && update.cycleLength >= 1 && update.cycleLength <= 120)
     ) {
-      throw validation("Cycle length must be a whole number from 1 to 120, or blank.");
+      // The words and the field are the screen's (Payments per cycle, Hike), and the field is the request's own path.
+      throw validation("Payments per cycle must be a whole number from 1 to 120.", `portions.${index}.cycleLength`);
     }
     if (!(Number.isFinite(update.hikePercent) && update.hikePercent >= 0 && update.hikePercent <= 100)) {
-      throw validation("Hike % must be between 0 and 100.");
+      throw validation("Hike must be a number from 0 to 100.", `portions.${index}.hikePercent`);
     }
     const row = found.sheetRow;
     return [

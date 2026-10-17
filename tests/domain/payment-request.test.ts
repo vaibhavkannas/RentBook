@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  AMOUNT_BLANK_MESSAGE,
   AMOUNT_NOT_A_NUMBER_MESSAGE,
   amountFromText,
   buildPaymentRequest,
@@ -17,7 +18,7 @@ const base: PaymentRequestInput = {
   mode: "log",
   monthKey: "2026-10",
   portionId: "p1",
-  amount: 5450,
+  amountText: "5450",
   dateReceived: "2026-10-05",
   tenantName: "",
   confirmedReplace: false,
@@ -74,30 +75,78 @@ describe("amountFromText", () => {
   );
 });
 
-describe("buildPaymentRequest: an amount that is not a number", () => {
-  it("says to enter a whole number, and builds no request, for text such as 5k", () => {
+describe("buildPaymentRequest: an amount that is not there, or not a number", () => {
+  it("says to enter the amount, beside the amount field, when it is blank", () => {
+    expect(AMOUNT_BLANK_MESSAGE).toBe("Enter the amount received.");
+    for (const amountText of ["", "   ", "₹", " , "]) {
+      expect(buildPaymentRequest({ ...base, amountText }), JSON.stringify(amountText)).toEqual({
+        ok: false,
+        message: "Enter the amount received.",
+        field: "amount",
+      });
+    }
+  });
+
+  it("says to enter a whole number, beside the amount field, for text such as 5k", () => {
     expect(AMOUNT_NOT_A_NUMBER_MESSAGE).toBe("Enter the amount as a whole number.");
-    expect(buildPaymentRequest({ ...base, amount: amountFromText("5k") })).toEqual({
+    expect(buildPaymentRequest({ ...base, amountText: "5k" })).toEqual({
       ok: false,
       message: "Enter the amount as a whole number.",
+      field: "amount",
     });
   });
 
-  it.each([Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY])("refuses %s the same way", (amount) => {
-    expect(buildPaymentRequest({ ...base, amount })).toEqual({ ok: false, message: AMOUNT_NOT_A_NUMBER_MESSAGE });
+  it.each(["five thousand", "Infinity", "-Infinity", "NaN", "5,4a0", "1e999", "12.5.1"])("refuses %s the same way", (amountText) => {
+    expect(buildPaymentRequest({ ...base, amountText })).toEqual({
+      ok: false,
+      message: AMOUNT_NOT_A_NUMBER_MESSAGE,
+      field: "amount",
+    });
   });
 
   it("refuses Infinity typed in the field, in every mode", () => {
     for (const mode of ["log", "edit", "new-tenant"] as const) {
-      const result = buildPaymentRequest({ ...base, mode, amount: amountFromText("Infinity"), seenEntry: SEEN });
-      expect(result).toEqual({ ok: false, message: AMOUNT_NOT_A_NUMBER_MESSAGE });
+      const result = buildPaymentRequest({ ...base, mode, amountText: "Infinity", tenantName: "Hari", seenEntry: SEEN });
+      expect(result).toEqual({ ok: false, message: AMOUNT_NOT_A_NUMBER_MESSAGE, field: "amount" });
     }
+  });
+
+  it("reads the amount the way amountFromText does: commas, spaces and a rupee sign are ignored", () => {
+    expect(buildPaymentRequest({ ...base, amountText: "₹ 5,450 " })).toMatchObject({ ok: true, body: { amount: 5450 } });
   });
 
   it("leaves the other checks of the amount to the server: zero, a negative number and a fraction are sent", () => {
     for (const amount of [0, -5, 5450.5]) {
-      expect(buildPaymentRequest({ ...base, amount })).toMatchObject({ ok: true, body: { amount } });
+      expect(buildPaymentRequest({ ...base, amountText: String(amount) })).toMatchObject({ ok: true, body: { amount } });
     }
+  });
+});
+
+describe("buildPaymentRequest: a new tenant with no name", () => {
+  const newTenant: PaymentRequestInput = { ...base, mode: "new-tenant", tenantName: "" };
+
+  it("says to enter the new tenant's name, beside the name field, before anything is sent", () => {
+    for (const tenantName of ["", "   ", "\t"]) {
+      expect(buildPaymentRequest({ ...newTenant, tenantName }), JSON.stringify(tenantName)).toEqual({
+        ok: false,
+        message: "Enter the new tenant's name.",
+        field: "tenantName",
+      });
+    }
+  });
+
+  it("looks at the name before the amount, the order the fields are in on the screen", () => {
+    expect(buildPaymentRequest({ ...newTenant, amountText: "" })).toMatchObject({ field: "tenantName" });
+    expect(buildPaymentRequest({ ...newTenant, tenantName: "Hari", amountText: "" })).toMatchObject({ field: "amount" });
+  });
+
+  it("does not ask for a name when logging or editing, which keep the tenant already there", () => {
+    expect(buildPaymentRequest({ ...base, tenantName: "" }).ok).toBe(true);
+    expect(buildPaymentRequest({ ...base, mode: "edit", tenantName: "", seenEntry: SEEN }).ok).toBe(true);
+  });
+
+  it("sends a name with something in it", () => {
+    expect(buildPaymentRequest({ ...newTenant, tenantName: "Hari" })).toMatchObject({ ok: true, body: { newTenantName: "Hari" } });
   });
 });
 
@@ -118,7 +167,7 @@ describe("buildPaymentRequest", () => {
   });
 
   it("makes an edit carry the entry the person saw", () => {
-    const result = buildPaymentRequest({ ...base, mode: "edit", amount: 6000, seenEntry: SEEN });
+    const result = buildPaymentRequest({ ...base, mode: "edit", amountText: "6000", seenEntry: SEEN });
     expect(result).toMatchObject({
       ok: true,
       body: { overwrite: true, expected: SEEN, amount: 6000, newTenantName: undefined },
@@ -132,7 +181,7 @@ describe("buildPaymentRequest", () => {
   });
 
   it("makes a confirmed replace carry the entry the duplicate warning named", () => {
-    const result = buildPaymentRequest({ ...base, amount: 6000, confirmedReplace: true, seenEntry: SEEN });
+    const result = buildPaymentRequest({ ...base, amountText: "6000", confirmedReplace: true, seenEntry: SEEN });
     expect(result).toMatchObject({ ok: true, body: { overwrite: true, expected: SEEN, amount: 6000 } });
   });
 
@@ -152,9 +201,10 @@ describe("buildPaymentRequest", () => {
 
   it("refuses to build a replace that has no entry to compare against", () => {
     for (const mode of ["log", "new-tenant"] as const) {
-      const result = buildPaymentRequest({ ...base, mode, confirmedReplace: true, seenEntry: undefined });
+      const result = buildPaymentRequest({ ...base, mode, tenantName: "Hari", confirmedReplace: true, seenEntry: undefined });
       expect(result.ok).toBe(false);
       expect(result.ok ? "" : result.message).toMatch(/no longer recorded/);
+      expect(result).not.toHaveProperty("field");
     }
   });
 

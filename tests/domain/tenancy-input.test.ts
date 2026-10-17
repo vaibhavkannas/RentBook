@@ -28,15 +28,17 @@ describe("parseRupees", () => {
     ["  ₹ 5,450 ", 5450],
     ["10000000", 10_000_000],
   ])("reads %j as %j", (text, value) => {
-    expect(parseRupees(text, "Advance")).toEqual({ ok: true, value });
+    expect(parseRupees(text, "Advance", "advance")).toEqual({ ok: true, value });
   });
 
   it.each(["1.5", "-5", "abc", "12a", "1e3", "5 000 x", "10000001", "99999999999999999999999"])(
-    "refuses %j with a message that names the field",
+    "refuses %j with a message that names the field, and says which field",
     (text) => {
-      const result = parseRupees(text, "Refund");
-      expect(result.ok).toBe(false);
-      expect(result.ok ? "" : result.message).toBe("Refund must be a whole number of rupees from 0 to 10,000,000.");
+      expect(parseRupees(text, "Refund", "refund")).toEqual({
+        ok: false,
+        message: "Refund must be a whole number of rupees from 0 to 10,000,000.",
+        field: "refund",
+      });
     },
   );
 });
@@ -145,6 +147,7 @@ describe("newTenantDetails", () => {
       const result = newTenantDetails({ ...untouched, advance }, TODAY);
       expect(result.ok).toBe(false);
       expect(result.ok ? "" : result.message).toMatch(/^Advance must be a whole number of rupees/);
+      expect(result.ok ? "" : result.field).toBe("advance");
     }
   });
 
@@ -153,6 +156,7 @@ describe("newTenantDetails", () => {
       const result = newTenantDetails(form, TODAY);
       expect(result.ok).toBe(false);
       expect(result.ok ? "" : result.message).toMatch(/move-in date/i);
+      expect(result.ok ? "" : result.field).toBe("moveIn");
     }
   });
 });
@@ -257,12 +261,18 @@ describe("buildTenancyRequest", () => {
     expect(result).toEqual({
       ok: false,
       message: "Advance must be a whole number of rupees from 0 to 10,000,000.",
+      field: "advance",
     });
   });
 
   it("refuses a form with no move-in date", () => {
     const result = buildTenancyRequest({ mode: "create", portionId: "p1", tenant: "Asha" }, { ...form, moveIn: " " });
-    expect(result).toEqual({ ok: false, message: "Move-in date is required." });
+    expect(result).toEqual({ ok: false, message: "Move-in date is required.", field: "moveIn" });
+  });
+
+  it("looks at the move-in date before the advance, the order the fields are in on the screen", () => {
+    const result = buildTenancyRequest({ mode: "create", portionId: "p1", tenant: "Asha" }, { ...form, moveIn: "", advance: "lots" });
+    expect(result).toMatchObject({ ok: false, field: "moveIn" });
   });
 });
 
@@ -334,6 +344,7 @@ describe("buildMoveOutRequest", () => {
     expect(buildMoveOutRequest(target, { ...form, moveOut: "" })).toEqual({
       ok: false,
       message: "Move-out date is required.",
+      field: "moveOut",
     });
   });
 
@@ -341,10 +352,12 @@ describe("buildMoveOutRequest", () => {
     expect(buildMoveOutRequest(target, { ...form, refund: "ten" })).toEqual({
       ok: false,
       message: "Refund must be a whole number of rupees from 0 to 10,000,000.",
+      field: "refund",
     });
     expect(buildMoveOutRequest(target, { ...form, deductions: "-5" })).toEqual({
       ok: false,
       message: "Deductions must be a whole number of rupees from 0 to 10,000,000.",
+      field: "deductions",
     });
   });
 });
@@ -435,6 +448,7 @@ describe("tenancy drafts", () => {
     expect(buildTenancyDraftRequest(draft)).toEqual({
       ok: false,
       message: "Advance must be a whole number of rupees from 0 to 10,000,000.",
+      field: "advance",
     });
   });
 });

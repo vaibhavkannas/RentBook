@@ -5,8 +5,11 @@ import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { Field, Input, TextArea } from "@/components/ui/Field";
 import { Notice } from "@/components/ui/Notice";
+import { SlowHint } from "@/components/ui/SlowHint";
 import { useToast } from "@/components/ui/Toast";
-import { postJson } from "@/lib/post-json";
+import { afterEdit, fieldProblem, plainMessage, plainProblem, problemAt, type FormProblem } from "@/lib/form-errors";
+import { sendJson } from "@/lib/post-json";
+import { sendFailureMessage } from "@/lib/request-copy";
 import { DETAILS_SAVED_TOAST } from "@/lib/toast-copy";
 import {
   buildTenancyDraftRequest,
@@ -20,8 +23,13 @@ import {
   pageAfterConflict,
   pageAfterSave,
   saveFailure,
+  TENANCY_NO_CONFIRMATION,
   type TenancyApiBody,
 } from "@/lib/tenancy-response";
+import { useFieldFocus } from "./useFieldFocus";
+
+/** The fields a message can be about, by the form's own names. */
+const FIELDS = ["phone", "moveIn", "agreementEnd", "advance", "advanceDate", "notes"];
 
 type Props = {
   /** What this form saves. An edit carries the updated-at the page was rendered with. */
@@ -49,7 +57,9 @@ export default function TenancyForm({ target, initial, noticeShown = false, mont
   const [open, setOpen] = useState(!editing);
   const [draft, setDraft] = useState(() => startDraft(target, initial));
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  // What is wrong: a message under the field it is about, or in the form's own box when it is about the form.
+  const [problem, setProblem] = useState<FormProblem | null>(null);
+  const field = useFieldFocus(problem);
   const [saved, setSaved] = useState(false);
   const editButton = useRef<HTMLButtonElement>(null);
   const wasOpen = useRef(open);
@@ -60,8 +70,9 @@ export default function TenancyForm({ target, initial, noticeShown = false, mont
     wasOpen.current = open;
   }, [open]);
 
-  const set = (patch: Partial<TenancyFormText>) => {
-    setError(null);
+  /** Changes a field. Typing in a field clears what was said about it. */
+  const set = (patch: Partial<TenancyFormText>, edited: keyof TenancyFormText) => {
+    setProblem((current) => afterEdit(current, edited));
     setDraft((current) => editDraft(current, patch));
   };
   const form = draft.form;
@@ -70,13 +81,13 @@ export default function TenancyForm({ target, initial, noticeShown = false, mont
     if (busy) return;
     const request = buildTenancyDraftRequest(draft);
     if (!request.ok) {
-      setError(request.message);
+      setProblem(fieldProblem(request.message, request.field, FIELDS));
       return;
     }
     setBusy(true);
-    setError(null);
-    const body = await postJson<TenancyApiBody>("/api/tenancies", request.body);
-    if (body?.ok) {
+    setProblem(null);
+    const sent = await sendJson<TenancyApiBody>("/api/tenancies", request.body);
+    if (sent.kind === "answer" && sent.body.ok) {
       applyPageMove(router, pageAfterSave(target.portionId, noticeShown, monthKey));
       toast.show(DETAILS_SAVED_TOAST);
       setSaved(true);
@@ -88,7 +99,11 @@ export default function TenancyForm({ target, initial, noticeShown = false, mont
       return;
     }
     setBusy(false);
-    const failure = saveFailure(body);
+    if (sent.kind !== "answer") {
+      setProblem(plainProblem(sendFailureMessage(sent, TENANCY_NO_CONFIRMATION)));
+      return;
+    }
+    const failure = saveFailure(sent.body, FIELDS);
     if (failure.refresh) {
       // The page behind the form is out of date. Open it again: it loads what is in the Sheet now and shows the
       // changed-just-now notice itself, so the notice does not go away when the page replaces this form. An edit
@@ -97,7 +112,7 @@ export default function TenancyForm({ target, initial, noticeShown = false, mont
       if (editing) setOpen(false);
       return;
     }
-    setError(failure.message);
+    setProblem(failure.problem);
   }
 
   // The create form stays disabled until the refreshed page replaces it, and says so. An edit form closes, and the toast
@@ -118,7 +133,7 @@ export default function TenancyForm({ target, initial, noticeShown = false, mont
             aria-label="Edit tenancy details"
             onClick={() => {
               setDraft(startDraft(target, initial));
-              setError(null);
+              setProblem(null);
               setSaved(false);
               setOpen(true);
             }}
@@ -128,6 +143,7 @@ export default function TenancyForm({ target, initial, noticeShown = false, mont
         </div>
       ) : (
         <form
+          noValidate
           aria-label={editing ? "Edit tenancy details" : "Add tenancy details"}
           className="mt-3 space-y-3"
           onSubmit={(event) => {
@@ -137,69 +153,81 @@ export default function TenancyForm({ target, initial, noticeShown = false, mont
         >
           {/* While the details are being saved no field can be edited. */}
           <fieldset disabled={busy} className="min-w-0 space-y-3">
-            <Field label="Phone">
+            <Field label="Phone" error={problemAt(problem, "phone")}>
               <Input
+                ref={field("phone")}
                 type="tel"
                 value={form.phone}
-                onChange={(event) => set({ phone: event.target.value })}
+                onChange={(event) => set({ phone: event.target.value }, "phone")}
                 autoComplete="off"
                 autoFocus={editing}
                 maxLength={30}
               />
             </Field>
 
-            <Field label="Move-in date" hint={editing ? undefined : "Change this if the tenant moved in earlier."}>
+            <Field
+              label="Move-in date"
+              hint={editing ? undefined : "Change this if the tenant moved in earlier."}
+              error={problemAt(problem, "moveIn")}
+            >
               <Input
+                ref={field("moveIn")}
                 type="date"
                 value={form.moveIn}
-                onChange={(event) => set({ moveIn: event.target.value })}
+                onChange={(event) => set({ moveIn: event.target.value }, "moveIn")}
                 required
               />
             </Field>
 
-            <Field label="Agreement end">
+            <Field label="Agreement end" error={problemAt(problem, "agreementEnd")}>
               <Input
+                ref={field("agreementEnd")}
                 type="date"
                 value={form.agreementEnd}
-                onChange={(event) => set({ agreementEnd: event.target.value })}
+                onChange={(event) => set({ agreementEnd: event.target.value }, "agreementEnd")}
               />
             </Field>
 
-            <Field label="Advance (₹)">
+            <Field label="Advance (₹)" error={problemAt(problem, "advance")}>
               <Input
+                ref={field("advance")}
                 value={form.advance}
-                onChange={(event) => set({ advance: event.target.value })}
+                onChange={(event) => set({ advance: event.target.value }, "advance")}
                 inputMode="numeric"
                 autoComplete="off"
               />
             </Field>
 
-            <Field label="Advance date">
+            <Field label="Advance date" error={problemAt(problem, "advanceDate")}>
               <Input
+                ref={field("advanceDate")}
                 type="date"
                 value={form.advanceDate}
-                onChange={(event) => set({ advanceDate: event.target.value })}
+                onChange={(event) => set({ advanceDate: event.target.value }, "advanceDate")}
               />
             </Field>
 
-            <Field label="Notes">
+            <Field label="Notes" error={problemAt(problem, "notes")}>
               <TextArea
+                ref={field("notes")}
                 value={form.notes}
-                onChange={(event) => set({ notes: event.target.value })}
+                onChange={(event) => set({ notes: event.target.value }, "notes")}
+                autoCapitalize="sentences"
                 rows={3}
                 maxLength={500}
               />
             </Field>
 
-            {error && (
+            {plainMessage(problem) && (
               <Notice tone="danger" role="alert">
-                {error}
+                {plainMessage(problem)}
               </Notice>
             )}
 
             <Button type="submit" size="lg" className="w-full" pending={busy} pendingLabel="Saving…">
               Save details
             </Button>
+            <SlowHint busy={busy} />
           </fieldset>
           {editing && (
             <Button
@@ -207,7 +235,7 @@ export default function TenancyForm({ target, initial, noticeShown = false, mont
               className="w-full"
               onClick={() => {
                 setOpen(false);
-                setError(null);
+                setProblem(null);
               }}
               disabled={busy}
             >

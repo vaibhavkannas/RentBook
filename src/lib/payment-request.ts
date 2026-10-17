@@ -5,7 +5,8 @@ export type PaymentRequestInput = {
   mode: "log" | "edit" | "new-tenant";
   monthKey: string;
   portionId: string;
-  amount: number;
+  /** The amount as typed. Blank and not-a-number are told apart, and each says so beside the amount field. */
+  amountText: string;
   dateReceived: string;
   tenantName: string;
   /** The person confirmed "Replace amount" after a duplicate warning. */
@@ -38,10 +39,17 @@ export type PaymentRequest =
         tenancy: TenancyFields | undefined;
       };
     }
-  | { ok: false; message: string };
+  /** `field` is the sheet's own name for the field the message is about (`amount`, `tenantName`), when there is one. */
+  | { ok: false; message: string; field?: string };
+
+/** Shown when the amount field is blank. */
+export const AMOUNT_BLANK_MESSAGE = "Enter the amount received.";
 
 /** Shown when the amount typed is not a number at all (text such as "5k", or "Infinity"). */
 export const AMOUNT_NOT_A_NUMBER_MESSAGE = "Enter the amount as a whole number.";
+
+/** Shown when a new tenant is being added and the name field is blank. */
+export const NEW_TENANT_NAME_BLANK_MESSAGE = "Enter the new tenant's name.";
 
 /**
  * The amount typed into the sheet as a number. Commas, spaces and a rupee sign are ignored, like in the other
@@ -68,12 +76,18 @@ export function existingEntryFrom(details: Record<string, unknown> | undefined):
 /**
  * The body of POST /api/payments. An edit, and a Replace after a duplicate warning, always say which entry the
  * person was shown, so the server can refuse them if someone else has since changed or undone that payment.
- * An amount that is not a number is refused here, before any request is sent. Whether it is a whole number of
- * rupees in range is for the server to say.
+ * A blank new-tenant name, a blank amount and an amount that is not a number are refused here, before any request is
+ * sent, each naming its field, in the order the fields are on the screen. Whether the amount is a whole number of rupees
+ * in range is for the server to say.
  */
 export function buildPaymentRequest(input: PaymentRequestInput): PaymentRequest {
+  if (input.mode === "new-tenant" && input.tenantName.trim() === "") {
+    return { ok: false, message: NEW_TENANT_NAME_BLANK_MESSAGE, field: "tenantName" };
+  }
+  if (input.amountText.replace(/[,\s₹]/g, "") === "") return { ok: false, message: AMOUNT_BLANK_MESSAGE, field: "amount" };
+  const amount = amountFromText(input.amountText);
   // JSON has no NaN or Infinity: they would reach the server as null and be refused with a message about the format.
-  if (!Number.isFinite(input.amount)) return { ok: false, message: AMOUNT_NOT_A_NUMBER_MESSAGE };
+  if (!Number.isFinite(amount)) return { ok: false, message: AMOUNT_NOT_A_NUMBER_MESSAGE, field: "amount" };
   const editing = input.mode === "edit";
   const replacing = editing || input.confirmedReplace;
   if (replacing && !input.seenEntry) {
@@ -87,7 +101,7 @@ export function buildPaymentRequest(input: PaymentRequestInput): PaymentRequest 
     body: {
       month: input.monthKey,
       portionId: input.portionId,
-      amount: input.amount,
+      amount,
       dateReceived: input.dateReceived,
       newTenantName: input.mode === "new-tenant" ? input.tenantName : undefined,
       overwrite: replacing ? true : undefined,

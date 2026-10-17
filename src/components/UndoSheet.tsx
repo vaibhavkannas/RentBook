@@ -5,10 +5,12 @@ import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { Notice } from "@/components/ui/Notice";
 import { Sheet } from "@/components/ui/Sheet";
+import { SlowHint } from "@/components/ui/SlowHint";
 import { useToast } from "@/components/ui/Toast";
 import type { PortionCard } from "@/lib/domain/types";
-import type { LogRetryResponse } from "@/lib/payment-request";
-import { postJson } from "@/lib/post-json";
+import { LOG_RETRY_UNCONFIRMED_MESSAGE, type LogRetryResponse } from "@/lib/payment-request";
+import { sendJson } from "@/lib/post-json";
+import { apiErrorMessage, sendFailureMessage, UNDO_NO_CONFIRMATION } from "@/lib/request-copy";
 import {
   undoConfirmationText,
   undoLogRetryFailureMessage,
@@ -29,9 +31,6 @@ type ApiBody = LogRetryResponse & {
   /** Present when the log entry did not save: the signed token to send back to retry it. */
   retryToken?: string;
 };
-
-const NO_CONFIRMATION =
-  "Couldn't confirm that the undo went through. Check your connection and refresh the page before trying again.";
 
 export default function UndoSheet({ monthKey, monthLabel, card, onClose }: Props) {
   const router = useRouter();
@@ -62,13 +61,14 @@ export default function UndoSheet({ monthKey, monthLabel, card, onClose }: Props
   async function undo() {
     setBusy(true);
     setError(null);
-    const body = await postJson<ApiBody>("/api/payments/undo", {
+    const sent = await sendJson<ApiBody>("/api/payments/undo", {
       month: monthKey,
       portionId: card.portionId,
       expected: entry,
     });
     setBusy(false);
-    if (!body) return setError(NO_CONFIRMATION);
+    if (sent.kind !== "answer") return setError(sendFailureMessage(sent, UNDO_NO_CONFIRMATION));
+    const body = sent.body;
     if (body.ok) {
       router.refresh();
       if (body.logWritten === false) return setPendingToken(body.retryToken ?? "");
@@ -78,16 +78,21 @@ export default function UndoSheet({ monthKey, monthLabel, card, onClose }: Props
       router.refresh();
       return setConflicted(true);
     }
-    setError(body.error?.message ?? "Something went wrong. Try again.");
+    setError(apiErrorMessage(body.error));
   }
 
   async function retryLog() {
     setBusy(true);
     setError(null);
-    const body = await postJson<ApiBody>("/api/payments/log-retry", { token: pendingToken });
+    const sent = await sendJson<ApiBody>("/api/payments/log-retry", { token: pendingToken });
     setBusy(false);
+    const body = sent.kind === "answer" ? sent.body : null;
     if (body?.ok && body.logWritten) return done();
-    setError(undoLogRetryFailureMessage(body));
+    setError(
+      sent.kind === "answer"
+        ? undoLogRetryFailureMessage(body)
+        : sendFailureMessage(sent, LOG_RETRY_UNCONFIRMED_MESSAGE),
+    );
   }
 
   return (
@@ -134,6 +139,7 @@ export default function UndoSheet({ monthKey, monthLabel, card, onClose }: Props
           >
             Skip for now
           </Button>
+          <SlowHint busy={busy} />
         </div>
       ) : (
         <div className="mt-4 space-y-3">
@@ -166,6 +172,7 @@ export default function UndoSheet({ monthKey, monthLabel, card, onClose }: Props
           <Button ref={safeButton} variant="quiet" className="w-full" onClick={onClose} disabled={busy}>
             {conflicted ? "Close" : "Keep"}
           </Button>
+          <SlowHint busy={busy} />
         </div>
       )}
     </Sheet>

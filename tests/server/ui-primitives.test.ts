@@ -281,6 +281,13 @@ describe("LiveNotice", () => {
     const out = html(createElement(LiveNotice, { tone: "warn", className: "mt-4" }, "Details weren't saved."));
     expect(out).toBe(`<div role="status" class="${noticeClasses("warn")} mt-4">Details weren&#x27;t saved.</div>`);
   });
+
+  it("can take a class for the time it is empty, for a region that must not add room (emptyClassName), and drops it when it speaks", () => {
+    expect(html(createElement(LiveNotice, { tone: "warn", emptyClassName: "-mt-3" }))).toBe('<div role="status" class="-mt-3"></div>');
+    expect(html(createElement(LiveNotice, { tone: "warn", emptyClassName: "-mt-3" }, "Still working."))).toBe(
+      `<div role="status" class="${noticeClasses("warn")}">Still working.</div>`,
+    );
+  });
 });
 
 describe("Pill", () => {

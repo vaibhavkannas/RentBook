@@ -19,11 +19,11 @@ const portions: PortionConfig[] = [
 const html = renderToStaticMarkup(createElement(SettingsForm, { portions }));
 
 describe("SettingsForm", () => {
-  it("draws each portion as a card (a fieldset with a hidden legend) holding Name, Cycle length, Hike % and a checkbox", () => {
+  it("draws each portion as a card (a fieldset with a hidden legend) holding Portion name, Payments per cycle, Hike at each new cycle (%) and a checkbox", () => {
     expect(html.match(new RegExp(`<fieldset class="${CARD}`, "g"))).toHaveLength(2);
     expect(html).toContain('<legend class="sr-only">Settings for Ground floor</legend>');
-    for (const label of ["Name", "Cycle length", "Hike %"]) {
-      expect(html.match(new RegExp(`<span class="text-muted">${label}</span>`, "g"))).toHaveLength(2);
+    for (const label of ["Portion name", "Payments per cycle", "Hike at each new cycle (%)"]) {
+      expect(html.match(new RegExp(`<span class="text-muted">${label.replace(/[()]/g, "\\$&")}</span>`, "g"))).toHaveLength(2);
     }
     expect(html.match(/type="checkbox"/g)).toHaveLength(2);
     expect(html.match(/Count never resets/g)).toHaveLength(2);
@@ -53,6 +53,8 @@ describe("SettingsForm", () => {
   it("ends in a 48 px Save settings button, and shows no message before anything is saved", () => {
     expect(html).toContain(`<button type="submit" class="${buttonClasses("primary", "lg")} w-full">Save settings</button>`);
     expect(html).not.toContain('role="alert"');
-    expect(html).not.toContain('role="status"');
+    // the only status region is the empty one for "Still working", under the button
+    expect(html.match(/role="status"/g)).toHaveLength(1);
+    expect(html).toContain('<div role="status" class="-mt-3"></div>');
   });
 });

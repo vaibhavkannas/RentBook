@@ -69,13 +69,15 @@ describe("the settings loading screen", () => {
     expect(out.match(new RegExp(`class="${CARD}`, "g"))).toHaveLength(2);
   });
 
-  it("lays each card out like the real one: a name field, the cycle and hike fields side by side, and the tick box row", () => {
+  it("lays each card out like the real one: the name, payments per cycle with its hint and the hike one under the other, and the tick box row", () => {
     const cards = out.split(`class="${CARD} space-y-2"`).slice(1);
     expect(cards).toHaveLength(2);
     for (const card of cards) {
-      expect(card).toContain("grid grid-cols-2 gap-3");
-      // each field has a 20 px label bar over its control
+      // one under the other: the labels and the hint are too long for half a phone's width
+      expect(card).not.toContain("grid-cols-2");
+      // each field has a 20 px label bar over its control, and payments per cycle a hint of two lines under it
       expect(card.match(/\bh-5\b/g)!.length).toBeGreaterThanOrEqual(3);
+      expect(card.match(/\bh-10\b/g)).toHaveLength(1);
       // the "Count never resets" row is at least 44 px tall, with a 20 px box
       expect(card).toMatch(/min-h-11/);
       expect(card).toMatch(/\bsize-5\b/);

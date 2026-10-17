@@ -5,9 +5,12 @@ import { useEffect, useId, useRef, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { Field, Input, Select, TextArea } from "@/components/ui/Field";
 import { Notice } from "@/components/ui/Notice";
+import { SlowHint } from "@/components/ui/SlowHint";
 import { useToast } from "@/components/ui/Toast";
 import type { AdvanceStatus } from "@/lib/domain/tenancy";
-import { postJson } from "@/lib/post-json";
+import { afterEdit, fieldProblem, plainMessage, plainProblem, problemAt, type FormProblem } from "@/lib/form-errors";
+import { sendJson } from "@/lib/post-json";
+import { sendFailureMessage } from "@/lib/request-copy";
 import { moveOutToastText } from "@/lib/toast-copy";
 import {
   buildMoveOutDraftRequest,
@@ -21,9 +24,14 @@ import {
   pageAfterConflict,
   pageAfterSave,
   saveFailure,
+  TENANCY_NO_CONFIRMATION,
   type TenancyApiBody,
 } from "@/lib/tenancy-response";
 import { MOVE_OUT_OUTCOME_HINT, MOVE_OUT_RUPEES_HINT } from "@/lib/tenancy-view";
+import { useFieldFocus } from "./useFieldFocus";
+
+/** The fields a message can be about, by the form's own names. */
+const FIELDS = ["moveOut", "refund", "deductions"];
 
 type Props = {
   /** The tenancy being closed, as the page was rendered. */
@@ -60,7 +68,9 @@ export default function MoveOutForm({ target, initial, tenant, portionId, notice
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState(() => startDraft(target, initial));
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  // What is wrong: a message under the field it is about, or in the form's own box when it is about the form.
+  const [problem, setProblem] = useState<FormProblem | null>(null);
+  const field = useFieldFocus(problem);
   const rupeesHint = useId();
   const openButton = useRef<HTMLButtonElement>(null);
   const wasOpen = useRef(open);
@@ -71,8 +81,9 @@ export default function MoveOutForm({ target, initial, tenant, portionId, notice
     wasOpen.current = open;
   }, [open]);
 
-  const set = (patch: Partial<MoveOutFormText>) => {
-    setError(null);
+  /** Changes a field. Typing in a field clears what was said about it. */
+  const set = (patch: Partial<MoveOutFormText>, edited: keyof MoveOutFormText) => {
+    setProblem((current) => afterEdit(current, edited));
     setDraft((current) => editDraft(current, patch));
   };
   const form = draft.form;
@@ -81,20 +92,24 @@ export default function MoveOutForm({ target, initial, tenant, portionId, notice
     if (busy) return;
     const request = buildMoveOutDraftRequest(draft);
     if (!request.ok) {
-      setError(request.message);
+      setProblem(fieldProblem(request.message, request.field, FIELDS));
       return;
     }
     setBusy(true);
-    setError(null);
-    const body = await postJson<TenancyApiBody>("/api/tenancies/move-out", request.body);
-    if (body?.ok) {
+    setProblem(null);
+    const sent = await sendJson<TenancyApiBody>("/api/tenancies/move-out", request.body);
+    if (sent.kind === "answer" && sent.body.ok) {
       // The refreshed page shows the tenancy as a past one and replaces this form. Until then it stays disabled.
       applyPageMove(router, pageAfterSave(portionId, noticeShown, monthKey));
       toast.show(moveOutToastText(tenant));
       return;
     }
     setBusy(false);
-    const failure = saveFailure(body);
+    if (sent.kind !== "answer") {
+      setProblem(plainProblem(sendFailureMessage(sent, TENANCY_NO_CONFIRMATION)));
+      return;
+    }
+    const failure = saveFailure(sent.body, FIELDS);
     if (failure.refresh) {
       // The page behind the form is out of date. Open it again: it loads what is in the Sheet now and shows the
       // changed-just-now notice itself, so the notice does not go away when the page replaces this form. The form
@@ -103,7 +118,7 @@ export default function MoveOutForm({ target, initial, tenant, portionId, notice
       setOpen(false);
       return;
     }
-    setError(failure.message);
+    setProblem(failure.problem);
   }
 
   return (
@@ -115,7 +130,7 @@ export default function MoveOutForm({ target, initial, tenant, portionId, notice
           className="mt-3"
           onClick={() => {
             setDraft(startDraft(target, initial));
-            setError(null);
+            setProblem(null);
             setOpen(true);
           }}
           aria-label={`Move out ${tenant}`}
@@ -124,6 +139,7 @@ export default function MoveOutForm({ target, initial, tenant, portionId, notice
         </Button>
       ) : (
         <form
+          noValidate
           aria-label={`Move out ${tenant}`}
           className="mt-3 space-y-3"
           onSubmit={(event) => {
@@ -133,11 +149,12 @@ export default function MoveOutForm({ target, initial, tenant, portionId, notice
         >
           {/* While the move-out is being saved no field can be edited. */}
           <fieldset disabled={busy} className="min-w-0 space-y-3">
-            <Field label="Move-out date">
+            <Field label="Move-out date" error={problemAt(problem, "moveOut")}>
               <Input
+                ref={field("moveOut")}
                 type="date"
                 value={form.moveOut}
-                onChange={(event) => set({ moveOut: event.target.value })}
+                onChange={(event) => set({ moveOut: event.target.value }, "moveOut")}
                 required
                 autoFocus
               />
@@ -147,7 +164,7 @@ export default function MoveOutForm({ target, initial, tenant, portionId, notice
               <Field label="What happened to the advance?" hint={MOVE_OUT_OUTCOME_HINT}>
                 <Select
                   value={form.advanceStatus}
-                  onChange={(event) => set({ advanceStatus: event.target.value as AdvanceStatus })}
+                  onChange={(event) => set({ advanceStatus: event.target.value as AdvanceStatus }, "advanceStatus")}
                 >
                   {OUTCOMES.map((outcome) => (
                     <option key={outcome.value} value={outcome.value}>
@@ -160,20 +177,22 @@ export default function MoveOutForm({ target, initial, tenant, portionId, notice
 
             {/* One hint covers both amounts, so each field points at it. */}
             <div>
-              <Field label="Refund (₹)">
+              <Field label="Refund (₹)" error={problemAt(problem, "refund")}>
                 <Input
+                  ref={field("refund")}
                   value={form.refund}
-                  onChange={(event) => set({ refund: event.target.value })}
+                  onChange={(event) => set({ refund: event.target.value }, "refund")}
                   inputMode="numeric"
                   autoComplete="off"
                   aria-describedby={rupeesHint}
                 />
               </Field>
               <div className="mt-3">
-                <Field label="Deductions (₹)">
+                <Field label="Deductions (₹)" error={problemAt(problem, "deductions")}>
                   <Input
+                    ref={field("deductions")}
                     value={form.deductions}
-                    onChange={(event) => set({ deductions: event.target.value })}
+                    onChange={(event) => set({ deductions: event.target.value }, "deductions")}
                     inputMode="numeric"
                     autoComplete="off"
                     aria-describedby={rupeesHint}
@@ -188,28 +207,30 @@ export default function MoveOutForm({ target, initial, tenant, portionId, notice
             <Field label="Notes">
               <TextArea
                 value={form.notes}
-                onChange={(event) => set({ notes: event.target.value })}
+                onChange={(event) => set({ notes: event.target.value }, "notes")}
+                autoCapitalize="sentences"
                 rows={3}
                 maxLength={500}
               />
             </Field>
 
-            {error && (
+            {plainMessage(problem) && (
               <Notice tone="danger" role="alert">
-                {error}
+                {plainMessage(problem)}
               </Notice>
             )}
 
             <Button type="submit" size="lg" className="w-full" pending={busy} pendingLabel="Saving…">
               Record move-out
             </Button>
+            <SlowHint busy={busy} />
           </fieldset>
           <Button
             variant="quiet"
             className="w-full"
             onClick={() => {
               setOpen(false);
-              setError(null);
+              setProblem(null);
             }}
             disabled={busy}
           >

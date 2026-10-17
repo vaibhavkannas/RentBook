@@ -367,12 +367,16 @@ describe("updateSettings", () => {
         { id: "p2", name: "", cycleLength: 12, hikePercent: 5 },
       ]),
     ).rejects.toThrow(/Portion name/);
+    // the words the screen uses for the fields, and the field (in the request's own path) so the screen can show them beside it
     await expect(
       updateSettings(fake, [{ id: "p1", name: "A", cycleLength: 0, hikePercent: 5 }]),
-    ).rejects.toThrow(/Cycle length/);
+    ).rejects.toMatchObject({ message: "Payments per cycle must be a whole number from 1 to 120.", details: { field: "portions.0.cycleLength" } });
     await expect(
-      updateSettings(fake, [{ id: "p1", name: "A", cycleLength: 11, hikePercent: 101 }]),
-    ).rejects.toThrow(/Hike/);
+      updateSettings(fake, [
+        { id: "p1", name: "A", cycleLength: 11, hikePercent: 5 },
+        { id: "p2", name: "B", cycleLength: 11, hikePercent: 101 },
+      ]),
+    ).rejects.toMatchObject({ message: "Hike must be a number from 0 to 100.", details: { field: "portions.1.hikePercent" } });
     await expect(
       updateSettings(fake, [{ id: "zz", name: "A", cycleLength: 11, hikePercent: 5 }]),
     ).rejects.toThrow("That portion isn't in your Settings any more. Refresh the page.");

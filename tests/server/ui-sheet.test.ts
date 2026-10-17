@@ -202,7 +202,7 @@ describe("PaymentSheet on Sheet", () => {
   it("labels its fields, takes focus in the amount field, and saves with a 48 px button", () => {
     const out = html(createElement(PaymentSheet, { ...props, mode: "log" }));
     expect(out).toMatch(/<label for="[^"]+" class="block text-sm"><span class="text-muted">Amount received \(₹\)<\/span><input [^>]*autofocus=""/i);
-    expect(out).toMatch(/<button type="submit"[^>]*class="[^"]*\bmin-h-12\b[^"]*"[^>]*>Save to sheet<\/button>/);
+    expect(out).toMatch(/<button type="submit"[^>]*class="[^"]*\bmin-h-12\b[^"]*"[^>]*>Save to Sheet<\/button>/);
   });
 
   it("keeps the Close button at least 44 px square, as a muted IconButton that gives press feedback", () => {

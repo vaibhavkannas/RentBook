@@ -4,6 +4,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { PortionCard } from "@/lib/domain/types";
 import type { ActivityItem } from "@/lib/sheets/service";
+import { renderOpen as renderOpenWith } from "../support/render-open";
 import { smallTargets, smallTextControls, unpressedTargets } from "../support/tap-targets";
 import { withoutComments } from "../support/source-scan";
 
@@ -12,9 +13,6 @@ import { withoutComments } from "../support/source-scan";
 
 const state = vi.hoisted(() => ({
   pathname: "/",
-  // See renderOpen: the first useState of a component, forced to true for one render.
-  openFirst: false,
-  stateCalls: 0,
   getViewer: vi.fn(),
   readActivity: vi.fn(),
 }));
@@ -34,17 +32,7 @@ vi.mock("@/lib/server/auth-guard", () => ({ getViewer: state.getViewer }));
 vi.mock("@/lib/server/context", () => ({ getSheetsContext: () => ({}) }));
 vi.mock("@/lib/server/freshness", () => ({ readWrittenAt: async () => undefined }));
 vi.mock("@/lib/sheets/service", () => ({ readActivity: state.readActivity }));
-vi.mock("react", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("react")>();
-  return {
-    ...actual,
-    useState: ((initial: unknown) => {
-      state.stateCalls += 1;
-      if (state.openFirst && state.stateCalls === 1) return [true, () => {}];
-      return actual.useState(initial);
-    }) as unknown as typeof actual.useState,
-  };
-});
+vi.mock("react", async (importOriginal) => (await import("../support/render-open")).mockReact(await importOriginal()));
 
 import ActivityPage from "@/app/activity/page";
 import { metadata, viewport } from "@/app/layout";
@@ -64,20 +52,8 @@ import { pageClasses } from "@/lib/ui-classes";
 
 const source = (path: string) => readFileSync(new URL(`../../${path}`, import.meta.url), "utf8");
 const html = (element: Parameters<typeof renderToStaticMarkup>[0]) => renderToStaticMarkup(element);
-
-/**
- * A form that opens when a button is pressed has no way to open in a render on the server, so the first useState of the
- * component (its `open` flag, declared first in both forms) is answered with true, for this one render.
- */
-function renderOpen(element: Parameters<typeof renderToStaticMarkup>[0]): string {
-  state.openFirst = true;
-  state.stateCalls = 0;
-  try {
-    return html(element);
-  } finally {
-    state.openFirst = false;
-  }
-}
+/** A form that opens when a button is pressed, rendered open (see tests/support/render-open.ts). */
+const renderOpen = (element: Parameters<typeof renderToStaticMarkup>[0]) => renderOpenWith(() => html(element));
 
 async function renderPage(page: ReactElement | Promise<ReactElement>): Promise<string> {
   const element = await page;

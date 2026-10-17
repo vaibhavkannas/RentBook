@@ -32,16 +32,19 @@ const hasContent = (children: ReactNode) => Children.toArray(children).some((chi
 export function LiveNotice({
   tone,
   className,
+  emptyClassName,
   children,
 }: {
   tone: Tone;
   /** Layout only: a margin, applied together with the box. */
   className?: string;
+  /** Layout only: a class for the time it is empty (a region that must not add room). */
+  emptyClassName?: string;
   children?: ReactNode;
 }) {
   const filled = hasContent(children);
   return (
-    <div role="status" className={filled ? cx(noticeClasses(tone), className) : undefined}>
+    <div role="status" className={filled ? cx(noticeClasses(tone), className) : emptyClassName}>
       {filled ? children : null}
     </div>
   );

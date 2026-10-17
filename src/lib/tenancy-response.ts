@@ -1,4 +1,5 @@
 import { withMonth } from "@/lib/app-nav";
+import { plainProblem, serverProblem, type FormProblem } from "@/lib/form-errors";
 
 /** How the tenant forms describe a save that did not succeed. Pure, so the wording can be tested. */
 
@@ -15,18 +16,22 @@ export const TENANCY_NO_CONFIRMATION =
 /** The JSON the tenancy routes answer with. */
 export type TenancyApiBody = {
   ok: boolean;
-  error?: { code: string; message: string };
+  error?: { code: string; message: string; details?: Record<string, unknown> };
 };
 
 /**
- * What to tell the person, and whether the page behind the form is out of date.
+ * What to tell the person, and whether the page behind the form is out of date. The message goes beside the field the
+ * server named when the form (`known`, its own field names) has that field, else in the form's own box.
  * `null` means no answer arrived (a network failure).
  */
-export function saveFailure(body: TenancyApiBody | null): { message: string; refresh: boolean } {
-  if (body === null) return { message: TENANCY_NO_CONFIRMATION, refresh: false };
+export function saveFailure(
+  body: TenancyApiBody | null,
+  known: readonly string[],
+): { problem: FormProblem; refresh: boolean } {
+  if (body === null) return { problem: plainProblem(TENANCY_NO_CONFIRMATION), refresh: false };
   const error = body.error;
-  if (error?.code === "conflict") return { message: TENANCY_CONFLICT_MESSAGE, refresh: true };
-  return { message: error?.message ?? "Something went wrong. Try again.", refresh: false };
+  if (error?.code === "conflict") return { problem: plainProblem(TENANCY_CONFLICT_MESSAGE), refresh: true };
+  return { problem: serverProblem(error, known), refresh: false };
 }
 
 /**

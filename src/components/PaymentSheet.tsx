@@ -7,22 +7,37 @@ import { Field, Input, Select } from "@/components/ui/Field";
 import { IconButton } from "@/components/ui/IconButton";
 import { LiveNotice, Notice } from "@/components/ui/Notice";
 import { Sheet } from "@/components/ui/Sheet";
+import { SlowHint } from "@/components/ui/SlowHint";
 import { useToast } from "@/components/ui/Toast";
 import { HIKE_ROUNDING_ALLOWANCE, roundedChoices } from "@/lib/domain/rent-rules";
 import type { TenancyFields } from "@/lib/domain/tenancy";
 import type { PortionCard, PortionEntry } from "@/lib/domain/types";
+import {
+  afterEdit,
+  fieldProblem,
+  isDetailField,
+  NEW_TENANT_DETAIL_FIELDS,
+  plainMessage,
+  plainProblem,
+  problemAt,
+  serverProblem,
+  type FormProblem,
+} from "@/lib/form-errors";
 import { formatRupees } from "@/lib/format";
 import {
   amountFromText,
   buildPaymentRequest,
   existingEntryFrom,
+  LOG_RETRY_UNCONFIRMED_MESSAGE,
   logRetryFailureMessage,
   paymentOutcome,
   TENANCY_NOT_SAVED_MESSAGE,
 } from "@/lib/payment-request";
-import { postJson } from "@/lib/post-json";
+import { sendJson } from "@/lib/post-json";
+import { PAYMENT_NO_CONFIRMATION, sendFailureMessage } from "@/lib/request-copy";
 import { exitToastText, paymentToasts, type PaymentToasts } from "@/lib/toast-copy";
 import { newTenantDetails, type NewTenantDetailsForm } from "@/lib/tenancy-input";
+import { useFieldFocus } from "./useFieldFocus";
 
 export type SheetMode = "log" | "edit" | "new-tenant";
 
@@ -48,8 +63,9 @@ type ApiBody = {
 /** What the sheet still has to tell the person after the payment was saved. */
 type AfterSave = { retryToken: string | null; tenancyNotSaved: boolean };
 
-const NO_CONFIRMATION =
-  "Couldn't confirm that the save went through. Check your connection and refresh the page before trying again.";
+/** The fields a message can be about, by the sheet's own names: the ones logging and editing have, and those the New tenant sheet adds. */
+const LOG_FIELDS = ["amount", "date"];
+const NEW_TENANT_FIELDS = ["portion", "tenantName", ...LOG_FIELDS, ...NEW_TENANT_DETAIL_FIELDS];
 
 export default function PaymentSheet({
   mode,
@@ -80,7 +96,10 @@ export default function PaymentSheet({
   const [date, setDate] = useState(defaultDate);
   const [tenantName, setTenantName] = useState("");
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  // What is wrong: a message beside the field it is about, or in the sheet's own box when it is about the sheet.
+  const [problem, setProblem] = useState<FormProblem | null>(null);
+  const field = useFieldFocus(problem);
+  const known = mode === "new-tenant" ? NEW_TENANT_FIELDS : LOG_FIELDS;
   // The payment a duplicate warning named: the Replace it offers is checked against this entry.
   const [conflict, setConflict] = useState<PortionEntry | null>(null);
   const [notice, setNotice] = useState<AfterSave | null>(null);
@@ -97,8 +116,17 @@ export default function PaymentSheet({
     phone: "",
   });
   const [detailsOpen, setDetailsOpen] = useState(false);
-  const setDetail = (patch: Partial<NewTenantDetailsForm>) =>
-    setDetails((current) => ({ ...current, ...patch }));
+  const setDetail = (name: keyof NewTenantDetailsForm, value: string) => {
+    clear(name);
+    setDetails((current) => ({ ...current, [name]: value }));
+  };
+  /** Typing in a field clears what was said about it. */
+  const clear = (name: string) => setProblem((current) => afterEdit(current, name));
+  /** Shows a problem; the details are in a box that starts closed, so a problem inside it opens it. */
+  const show = (next: FormProblem) => {
+    if (isDetailField(next.field)) setDetailsOpen(true);
+    setProblem(next);
+  };
 
   const title =
     mode === "new-tenant" ? "New tenant" : mode === "edit" ? "Edit amount" : "Log payment";
@@ -112,35 +140,36 @@ export default function PaymentSheet({
   const finish = () => finishWith(notice?.retryToken == null);
 
   async function submit(overwrite: boolean) {
-    if (!card) return setError("Choose a portion first.");
+    if (!card) return show(fieldProblem("Choose a portion first.", "portion", known));
     // The sheet decides whether tenancy details are sent: only when the person filled in or changed something.
     let tenancy: TenancyFields | undefined;
+    let detailsProblem: FormProblem | null = null;
     if (mode === "new-tenant") {
       const parsed = newTenantDetails(details, defaultDate);
-      if (!parsed.ok) {
-        setDetailsOpen(true);
-        return setError(parsed.message);
-      }
-      tenancy = parsed.tenancy;
+      if (parsed.ok) tenancy = parsed.tenancy;
+      else detailsProblem = fieldProblem(parsed.message, parsed.field, known);
     }
     const request = buildPaymentRequest({
       mode,
       monthKey,
       portionId,
-      amount: amountFromText(amount),
+      amountText: amount,
       dateReceived: date,
       tenantName,
       confirmedReplace: overwrite,
       seenEntry: seenEntry ?? (overwrite ? (conflict ?? undefined) : undefined),
       tenancy,
     });
-    if (!request.ok) return setError(request.message);
+    // The first thing wrong, in the order the fields are on the screen: the tenant's name and the amount, then the details box.
+    if (!request.ok) return show(fieldProblem(request.message, request.field, known));
+    if (detailsProblem) return show(detailsProblem);
     setBusy(true);
-    setError(null);
-    const body = await postJson<ApiBody>("/api/payments", request.body);
+    setProblem(null);
+    const sent = await sendJson<ApiBody>("/api/payments", request.body);
     setBusy(false);
 
-    if (!body) return setError(NO_CONFIRMATION);
+    if (sent.kind !== "answer") return show(plainProblem(sendFailureMessage(sent, PAYMENT_NO_CONFIRMATION)));
+    const body = sent.body;
     if (body.ok) {
       router.refresh();
       const toasts = paymentToasts({
@@ -159,28 +188,33 @@ export default function PaymentSheet({
       setDoneToasts(toasts);
       return setNotice({ retryToken: outcome.retryToken, tenancyNotSaved: outcome.tenancyNotSaved });
     }
-    const failure = body.error ?? { code: "unknown", message: "Something went wrong. Try again." };
-    const duplicate = failure.code === "conflict" ? existingEntryFrom(failure.details) : null;
+    const failure = body.error;
+    const duplicate = failure?.code === "conflict" ? existingEntryFrom(failure.details) : null;
     if (duplicate) return setConflict(duplicate);
     // Someone else changed this payment, so the screen behind this sheet is out of date.
-    if (failure.code === "conflict") router.refresh();
+    if (failure?.code === "conflict") router.refresh();
     // The details are in the collapsed section, so open it when the server found something wrong in them.
-    if (failure.code === "validation" && request.body.tenancy) setDetailsOpen(true);
-    setError(failure.message);
+    if (failure?.code === "validation" && request.body.tenancy) setDetailsOpen(true);
+    show(serverProblem(failure, known));
   }
 
   async function retryLog() {
     if (notice?.retryToken == null) return;
     setBusy(true);
-    setError(null);
-    const body = await postJson<ApiBody>("/api/payments/log-retry", { token: notice.retryToken });
+    setProblem(null);
+    const sent = await sendJson<ApiBody>("/api/payments/log-retry", { token: notice.retryToken });
     setBusy(false);
+    const body = sent.kind === "answer" ? sent.body : null;
     if (body?.ok && body.logWritten) {
       // The log entry is saved now; the tenancy warning, if any, still has to be seen.
       if (notice.tenancyNotSaved) return setNotice({ retryToken: null, tenancyNotSaved: true });
       return finishWith(true);
     }
-    setError(logRetryFailureMessage(body));
+    setProblem(
+      plainProblem(
+        sent.kind === "answer" ? logRetryFailureMessage(body) : sendFailureMessage(sent, LOG_RETRY_UNCONFIRMED_MESSAGE),
+      ),
+    );
   }
 
   return (
@@ -210,9 +244,9 @@ export default function PaymentSheet({
           {notice.retryToken !== null && (
             <Notice tone="warn">Saved to your Schedule, but the Payments Log entry didn&apos;t save.</Notice>
           )}
-          {error && (
+          {problem && (
             <p role="alert" className="text-sm text-danger-ink">
-              {error}
+              {problem.message}
             </p>
           )}
           {notice.retryToken !== null ? (
@@ -235,6 +269,7 @@ export default function PaymentSheet({
               Close
             </Button>
           )}
+          <SlowHint busy={busy} />
         </div>
       ) : conflict ? (
         <div className="mt-4 space-y-3">
@@ -243,9 +278,9 @@ export default function PaymentSheet({
             {conflict.tenant ? ` (${conflict.tenant})` : ""}. Replace it with {formatRupees(amountFromText(amount))}
             {mode === "new-tenant" ? ` and start ${tenantName.trim() || "the new tenant"} at payment 1` : ""}?
           </Notice>
-          {error && (
+          {problem && (
             <Notice tone="danger" role="alert">
-              {error}
+              {problem.message}
             </Notice>
           )}
           <Button
@@ -262,15 +297,17 @@ export default function PaymentSheet({
             className="w-full"
             onClick={() => {
               setConflict(null);
-              setError(null);
+              setProblem(null);
             }}
             disabled={busy}
           >
             Go back
           </Button>
+          <SlowHint busy={busy} />
         </div>
       ) : (
         <form
+          noValidate
           onSubmit={(event) => {
             event.preventDefault();
             void submit(false);
@@ -280,8 +317,16 @@ export default function PaymentSheet({
           <fieldset disabled={busy} className="mt-4 min-w-0 space-y-3">
             {mode === "new-tenant" && (
               <>
-                <Field label="Portion">
-                  <Select value={portionId} onChange={(event) => setPortionId(event.target.value)} required>
+                <Field label="Portion" error={problemAt(problem, "portion")}>
+                  <Select
+                    ref={field("portion")}
+                    value={portionId}
+                    onChange={(event) => {
+                      clear("portion");
+                      setPortionId(event.target.value);
+                    }}
+                    required
+                  >
                     <option value="" disabled>
                       Choose a portion
                     </option>
@@ -292,11 +337,18 @@ export default function PaymentSheet({
                     ))}
                   </Select>
                 </Field>
-                <Field label="Tenant name">
+                <Field label="Tenant name" error={problemAt(problem, "tenantName")}>
                   <Input
+                    ref={field("tenantName")}
                     value={tenantName}
-                    onChange={(event) => setTenantName(event.target.value)}
+                    onChange={(event) => {
+                      clear("tenantName");
+                      setTenantName(event.target.value);
+                    }}
                     autoComplete="off"
+                    autoCapitalize="words"
+                    spellCheck={false}
+                    enterKeyHint="next"
                     autoFocus
                     required
                     maxLength={60}
@@ -332,19 +384,34 @@ export default function PaymentSheet({
               </Notice>
             )}
 
-            <Field label="Amount received (₹)">
+            <Field label="Amount received (₹)" error={problemAt(problem, "amount")}>
               <Input
+                ref={field("amount")}
                 large
                 value={amount}
-                onChange={(event) => setAmount(event.target.value)}
+                onChange={(event) => {
+                  clear("amount");
+                  setAmount(event.target.value);
+                }}
                 inputMode="numeric"
+                enterKeyHint="done"
+                autoComplete="off"
                 autoFocus={mode !== "new-tenant"}
                 required
               />
             </Field>
 
-            <Field label="Date received">
-              <Input type="date" value={date} onChange={(event) => setDate(event.target.value)} required />
+            <Field label="Date received" error={problemAt(problem, "date")}>
+              <Input
+                ref={field("date")}
+                type="date"
+                value={date}
+                onChange={(event) => {
+                  clear("date");
+                  setDate(event.target.value);
+                }}
+                required
+              />
             </Field>
 
             {mode === "log" && card?.next && (
@@ -378,40 +445,45 @@ export default function PaymentSheet({
                   </svg>
                 </summary>
                 <div className="space-y-3 pb-3">
-                  <Field label="Move-in date">
+                  <Field label="Move-in date" error={problemAt(problem, "moveIn")}>
                     <Input
+                      ref={field("moveIn")}
                       type="date"
                       value={details.moveIn}
-                      onChange={(event) => setDetail({ moveIn: event.target.value })}
+                      onChange={(event) => setDetail("moveIn", event.target.value)}
                     />
                   </Field>
-                  <Field label="Advance (₹)">
+                  <Field label="Advance (₹)" error={problemAt(problem, "advance")}>
                     <Input
+                      ref={field("advance")}
                       value={details.advance}
-                      onChange={(event) => setDetail({ advance: event.target.value })}
+                      onChange={(event) => setDetail("advance", event.target.value)}
                       inputMode="numeric"
                       autoComplete="off"
                     />
                   </Field>
-                  <Field label="Advance date">
+                  <Field label="Advance date" error={problemAt(problem, "advanceDate")}>
                     <Input
+                      ref={field("advanceDate")}
                       type="date"
                       value={details.advanceDate}
-                      onChange={(event) => setDetail({ advanceDate: event.target.value })}
+                      onChange={(event) => setDetail("advanceDate", event.target.value)}
                     />
                   </Field>
-                  <Field label="Agreement end">
+                  <Field label="Agreement end" error={problemAt(problem, "agreementEnd")}>
                     <Input
+                      ref={field("agreementEnd")}
                       type="date"
                       value={details.agreementEnd}
-                      onChange={(event) => setDetail({ agreementEnd: event.target.value })}
+                      onChange={(event) => setDetail("agreementEnd", event.target.value)}
                     />
                   </Field>
-                  <Field label="Phone">
+                  <Field label="Phone" error={problemAt(problem, "phone")}>
                     <Input
+                      ref={field("phone")}
                       type="tel"
                       value={details.phone}
-                      onChange={(event) => setDetail({ phone: event.target.value })}
+                      onChange={(event) => setDetail("phone", event.target.value)}
                       autoComplete="off"
                       maxLength={30}
                     />
@@ -420,15 +492,16 @@ export default function PaymentSheet({
               </details>
             )}
 
-            {error && (
+            {plainMessage(problem) && (
               <Notice tone="danger" role="alert">
-                {error}
+                {plainMessage(problem)}
               </Notice>
             )}
 
             <Button type="submit" size="lg" className="w-full" pending={busy} pendingLabel="Saving…">
-              Save to sheet
+              Save to Sheet
             </Button>
+            <SlowHint busy={busy} />
           </fieldset>
         </form>
       )}

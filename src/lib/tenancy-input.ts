@@ -5,18 +5,21 @@ import { MAX_RUPEES, type AdvanceStatus, type Tenancy, type TenancyFields } from
  * sent, and what is wrong, live here so they can be tested. The server checks everything again.
  */
 
-export type RupeesResult = { ok: true; value: number | null } | { ok: false; message: string };
+/** What is wrong with a form, in plain words, and the form's own name for the field it is about. */
+export type FieldFailure = { ok: false; message: string; field: string };
+
+export type RupeesResult = { ok: true; value: number | null } | FieldFailure;
 
 /**
  * Whole rupees typed into a field. Blank is "nothing" (null). Commas, spaces and a rupee sign are
  * ignored, like the amount field of the payment sheet. Anything else that is not 0 to 10,000,000 is refused.
  */
-export function parseRupees(text: string, label: string): RupeesResult {
+export function parseRupees(text: string, label: string, field: string): RupeesResult {
   const cleaned = text.replace(/[,\s₹]/g, "");
   if (cleaned === "") return { ok: true, value: null };
   const value = /^\d+$/.test(cleaned) ? Number(cleaned) : Number.NaN;
   if (!Number.isFinite(value) || value > MAX_RUPEES) {
-    return { ok: false, message: `${label} must be a whole number of rupees from 0 to 10,000,000.` };
+    return { ok: false, message: `${label} must be a whole number of rupees from 0 to 10,000,000.`, field };
   }
   return { ok: true, value };
 }
@@ -44,16 +47,14 @@ export type NewTenantDetailsForm = {
   phone: string;
 };
 
-export type NewTenantDetails =
-  | { ok: true; tenancy: TenancyFields | undefined }
-  | { ok: false; message: string };
+export type NewTenantDetails = { ok: true; tenancy: TenancyFields | undefined } | FieldFailure;
 
 /**
  * The tenancy details the New tenant sheet sends with the payment, or `undefined` when the person left the
  * section as it was. When it sends details it always includes the move-in date (the default if untouched).
  */
 export function newTenantDetails(form: NewTenantDetailsForm, defaultMoveIn: string): NewTenantDetails {
-  const advance = parseRupees(form.advance, "Advance");
+  const advance = parseRupees(form.advance, "Advance", "advance");
   if (!advance.ok) return advance;
   const fields: TenancyFields = {
     moveIn: form.moveIn.trim(),
@@ -64,7 +65,7 @@ export function newTenantDetails(form: NewTenantDetailsForm, defaultMoveIn: stri
   };
   if (!hasTenancyDetails(fields, defaultMoveIn)) return { ok: true, tenancy: undefined };
   if (fields.moveIn === "") {
-    return { ok: false, message: "Tenancy details need a move-in date. Fill it in under Tenancy details." };
+    return { ok: false, message: "Tenancy details need a move-in date. Fill it in under Tenancy details.", field: "moveIn" };
   }
   return { ok: true, tenancy: fields };
 }
@@ -112,17 +113,18 @@ export type TenancyRequestBody = {
   expectedUpdatedAt?: string;
 };
 
-export type TenancyRequest = { ok: true; body: TenancyRequestBody } | { ok: false; message: string };
+export type TenancyRequest = { ok: true; body: TenancyRequestBody } | FieldFailure;
 
 /**
  * The body of POST /api/tenancies for a form. A create names the tenant the page showed; an edit names the tenancy
  * and the updated-at it was shown with (which may be empty for a row typed by hand), so a stale page is refused.
  */
 export function buildTenancyRequest(target: TenancyTarget, form: TenancyFormText): TenancyRequest {
-  const advance = parseRupees(form.advance, "Advance");
-  if (!advance.ok) return advance;
+  // In the order the fields are on the screen, so the first one that is wrong is the first one the person sees.
   const moveIn = form.moveIn.trim();
-  if (moveIn === "") return { ok: false, message: "Move-in date is required." };
+  if (moveIn === "") return { ok: false, message: "Move-in date is required.", field: "moveIn" };
+  const advance = parseRupees(form.advance, "Advance", "advance");
+  if (!advance.ok) return advance;
   const fields: TenancyFields = {
     phone: form.phone.trim(),
     moveIn,
@@ -184,7 +186,7 @@ export type MoveOutRequestBody = {
   notes?: string;
 };
 
-export type MoveOutRequest = { ok: true; body: MoveOutRequestBody } | { ok: false; message: string };
+export type MoveOutRequest = { ok: true; body: MoveOutRequestBody } | FieldFailure;
 
 /**
  * The body of POST /api/tenancies/move-out for a form. What the person left empty or did not change is left out,
@@ -192,10 +194,10 @@ export type MoveOutRequest = { ok: true; body: MoveOutRequestBody } | { ok: fals
  */
 export function buildMoveOutRequest(target: MoveOutTarget, form: MoveOutFormText): MoveOutRequest {
   const moveOut = form.moveOut.trim();
-  if (moveOut === "") return { ok: false, message: "Move-out date is required." };
-  const refund = parseRupees(form.refund, "Refund");
+  if (moveOut === "") return { ok: false, message: "Move-out date is required.", field: "moveOut" };
+  const refund = parseRupees(form.refund, "Refund", "refund");
   if (!refund.ok) return refund;
-  const deductions = parseRupees(form.deductions, "Deductions");
+  const deductions = parseRupees(form.deductions, "Deductions", "deductions");
   if (!deductions.ok) return deductions;
 
   const body: MoveOutRequestBody = { id: target.id, expectedUpdatedAt: target.expectedUpdatedAt, moveOut };

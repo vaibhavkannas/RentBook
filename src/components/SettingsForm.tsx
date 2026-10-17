@@ -6,11 +6,15 @@ import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Checkbox, Field, Input } from "@/components/ui/Field";
 import { Notice } from "@/components/ui/Notice";
+import { SlowHint } from "@/components/ui/SlowHint";
 import { useToast } from "@/components/ui/Toast";
 import type { PortionConfig } from "@/lib/domain/types";
-import { postJson, POST_TIMEOUT_MS } from "@/lib/post-json";
-import { parseSettingsRows, type SettingsRowInput } from "@/lib/settings-input";
+import { afterEdit, fieldProblem, plainMessage, plainProblem, problemAt, serverProblem, type FormProblem } from "@/lib/form-errors";
+import { sendJson } from "@/lib/post-json";
+import { sendFailureMessage, SETTINGS_NO_CONFIRMATION } from "@/lib/request-copy";
+import { parseSettingsRows, type SettingsField, type SettingsRowInput } from "@/lib/settings-input";
 import { SETTINGS_SAVED_TOAST } from "@/lib/toast-copy";
+import { useFieldFocus } from "./useFieldFocus";
 
 const toRow = (p: PortionConfig): SettingsRowInput => ({
   id: p.id,
@@ -20,45 +24,55 @@ const toRow = (p: PortionConfig): SettingsRowInput => ({
   hike: String(p.hikePercent),
 });
 
-type SaveBody = { ok: boolean; error?: { message: string }; portions?: PortionConfig[] };
+type SaveBody = {
+  ok: boolean;
+  error?: { code: string; message: string; details?: Record<string, unknown> };
+  portions?: PortionConfig[];
+};
+
+/** The fields of a row, by the form's own names: the ones a message can be about. */
+const FIELDS: SettingsField[] = ["name", "cycle", "hike"];
 
 export default function SettingsForm({ portions }: { portions: PortionConfig[] }) {
   const router = useRouter();
   const toast = useToast();
   const [rows, setRows] = useState(() => portions.map(toRow));
   const [busy, setBusy] = useState(false);
-  // Only a problem is shown here. A save that went through is a toast.
-  const [error, setError] = useState<string | null>(null);
+  // Only a problem is shown here. A save that went through is a toast. A problem about a field shows under it, in its row.
+  const [problem, setProblem] = useState<FormProblem | null>(null);
+  const field = useFieldFocus(problem);
 
-  const update = (id: string, patch: Partial<SettingsRowInput>) => {
-    setError(null);
+  /** Changes a row. Typing in a field clears what was said about that field; the tick box can make a cycle problem moot. */
+  const update = (id: string, patch: Partial<SettingsRowInput>, edited: SettingsField) => {
+    setProblem((current) => afterEdit(current, edited, id));
     setRows((current) => current.map((row) => (row.id === id ? { ...row, ...patch } : row)));
   };
 
   async function save() {
     const parsed = parseSettingsRows(rows);
     if (!parsed.ok) {
-      setError(parsed.message);
+      setProblem(fieldProblem(parsed.message, parsed.field, FIELDS, parsed.rowId));
       return;
     }
     setBusy(true);
-    setError(null);
-    const body = await postJson<SaveBody>("/api/settings", { portions: parsed.portions }, POST_TIMEOUT_MS, "PUT");
+    setProblem(null);
+    const sent = await sendJson<SaveBody>("/api/settings", { portions: parsed.portions }, { method: "PUT" });
     setBusy(false);
-    if (!body) {
-      setError("Couldn't reach the server. Try again.");
-    } else if (body.ok) {
+    if (sent.kind !== "answer") {
+      setProblem(plainProblem(sendFailureMessage(sent, SETTINGS_NO_CONFIRMATION)));
+    } else if (sent.body.ok) {
       // Show what was really stored, so the screen can never disagree with the Sheet.
-      if (body.portions) setRows(body.portions.map(toRow));
+      if (sent.body.portions) setRows(sent.body.portions.map(toRow));
       toast.show(SETTINGS_SAVED_TOAST);
       router.refresh();
     } else {
-      setError(body.error?.message ?? "Couldn't save settings.");
+      setProblem(serverProblem(sent.body.error, FIELDS, parsed.portions.map((portion) => portion.id)));
     }
   }
 
   return (
     <form
+      noValidate
       className="mt-3 space-y-3"
       onSubmit={(event) => {
         event.preventDefault();
@@ -70,51 +84,61 @@ export default function SettingsForm({ portions }: { portions: PortionConfig[] }
         {rows.map((row) => (
           <Card as="fieldset" key={row.id} className="space-y-2">
             <legend className="sr-only">Settings for {row.name || row.id}</legend>
-            <Field label="Name">
+            <Field label="Portion name" error={problemAt(problem, "name", row.id)}>
               <Input
+                ref={field("name", row.id)}
                 value={row.name}
-                onChange={(event) => update(row.id, { name: event.target.value })}
+                onChange={(event) => update(row.id, { name: event.target.value }, "name")}
+                autoCapitalize="words"
+                autoComplete="off"
                 required
                 maxLength={60}
               />
             </Field>
 
-            <div className="grid grid-cols-2 gap-3">
-              <Field label="Cycle length">
-                <Input
-                  value={row.cycle}
-                  onChange={(event) => update(row.id, { cycle: event.target.value })}
-                  inputMode="numeric"
-                  disabled={row.never}
-                />
-              </Field>
-              <Field label="Hike %">
-                <Input
-                  value={row.hike}
-                  onChange={(event) => update(row.id, { hike: event.target.value })}
-                  inputMode="decimal"
-                />
-              </Field>
-            </div>
+            {/* One under the other, not side by side: the labels and the hint are too long for half a phone's width. */}
+            <Field
+              label="Payments per cycle"
+              hint="After this many payments the count starts again at 1 and the hike is added."
+              error={problemAt(problem, "cycle", row.id)}
+            >
+              <Input
+                ref={field("cycle", row.id)}
+                value={row.cycle}
+                onChange={(event) => update(row.id, { cycle: event.target.value }, "cycle")}
+                inputMode="numeric"
+                disabled={row.never}
+              />
+            </Field>
+
+            <Field label="Hike at each new cycle (%)" error={problemAt(problem, "hike", row.id)}>
+              <Input
+                ref={field("hike", row.id)}
+                value={row.hike}
+                onChange={(event) => update(row.id, { hike: event.target.value }, "hike")}
+                inputMode="decimal"
+              />
+            </Field>
 
             <Checkbox
               label="Count never resets"
               checked={row.never}
-              onChange={(event) => update(row.id, { never: event.target.checked })}
+              onChange={(event) => update(row.id, { never: event.target.checked }, "cycle")}
             />
           </Card>
         ))}
       </fieldset>
 
-      {error && (
+      {plainMessage(problem) && (
         <Notice tone="danger" role="alert">
-          {error}
+          {plainMessage(problem)}
         </Notice>
       )}
 
       <Button type="submit" size="lg" className="w-full" pending={busy} pendingLabel="Saving…">
         Save settings
       </Button>
+      <SlowHint busy={busy} />
     </form>
   );
 }

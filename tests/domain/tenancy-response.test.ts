@@ -1,4 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
+import { plainProblem } from "@/lib/form-errors";
+import { SOMETHING_WENT_WRONG_MESSAGE } from "@/lib/request-copy";
 import {
   applyPageMove,
   changedPagePath,
@@ -12,31 +14,54 @@ import {
 } from "@/lib/tenancy-response";
 
 describe("saveFailure", () => {
+  const known = ["phone", "moveIn", "advance"];
+
   it("says the page was updated, and asks for a refresh, on a conflict", () => {
     expect(TENANCY_CONFLICT_MESSAGE).toBe("This changed just now. The page was updated. Please check and save again.");
     expect(
-      saveFailure({ ok: false, error: { code: "conflict", message: "The tenancy of Asha was changed by someone else." } }),
-    ).toEqual({ message: TENANCY_CONFLICT_MESSAGE, refresh: true });
+      saveFailure({ ok: false, error: { code: "conflict", message: "The tenancy of Asha was changed by someone else." } }, known),
+    ).toEqual({ problem: plainProblem(TENANCY_CONFLICT_MESSAGE), refresh: true });
   });
 
-  it("shows the server's own message for any other failure, without a refresh", () => {
-    expect(saveFailure({ ok: false, error: { code: "validation", message: "Move-in date is required." } })).toEqual({
-      message: "Move-in date is required.",
+  it("shows the server's own message for any other failure, in the form's own box, without a refresh", () => {
+    expect(saveFailure({ ok: false, error: { code: "validation", message: "Something is wrong." } }, known)).toEqual({
+      problem: plainProblem("Something is wrong."),
       refresh: false,
     });
-    expect(saveFailure({ ok: false, error: { code: "sheet-structure", message: "Fix the Tenants tab." } })).toEqual({
-      message: "Fix the Tenants tab.",
+    expect(saveFailure({ ok: false, error: { code: "sheet-structure", message: "Fix the Tenants tab." } }, known)).toEqual({
+      problem: plainProblem("Fix the Tenants tab."),
       refresh: false,
     });
+  });
+
+  it("puts the message beside the field the server named, when the form has that field", () => {
+    const failure = saveFailure(
+      { ok: false, error: { code: "validation", message: "Phone can have at most 30 characters.", details: { field: "fields.phone" } } },
+      known,
+    );
+    expect(failure).toEqual({
+      problem: { message: "Phone can have at most 30 characters.", field: "phone", row: null },
+      refresh: false,
+    });
+    // a field the form does not have goes in its own box
+    expect(
+      saveFailure({ ok: false, error: { code: "validation", message: "Notes are long.", details: { field: "fields.notes" } } }, known).problem,
+    ).toEqual(plainProblem("Notes are long."));
+  });
+
+  it("tells a person who was signed out to sign in again", () => {
+    expect(saveFailure({ ok: false, error: { code: "unauthorized", message: "Sign in with an allowed Google account." } }, known).problem.message).toBe(
+      "You've been signed out. Reload the page to sign in again.",
+    );
   });
 
   it("says it could not confirm the save when there was no answer", () => {
-    expect(saveFailure(null)).toEqual({ message: TENANCY_NO_CONFIRMATION, refresh: false });
+    expect(saveFailure(null, known)).toEqual({ problem: plainProblem(TENANCY_NO_CONFIRMATION), refresh: false });
     expect(TENANCY_NO_CONFIRMATION).toMatch(/Couldn't confirm that the save went through/);
   });
 
-  it("gives a general message when the answer has no error", () => {
-    expect(saveFailure({ ok: false })).toEqual({ message: "Something went wrong. Try again.", refresh: false });
+  it("says something went wrong on our side when the answer has no error", () => {
+    expect(saveFailure({ ok: false }, known)).toEqual({ problem: plainProblem(SOMETHING_WENT_WRONG_MESSAGE), refresh: false });
   });
 });
 
