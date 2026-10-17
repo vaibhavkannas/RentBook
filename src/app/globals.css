@@ -130,6 +130,24 @@ html.sheet-open body {
   padding-top: max(1rem, env(safe-area-inset-top));
 }
 
+/*
+ * A row that scrolls sideways reaches the edges of the screen: it takes back the page's gutter as margin and pads itself
+ * with the same, so it starts in line with the content and its chips run out under the edge instead of being cut off
+ * 1rem short of it. Its scrollbar is not drawn: a phone's is an overlay, and a desktop's would add a bar under the row.
+ */
+@utility bleed-x-safe {
+  margin-left: calc(-1 * max(1rem, env(safe-area-inset-left)));
+  margin-right: calc(-1 * max(1rem, env(safe-area-inset-right)));
+  padding-left: max(1rem, env(safe-area-inset-left));
+  padding-right: max(1rem, env(safe-area-inset-right));
+  scrollbar-width: none;
+}
+
+/* Where a heading sticks while a long screen scrolls: just under the notch, or at the top edge when there is none. */
+@utility top-safe {
+  top: env(safe-area-inset-top);
+}
+
 /* Side padding for a page: the usual 1rem gutter, or the inset beside a cut-out in the screen (a phone held sideways). */
 @utility px-safe {
   padding-left: max(1rem, env(safe-area-inset-left));

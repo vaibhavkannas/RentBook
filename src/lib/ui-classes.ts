@@ -80,6 +80,12 @@ export const pillClasses = (tone: PillTone) =>
 
 export const CARD = "rounded-card border border-line bg-surface p-4";
 
+/**
+ * A row of chips that scrolls sideways when they do not all fit, out to the edges of the screen (bleed-x-safe, in
+ * globals.css). The vertical padding leaves room for the focus ring of a chip, which a scrolling box would clip.
+ */
+export const CHIP_ROW = "bleed-x-safe flex gap-2 overflow-x-auto py-1";
+
 /** A grey placeholder bar. It pulses, except for people who asked their device for less motion. */
 export const SKELETON_BAR = "rounded-chip bg-line animate-pulse motion-reduce:animate-none";
 

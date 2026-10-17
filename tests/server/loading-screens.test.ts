@@ -14,7 +14,7 @@ vi.mock("next/navigation", () => ({
 import ActivityLoading from "@/app/activity/loading";
 import SettingsLoading from "@/app/settings/loading";
 import TenantsLoading from "@/app/tenants/[portionId]/loading";
-import { CARD } from "@/lib/ui-classes";
+import { CARD, CHIP_ROW } from "@/lib/ui-classes";
 
 const html = (element: Parameters<typeof renderToStaticMarkup>[0]) => renderToStaticMarkup(element);
 
@@ -49,10 +49,39 @@ describe("the Activity loading screen", () => {
     expect(out).not.toContain("<a");
   });
 
-  it("shows a row of three filter chips and three entry cards", () => {
+  it("shows the two rows of filter chips the page has, in the page's own row classes: four for what happened, three for the portion", () => {
+    expect(out.match(new RegExp(`class="${CHIP_ROW}"`, "g"))).toHaveLength(2);
+    const [what, portion] = out.split(`class="${CHIP_ROW}"`).slice(1);
+    // every chip is a 44 px bar, as a chip of the page is, and does not shrink in the scrolling row
+    // (not min-h-11, which the header has)
+    const chip = /(?<![-\w])h-11\b/g;
+    expect(what.split("</div></div>")[0].match(chip)).toHaveLength(4);
+    expect(portion.split("</div></div>")[0].match(chip)).toHaveLength(3);
+    expect(out.match(chip)).toHaveLength(7);
+    expect(out.match(/(?<![-\w])h-11\b[^"]*\bshrink-0\b/g)).toHaveLength(7);
+    // a chip is not the 32 px bar the screen drew before it had chips
+    expect(out).not.toMatch(/class="[^"]*\bh-8\b/);
+  });
+
+  it("shows a day heading the height of the sticky one (36 px) under the chips, then three entry cards", () => {
     expect(out.match(new RegExp(`class="${CARD}`, "g"))).toHaveLength(3);
-    // the chips are the 32 px bars in the row under the header
-    expect(out.match(/class="[^"]*\bh-8\b/g)).toHaveLength(3);
+    expect(out).toMatch(/<div class="py-2"><div aria-hidden="true" class="[^"]*\bh-5\b[^"]*"><\/div><\/div>/);
+    const chipsAt = out.lastIndexOf(" h-11 ");
+    const headingAt = out.indexOf('<div class="py-2">');
+    const cardAt = out.indexOf(`class="${CARD}`);
+    expect(chipsAt).toBeLessThan(headingAt);
+    expect(headingAt).toBeLessThan(cardAt);
+  });
+
+  it("lays each card out like a real entry: the portion row, a two line sentence, the amount, the meta line", () => {
+    const cards = out.split(`class="${CARD} space-y-1"`).slice(1);
+    expect(cards).toHaveLength(3);
+    for (const card of cards) {
+      expect(card).toMatch(/\bh-6\b/);
+      expect(card.match(/\bh-4\b/g)).toHaveLength(2);
+      expect(card).toMatch(/<div class="py-1">/);
+      expect(card).toMatch(/\bh-5\b/);
+    }
   });
 });
 

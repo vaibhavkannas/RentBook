@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   buttonClasses,
   CARD,
+  CHIP_ROW,
   cx,
   FIELD_CONTROL,
   fieldControlClasses,
@@ -134,6 +135,10 @@ describe("the card, the skeleton bar and the page", () => {
   it("keep the look of today's screens", () => {
     expect(CARD).toBe("rounded-card border border-line bg-surface p-4");
     expect(SKELETON_BAR).toBe("rounded-chip bg-line animate-pulse motion-reduce:animate-none");
+  });
+
+  it("make a row of chips scroll sideways out to the edges of the screen, with room above and below for a focus ring", () => {
+    expect(CHIP_ROW).toBe("bleed-x-safe flex gap-2 overflow-x-auto py-1");
   });
 
   it("makes the page the single phone column with a 16 px gutter that clears a notch, and leaves room under it for the tab bar", () => {

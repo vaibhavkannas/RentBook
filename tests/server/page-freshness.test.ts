@@ -1,6 +1,7 @@
 import { createElement, type ReactElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from "vitest";
+import { ACTIVITY_SCAN_LIMIT } from "@/lib/activity-view";
 import { unavailable } from "@/lib/errors";
 
 // Every page that reads the Sheet asks for data no older than its viewer's own last write, and names the viewer
@@ -75,13 +76,13 @@ describe("pages and the write-time cookie", () => {
   it("the Activity page asks for data no older than the person's own last write", async () => {
     await render(ActivityPage());
     expect(mocks.readWrittenAt).toHaveBeenCalledWith("owner@example.com");
-    expect(mocks.readActivity).toHaveBeenCalledWith(expect.anything(), undefined, { minFetchedAt: 1_800_000_000_000 });
+    expect(mocks.readActivity).toHaveBeenCalledWith(expect.anything(), ACTIVITY_SCAN_LIMIT, { minFetchedAt: 1_800_000_000_000 });
   });
 
   it("the Activity page asks for no minimum when the person has not written lately", async () => {
     mocks.readWrittenAt.mockResolvedValue(undefined);
     await render(ActivityPage());
-    expect(mocks.readActivity).toHaveBeenCalledWith(expect.anything(), undefined, { minFetchedAt: undefined });
+    expect(mocks.readActivity).toHaveBeenCalledWith(expect.anything(), ACTIVITY_SCAN_LIMIT, { minFetchedAt: undefined });
   });
 
   it("the Settings page asks for data no older than the owner's own last write", async () => {
