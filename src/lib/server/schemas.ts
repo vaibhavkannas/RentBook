@@ -15,6 +15,16 @@ const monthString = z.string().superRefine((month, ctx) => {
 /** A tenant's name: the text the person typed, which the sheets will hold. */
 const tenantName = safeText(MAX_NAME_LENGTH, { label: "Tenant name", required: true });
 
+/**
+ * The tenant the Schedule names, as the page sends it back to be matched against the Schedule. It is a name the Sheet holds, not
+ * one the person types now, and a hand-typed name can be one a new tenant could not be given (long, or with a line break),
+ * so it is only bounded and trimmed, as the name in the update of a tenancy is.
+ */
+const scheduleTenantName = z.string().superRefine((tenant, ctx) => {
+  if (tenant.length > MAX_TEXT) ctx.addIssue({ code: "custom", message: "Tenant name is too long." });
+  else if (tenant.trim() === "") ctx.addIssue({ code: "custom", message: "Tenant name is required." });
+});
+
 /** The tenant, count and amount the person saw on screen. */
 const seenEntry = z.object({ tenant: z.string().max(MAX_TEXT), count: z.number(), amount: z.number() });
 
@@ -137,7 +147,7 @@ export const moveOutBody = z
     id: z.string().min(1).max(MAX_TEXT).optional(),
     expectedUpdatedAt: z.string().max(MAX_TEXT).optional(),
     portionId: z.string().min(1).max(20).optional(),
-    tenant: tenantName.optional(),
+    tenant: scheduleTenantName.optional(),
     moveOut: isoDay("Move-out date"),
     advanceStatus: z.enum(ADVANCE_STATUSES).nullable().optional(),
     refund: z.number().nullable().optional(),
@@ -162,7 +172,7 @@ export const moveOutBody = z
       if (body.notes !== undefined) close.notes = body.notes;
       return close;
     }
-    const record: RecordMoveOutBody = { portionId: body.portionId!, tenant: body.tenant!, moveOut: body.moveOut };
+    const record: RecordMoveOutBody = { portionId: body.portionId!, tenant: body.tenant!.trim(), moveOut: body.moveOut };
     if (body.notes !== undefined) record.notes = body.notes;
     return record;
   });

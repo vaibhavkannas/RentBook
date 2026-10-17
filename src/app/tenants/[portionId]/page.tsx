@@ -134,7 +134,9 @@ export default async function TenantsPage({
   const today = todayIso(new Date());
   const phoneLink = current ? phoneHref(current.phone) : null;
   const advance = current ? advanceSummary(current) : null;
-  const note = current ? null : noCurrentTenancyNote({ scheduleTenant, mismatched, lastPast: past[0] });
+  const note = current
+    ? null
+    : noCurrentTenancyNote({ scheduleTenant, mismatched, lastPast: past[0], vacant: Boolean(vacantSince) });
   // A tenant the Schedule names, with no open tenancy (so no details to move out) and no move-out yet, can still be recorded
   // as moved out: the details are not needed first.
   const canRecordMoveOut = !current && !mismatched && scheduleTenant !== null && !vacantSince;
@@ -151,7 +153,7 @@ export default async function TenantsPage({
         {scheduleTenant === null ? "No tenant recorded yet." : `Tenant in the Schedule: ${scheduleTenant}`}
       </p>
 
-      {vacantSince && <p className="mt-2 text-sm font-medium">{vacantSinceNote(vacantSince)}</p>}
+      {vacantSince && <p className="mt-2 text-sm font-medium">{vacantSinceNote(vacantSince, today)}</p>}
 
       <Card as="section" aria-labelledby="current-heading" className="mt-4">
         <h2 id="current-heading" className="font-medium">

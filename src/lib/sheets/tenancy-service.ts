@@ -9,7 +9,6 @@ import {
   pastTenancies,
   sameTenantName,
   validateTenancyFields,
-  validateTenantName,
   type AdvanceStatus,
   type Tenancy,
   type TenancyFields,
@@ -237,8 +236,9 @@ function requireMoveOutAfterRent(snapshot: Snapshot, portionId: string, tenant: 
   const last = lastRentMonth(snapshot.rows, portionId, tenant);
   if (last === null || moveOut >= `${ymKey(last)}-01`) return;
   const title = formatMonthTitle(last);
+  // No tenant name: a validation message is logged in full, and the form says who the move-out is for.
   throw validation(
-    `${tenant.trim()} has rent logged for ${title}. Choose a move-out date in ${title} or later, or undo that payment first.`,
+    `Rent is logged for ${title}. Choose a move-out date in ${title} or later, or undo that payment first.`,
     "moveOut",
   );
 }
@@ -343,7 +343,10 @@ async function moveOutWithoutDetailsUnchecked(
   input: MoveOutWithoutDetailsInput,
   stamp: WriteStamp,
 ): Promise<{ tenancy: Tenancy }> {
-  const tenant = validateTenantName(input.tenant);
+  // The tenant is the Schedule's own name, sent back by the page and matched against the Schedule below: a name the Sheet
+  // holds may be one a new tenant could not be given (typed by hand, long, with a line break), so it is not checked like one.
+  const tenant = input.tenant.trim();
+  if (tenant === "") throw validation("Tenant name is required.", "tenant");
   const moveOut = (input.moveOut ?? "").trim();
   requireDay(moveOut, "Move-out date");
   const notes =
@@ -392,7 +395,16 @@ async function moveOutWithoutDetailsUnchecked(
   await appendTenancy(ctx.gateway, row);
   // Where Google put the row is not known (a blank row inside the tab makes it land there), so find it again by its id.
   const written = (await readTenancies(ctx.gateway)).findLast((t) => t.id === row.id);
-  if (!written) {
+  // The row must hold what was written (the cells the move-out is about), as confirmWritten checks a Schedule row.
+  const holdsWhatWasWritten =
+    written !== undefined &&
+    written.portionId === row.portionId &&
+    written.tenant === row.tenant &&
+    written.moveOut === row.moveOut &&
+    written.notes === row.notes &&
+    written.updatedBy === row.updatedBy &&
+    written.updatedAt === row.updatedAt;
+  if (!holdsWhatWasWritten) {
     throw conflict(
       `The Tenants tab in your Sheet changed while the move-out was being saved. ${reloadThen("check the details")}`,
     );

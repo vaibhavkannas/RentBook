@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
   buildAnyMoveOutRequest,
-  buildMoveOutDraftRequest,
   buildMoveOutRequest,
   buildRecordMoveOutRequest,
   buildTenancyDraftRequest,
@@ -14,6 +13,7 @@ import {
   parseRupees,
   startDraft,
   tenancyFormText,
+  type MoveOutRequest,
   type MoveOutTarget,
   type RecordMoveOutTarget,
   type TenancyFormText,
@@ -458,6 +458,8 @@ describe("tenancy drafts", () => {
 });
 
 describe("move-out drafts", () => {
+  /** The request of a draft of details on file (the form builds it with buildAnyMoveOutRequest, by the draft's own kind). */
+  const buildMoveOutDraftRequest = (draft: Parameters<typeof buildAnyMoveOutRequest>[0]) => buildAnyMoveOutRequest(draft) as MoveOutRequest;
   const OLD_AT = "2026-01-15T05:00:00.000Z";
   const NEW_AT = "2026-10-06T09:00:00.000Z";
   const moveOutTarget = (expectedUpdatedAt: string, initialNotes: string): MoveOutTarget => ({

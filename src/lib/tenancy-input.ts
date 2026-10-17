@@ -259,17 +259,13 @@ export function buildTenancyDraftRequest(draft: TenancyDraft): TenancyRequest {
   return buildTenancyRequest(draft.seen, draft.form);
 }
 
-export type MoveOutDraft = Draft<MoveOutTarget, MoveOutFormText>;
-
-/** The body of POST /api/tenancies/move-out for a draft: its own token, notes baseline and values. */
-export function buildMoveOutDraftRequest(draft: MoveOutDraft): MoveOutRequest {
-  return buildMoveOutRequest(draft.seen, draft.form);
-}
-
 /** A move-out draft of either kind: details on file (an id) or no details (a portion and a tenant). */
 export type AnyMoveOutDraft = Draft<MoveOutTarget | RecordMoveOutTarget, MoveOutFormText>;
 
-/** The body of POST /api/tenancies/move-out for a draft of either kind: its own token and values, built for its kind. */
+/**
+ * The body of POST /api/tenancies/move-out for a draft of either kind: its own token (for details on file, the stale-screen
+ * token and the notes baseline) and its own values, built for its kind.
+ */
 export function buildAnyMoveOutRequest(draft: AnyMoveOutDraft): MoveOutRequest | RecordMoveOutRequest {
   return "kind" in draft.seen
     ? buildRecordMoveOutRequest(draft.seen, draft.form)

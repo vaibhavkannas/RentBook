@@ -198,9 +198,38 @@ describe("recordMoveOutHint", () => {
 });
 
 describe("vacantSinceNote", () => {
-  it("says since when the portion is vacant, and where the next tenant is added", () => {
-    expect(vacantSinceNote("2026-10-20")).toBe(
+  const TODAY = "2026-10-17";
+
+  it("says since when the portion is vacant, and where the next tenant is added, once the day has come", () => {
+    expect(vacantSinceNote("2026-10-20", "2026-10-20")).toBe(
       "Vacant since 20 Oct 2026. Add the next tenant with New tenant on the month screen.",
+    );
+    expect(vacantSinceNote("2026-09-30", TODAY)).toBe(
+      "Vacant since 30 Sep 2026. Add the next tenant with New tenant on the month screen.",
+    );
+  });
+
+  it("says when the tenant moves out, and does not invite adding the next tenant, while the day is still to come", () => {
+    expect(vacantSinceNote("2026-12-20", TODAY)).toBe("Moves out on 20 Dec 2026.");
+    expect(vacantSinceNote("2026-10-18", TODAY)).toBe("Moves out on 18 Oct 2026.");
+  });
+});
+
+describe("noCurrentTenancyNote when the portion is vacant", () => {
+  const lastPast = { tenant: "Asha", moveOut: "2026-10-20" };
+
+  it("says that adding details for the same name ends the vacancy", () => {
+    expect(noCurrentTenancyNote({ scheduleTenant: "Asha", mismatched: null, lastPast, vacant: true })).toBe(
+      "Asha moved out on 20 Oct 2026. Saving details here starts a new tenancy for Asha. The portion then stops showing as Vacant.",
+    );
+  });
+
+  it("says no more than before when the portion is not vacant (the tenant came back and rent was logged)", () => {
+    expect(noCurrentTenancyNote({ scheduleTenant: "Asha", mismatched: null, lastPast })).toBe(
+      "Asha moved out on 20 Oct 2026. Saving details here starts a new tenancy for Asha.",
+    );
+    expect(noCurrentTenancyNote({ scheduleTenant: "Asha", mismatched: null, lastPast, vacant: false })).toBe(
+      "Asha moved out on 20 Oct 2026. Saving details here starts a new tenancy for Asha.",
     );
   });
 });

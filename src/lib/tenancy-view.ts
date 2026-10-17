@@ -75,13 +75,16 @@ export function noCurrentTenancyNote(input: {
   mismatched: Pick<Tenancy, "tenant"> | null;
   /** The most recent past tenancy of the portion. */
   lastPast: Pick<Tenancy, "tenant" | "moveOut"> | undefined;
+  /** The portion shows as Vacant: saving details for the tenant who left then ends the vacancy, and the note says so. */
+  vacant?: boolean;
 }): string | null {
   if (input.mismatched) {
     return `Earlier details for ${input.mismatched.tenant} will be marked as moved out when you save.`;
   }
   const { scheduleTenant, lastPast } = input;
   if (scheduleTenant !== null && lastPast && sameTenantName(lastPast.tenant, scheduleTenant)) {
-    return `${scheduleTenant} moved out on ${formatDay(lastPast.moveOut)}. Saving details here starts a new tenancy for ${scheduleTenant}.`;
+    const note = `${scheduleTenant} moved out on ${formatDay(lastPast.moveOut)}. Saving details here starts a new tenancy for ${scheduleTenant}.`;
+    return input.vacant ? `${note} The portion then stops showing as Vacant.` : note;
   }
   return null;
 }
@@ -96,7 +99,11 @@ export function recordMoveOutHint(tenant: string): string {
   return `Record that ${tenant} has moved out. You don't need to add their details first.`;
 }
 
-/** Above "Current tenancy" when the portion's last tenant has moved out: since when, and where the next tenant is added. */
-export function vacantSinceNote(since: string): string {
+/**
+ * Above "Current tenancy" when the portion's last tenant has moved out: since when, and where the next tenant is added. A
+ * move-out dated after `today` has not happened yet: it says when the tenant moves out, and does not invite adding the next one.
+ */
+export function vacantSinceNote(since: string, today: string): string {
+  if (since > today) return `Moves out on ${formatDay(since)}.`;
   return `Vacant since ${formatDay(since)}. Add the next tenant with New tenant on the month screen.`;
 }

@@ -245,12 +245,18 @@ describe("moveOutBody: a move-out with no details on file", () => {
     expect(problem(moveOutBody, { ...moveOut, expectedUpdatedAt: undefined })).toBe(`expectedUpdatedAt: ${outOfDate}`);
   });
 
-  it("refuses a tenant name that is blank, too long or has a line break, like any new tenant's", () => {
-    expect(problem(moveOutBody, { ...record, tenant: "   " })).toBe("tenant: Tenant name must be 1 to 60 characters.");
-    expect(problem(moveOutBody, { ...record, tenant: "a".repeat(61) })).toBe("tenant: Tenant name must be 1 to 60 characters.");
-    expect(problem(moveOutBody, { ...record, tenant: "As\nha" })).toBe(
-      "tenant: Tenant name cannot have line breaks or other control characters.",
-    );
+  it("takes the Schedule's own tenant name as the page sends it, even one a new tenant could not be given", () => {
+    // The name is the one the Sheet holds, which may have been typed by hand: long, or with a line break. It is the Schedule's
+    // name being matched, not a name the owner types now, so it is only bounded (as the update of a tenancy's name is).
+    const long = "a".repeat(70);
+    expect(moveOutBody.parse({ ...record, tenant: long })).toEqual({ ...record, tenant: long });
+    expect(moveOutBody.parse({ ...record, tenant: "  As\nha " })).toEqual({ ...record, tenant: "As\nha" });
+    expect(problem(moveOutBody, { ...record, tenant: "a".repeat(201) })).toBe("tenant: Tenant name is too long.");
+  });
+
+  it("refuses a tenant name that is blank", () => {
+    expect(problem(moveOutBody, { ...record, tenant: "   " })).toBe("tenant: Tenant name is required.");
+    expect(problem(moveOutBody, { ...record, tenant: "" })).toBe("tenant: Tenant name is required.");
   });
 
   it("refuses a portion id that is empty or over 20 characters, and a day that is not a real one", () => {

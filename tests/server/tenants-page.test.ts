@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { createElement, isValidElement, type ReactElement, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Tenancy } from "@/lib/domain/tenancy";
 import { AppError, sheetStructure, validation } from "@/lib/errors";
 import type { PortionTenants } from "@/lib/sheets/tenancy-service";
@@ -289,6 +289,13 @@ describe("the tenant details page", () => {
 });
 
 describe("the tenant details page: moving out and vacancy", () => {
+  // A fixed today, after the move-out of the tests below (the nested describe moves it back for a move-out still to come).
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-10-25T06:00:00Z"));
+  });
+  afterEach(() => vi.useRealTimers());
+
   const LEFT = tenancy({ id: "t-gone", rowNumber: 3, moveIn: "", moveOut: "2026-10-20", updatedBy: "owner@example.com" });
 
   it("says what a move-out does to the Schedule's month screen, in place of 'Your Schedule is not changed'", async () => {
@@ -362,8 +369,46 @@ describe("the tenant details page: moving out and vacancy", () => {
     it("keeps the moved-out note and the Add details form for a tenant who has moved out", async () => {
       mocks.getPortionTenants.mockResolvedValue(data({ current: null, past: [LEFT], vacantSince: "2026-10-20" }));
       const html = await render();
-      expect(html).toContain("Asha moved out on 20 Oct 2026. Saving details here starts a new tenancy for Asha.");
+      expect(html).toContain(
+        "Asha moved out on 20 Oct 2026. Saving details here starts a new tenancy for Asha. The portion then stops showing as Vacant.",
+      );
       expect(html).toContain('aria-label="Add tenancy details"');
+    });
+
+    it("does not say the portion is vacant in the note of a tenant who came back, when it is not", async () => {
+      mocks.getPortionTenants.mockResolvedValue(data({ current: null, past: [LEFT], vacantSince: null }));
+      const html = await render();
+      expect(html).toContain("Asha moved out on 20 Oct 2026. Saving details here starts a new tenancy for Asha.");
+      expect(html).not.toContain("stops showing as Vacant");
+    });
+
+    describe("a move-out dated after today", () => {
+      beforeEach(() => {
+        vi.setSystemTime(new Date("2026-10-17T06:00:00Z"));
+      });
+
+      it("says when the tenant moves out, not that the portion is vacant, and does not invite adding the next tenant", async () => {
+        mocks.getPortionTenants.mockResolvedValue(data({ current: null, past: [{ ...LEFT, moveOut: "2026-12-20" }], vacantSince: "2026-12-20" }));
+        const html = await render();
+        expect(html).toContain("Moves out on 20 Dec 2026.");
+        expect(html).not.toContain("Vacant since");
+        expect(html).not.toContain("Add the next tenant");
+      });
+
+      it("says vacant since on the day itself, and the day after says when the tenant moves out", async () => {
+        mocks.getPortionTenants.mockResolvedValue(data({ current: null, past: [LEFT], vacantSince: "2026-10-17" }));
+        expect(await render()).toContain("Vacant since 17 Oct 2026. Add the next tenant with New tenant on the month screen.");
+        mocks.getPortionTenants.mockResolvedValue(data({ current: null, past: [LEFT], vacantSince: "2026-10-18" }));
+        const html = await render();
+        expect(html).toContain("Moves out on 18 Oct 2026.");
+        expect(html).not.toContain("Vacant since");
+      });
+
+      it("uses India's day: late on the 17th in UTC is already the 18th there", async () => {
+        vi.setSystemTime(new Date("2026-10-17T20:00:00Z"));
+        mocks.getPortionTenants.mockResolvedValue(data({ current: null, past: [LEFT], vacantSince: "2026-10-18" }));
+        expect(await render()).toContain("Vacant since 18 Oct 2026.");
+      });
     });
 
     it("lists a move-out recorded without details as a past tenant, with no move-in day", async () => {

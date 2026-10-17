@@ -857,7 +857,7 @@ describe("POST /api/tenancies/move-out", () => {
     it("answers a day before the tenant's rent with the field, and does not mark the write time", async () => {
       signedInAs("member@example.com");
       moveOutWithoutDetails.mockRejectedValue(
-        validation("Asha has rent logged for September 2026. Choose a move-out date in September 2026 or later, or undo that payment first.", "moveOut"),
+        validation("Rent is logged for September 2026. Choose a move-out date in September 2026 or later, or undo that payment first.", "moveOut"),
       );
       const res = await postMoveOut(request(record));
       expect(res.status).toBe(400);

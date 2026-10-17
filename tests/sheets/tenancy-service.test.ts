@@ -1684,7 +1684,7 @@ describe("moveOutTenancy: the Schedule has the tenant's rent", () => {
     const before = snapshotOf(fake);
     const error = await expectCode(moveOutOn(ctx, tenancy, "2026-08-31"), "validation");
     expect(error.message).toBe(
-      "Asha has rent logged for September 2026. Choose a move-out date in September 2026 or later, or undo that payment first.",
+      "Rent is logged for September 2026. Choose a move-out date in September 2026 or later, or undo that payment first.",
     );
     expect(error.details).toEqual({ field: "moveOut" });
     expect(snapshotOf(fake)).toEqual(before);
@@ -1702,7 +1702,7 @@ describe("moveOutTenancy: the Schedule has the tenant's rent", () => {
     const { ctx, tenancy } = await created();
     await pay(ctx, { portionId: "p1" });
     const error = await expectCode(moveOutOn(ctx, tenancy, "2026-09-30"), "validation");
-    expect(error.message).toContain("rent logged for October 2026. Choose a move-out date in October 2026 or later");
+    expect(error.message).toContain("Rent is logged for October 2026. Choose a move-out date in October 2026 or later");
     await moveOutOn(ctx, tenancy, "2026-10-01");
   });
 
@@ -1881,7 +1881,7 @@ describe("moveOutWithoutDetails", () => {
     it("with the field moveOut when the day is before the month of the tenant's latest Schedule entry", async () => {
       const error = await refused({ moveOut: "2026-08-31" }, "validation");
       expect(error.message).toBe(
-        "Asha has rent logged for September 2026. Choose a move-out date in September 2026 or later, or undo that payment first.",
+        "Rent is logged for September 2026. Choose a move-out date in September 2026 or later, or undo that payment first.",
       );
       expect(error.details).toEqual({ field: "moveOut" });
     });
@@ -1969,6 +1969,29 @@ describe("moveOutWithoutDetails", () => {
       expect(error.message).toBe(
         "The Tenants tab in your Sheet changed while the move-out was being saved. Tap another tab at the bottom of the screen and come back, then check the details.",
       );
+    });
+
+    it("refuses with a conflict when the row it finds again does not hold what it wrote", async () => {
+      const { fake, ctx } = await ready();
+      const append = fake.appendRow.bind(fake);
+      fake.appendRow = async (tab, values) => {
+        await append(tab, values);
+        // someone changes the move-out date a moment after the append
+        if (tab === TENANTS_TAB) fake.tabs.get(TENANTS_TAB)!.at(-1)![12] = "2026-10-01";
+      };
+      const error = await expectCode(record(ctx), "conflict");
+      expect(error.message).toBe(
+        "The Tenants tab in your Sheet changed while the move-out was being saved. Tap another tab at the bottom of the screen and come back, then check the details.",
+      );
+    });
+
+    it("takes the Schedule's own tenant name even when it is longer than a new name may be, or has a line break", async () => {
+      const { fake, ctx } = await ready();
+      const name = `${"A".repeat(70)}\nB`;
+      setScheduleTenant(fake, "p1", name);
+      const { tenancy } = await record(ctx, { tenant: name });
+      expect(tenancy.tenant).toBe(name);
+      expect(await tenancies(ctx)).toMatchObject([{ tenant: name, moveOut: "2026-09-30" }]);
     });
 
     it("returns the row the Sheet gave it, found again by its id, when a blank row inside the tab makes it land there", async () => {
