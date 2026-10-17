@@ -110,12 +110,59 @@ export const tenancyBody = z
   })
   .transform((body) => (body.id === undefined ? { ...body, tenant: body.tenant.trim() } : body));
 
-export const moveOutBody = z.object({
-  id: z.string().min(1).max(MAX_TEXT),
-  expectedUpdatedAt: z.string().max(MAX_TEXT),
-  moveOut: isoDay("Move-out date"),
-  advanceStatus: z.enum(ADVANCE_STATUSES).nullable().optional(),
-  refund: z.number().nullable().optional(),
-  deductions: z.number().nullable().optional(),
-  notes: safeText(MAX_NOTES_LENGTH, { label: "Notes", allowNewlines: true }).optional(),
-});
+/** The body of a move-out of details on file: the tenancy, as the person saw it, and what happened to the advance. */
+type CloseTenancyBody = {
+  id: string;
+  expectedUpdatedAt: string;
+  moveOut: string;
+  advanceStatus?: (typeof ADVANCE_STATUSES)[number] | null;
+  refund?: number | null;
+  deductions?: number | null;
+  notes?: string;
+};
+
+/** The body of a move-out where no details were ever added: the tenant the Schedule names for the portion, and the day. */
+type RecordMoveOutBody = { portionId: string; tenant: string; moveOut: string; notes?: string };
+
+/**
+ * A move-out, of one of two kinds. With an `id` it closes the details on file for that tenancy (`id` and the
+ * `expectedUpdatedAt` the person saw, the day, and optionally what happened to the advance, the refund, the deductions and
+ * notes). Without one it records that the tenant the Schedule names for a portion has moved out (`portionId`, `tenant`, the
+ * day and optionally notes), for a portion that has no details on file. A body with an id is always the first kind, and
+ * gives back only what it was sent; the other kind gives back only its own fields. A body that is neither says the page is
+ * out of date, as a tenancy's does.
+ */
+export const moveOutBody = z
+  .object({
+    id: z.string().min(1).max(MAX_TEXT).optional(),
+    expectedUpdatedAt: z.string().max(MAX_TEXT).optional(),
+    portionId: z.string().min(1).max(20).optional(),
+    tenant: tenantName.optional(),
+    moveOut: isoDay("Move-out date"),
+    advanceStatus: z.enum(ADVANCE_STATUSES).nullable().optional(),
+    refund: z.number().nullable().optional(),
+    deductions: z.number().nullable().optional(),
+    notes: safeText(MAX_NOTES_LENGTH, { label: "Notes", allowNewlines: true }).optional(),
+  })
+  .superRefine((body, ctx) => {
+    if (body.id !== undefined) {
+      if (body.expectedUpdatedAt === undefined) {
+        ctx.addIssue({ code: "custom", message: PAGE_OUT_OF_DATE_MESSAGE, path: ["expectedUpdatedAt"] });
+      }
+    } else if (body.portionId === undefined || body.tenant === undefined) {
+      ctx.addIssue({ code: "custom", message: PAGE_OUT_OF_DATE_MESSAGE, path: ["id"] });
+    }
+  })
+  .transform((body): CloseTenancyBody | RecordMoveOutBody => {
+    if (body.id !== undefined) {
+      const close: CloseTenancyBody = { id: body.id, expectedUpdatedAt: body.expectedUpdatedAt!, moveOut: body.moveOut };
+      if (body.advanceStatus !== undefined) close.advanceStatus = body.advanceStatus;
+      if (body.refund !== undefined) close.refund = body.refund;
+      if (body.deductions !== undefined) close.deductions = body.deductions;
+      if (body.notes !== undefined) close.notes = body.notes;
+      return close;
+    }
+    const record: RecordMoveOutBody = { portionId: body.portionId!, tenant: body.tenant!, moveOut: body.moveOut };
+    if (body.notes !== undefined) record.notes = body.notes;
+    return record;
+  });

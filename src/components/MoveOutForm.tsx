@@ -13,11 +13,12 @@ import { sendJson } from "@/lib/post-json";
 import { sendFailureMessage } from "@/lib/request-copy";
 import { moveOutToastText } from "@/lib/toast-copy";
 import {
-  buildMoveOutDraftRequest,
+  buildAnyMoveOutRequest,
   editDraft,
   startDraft,
   type MoveOutFormText,
   type MoveOutTarget,
+  type RecordMoveOutTarget,
 } from "@/lib/tenancy-input";
 import {
   applyPageMove,
@@ -30,16 +31,19 @@ import {
 import { MOVE_OUT_OUTCOME_HINT, MOVE_OUT_RUPEES_HINT } from "@/lib/tenancy-view";
 import { useFieldFocus } from "./useFieldFocus";
 
-/** The fields a message can be about, by the form's own names. */
+/** The fields a message can be about, by the form's own names: a tenant with no details on file has only the day. */
 const FIELDS = ["moveOut", "refund", "deductions"];
+const RECORD_FIELDS = ["moveOut"];
 
 type Props = {
-  /** The tenancy being closed, as the page was rendered. */
-  target: MoveOutTarget;
+  /** The tenancy being closed, as the page was rendered, or the tenant with no details on file whose move-out is recorded. */
+  target: MoveOutTarget | RecordMoveOutTarget;
   /** The starting values. The form starts again from them every time it is opened. */
   initial: MoveOutFormText;
-  /** Only used in the button's name. */
+  /** Only used in the button's name, and in the toast. */
   tenant: string;
+  /** The portion's name, for the toast that says it is vacant. */
+  portionName: string;
   /** The portion whose page this is: where the form goes after a save or a conflict. */
   portionId: string;
   /** The page is showing the changed-just-now notice, so a save that goes through has to take it away. */
@@ -56,13 +60,22 @@ const OUTCOMES: Array<{ value: AdvanceStatus; label: string }> = [
 
 /**
  * "Move out" (a button that opens the form) for a current tenancy: the date, what happened to the advance, the
- * refund, the deductions and notes. It only gathers text and posts it: tenancy-input.ts and tenancy-response.ts decide the rest.
+ * refund, the deductions and notes. For a tenant with no details on file (a `target` with kind "record") it is only the
+ * date and notes. It only gathers text and posts it: tenancy-input.ts and tenancy-response.ts decide the rest.
  *
  * The form saves from its draft: the stale-screen token, the notes baseline and the values were taken together
  * when the form was opened. The `target` and `initial` props can change later (router.refresh() delivers newer
  * ones), but they are only used when the form is opened, so a save never mixes a newer token with older values.
  */
-export default function MoveOutForm({ target, initial, tenant, portionId, noticeShown = false, monthKey = null }: Props) {
+export default function MoveOutForm({
+  target,
+  initial,
+  tenant,
+  portionName,
+  portionId,
+  noticeShown = false,
+  monthKey = null,
+}: Props) {
   const router = useRouter();
   const toast = useToast();
   const [open, setOpen] = useState(false);
@@ -87,12 +100,15 @@ export default function MoveOutForm({ target, initial, tenant, portionId, notice
     setDraft((current) => editDraft(current, patch));
   };
   const form = draft.form;
+  // The details on file have an outcome for the advance, a refund and deductions; a tenant with none has only the day.
+  const onFile = "kind" in draft.seen ? null : draft.seen;
+  const fields = onFile ? FIELDS : RECORD_FIELDS;
 
   async function save() {
     if (busy) return;
-    const request = buildMoveOutDraftRequest(draft);
+    const request = buildAnyMoveOutRequest(draft);
     if (!request.ok) {
-      setProblem(fieldProblem(request.message, request.field, FIELDS));
+      setProblem(fieldProblem(request.message, request.field, fields));
       return;
     }
     setBusy(true);
@@ -101,7 +117,7 @@ export default function MoveOutForm({ target, initial, tenant, portionId, notice
     if (sent.kind === "answer" && sent.body.ok) {
       // The refreshed page shows the tenancy as a past one and replaces this form. Until then it stays disabled.
       applyPageMove(router, pageAfterSave(portionId, noticeShown, monthKey));
-      toast.show(moveOutToastText(tenant));
+      toast.show(moveOutToastText(tenant, portionName, request.body.moveOut));
       return;
     }
     setBusy(false);
@@ -109,7 +125,7 @@ export default function MoveOutForm({ target, initial, tenant, portionId, notice
       setProblem(plainProblem(sendFailureMessage(sent, TENANCY_NO_CONFIRMATION)));
       return;
     }
-    const failure = saveFailure(sent.body, FIELDS);
+    const failure = saveFailure(sent.body, fields);
     if (failure.refresh) {
       // The page behind the form is out of date. Open it again: it loads what is in the Sheet now and shows the
       // changed-just-now notice itself, so the notice does not go away when the page replaces this form. The form
@@ -160,7 +176,7 @@ export default function MoveOutForm({ target, initial, tenant, portionId, notice
               />
             </Field>
 
-            {draft.seen.hasAdvance && (
+            {onFile?.hasAdvance && (
               <Field label="What happened to the advance?" hint={MOVE_OUT_OUTCOME_HINT}>
                 <Select
                   value={form.advanceStatus}
@@ -176,33 +192,35 @@ export default function MoveOutForm({ target, initial, tenant, portionId, notice
             )}
 
             {/* One hint covers both amounts, so each field points at it. */}
-            <div>
-              <Field label="Refund (₹)" error={problemAt(problem, "refund")}>
-                <Input
-                  ref={field("refund")}
-                  value={form.refund}
-                  onChange={(event) => set({ refund: event.target.value }, "refund")}
-                  inputMode="numeric"
-                  autoComplete="off"
-                  aria-describedby={rupeesHint}
-                />
-              </Field>
-              <div className="mt-3">
-                <Field label="Deductions (₹)" error={problemAt(problem, "deductions")}>
+            {onFile && (
+              <div>
+                <Field label="Refund (₹)" error={problemAt(problem, "refund")}>
                   <Input
-                    ref={field("deductions")}
-                    value={form.deductions}
-                    onChange={(event) => set({ deductions: event.target.value }, "deductions")}
+                    ref={field("refund")}
+                    value={form.refund}
+                    onChange={(event) => set({ refund: event.target.value }, "refund")}
                     inputMode="numeric"
                     autoComplete="off"
                     aria-describedby={rupeesHint}
                   />
                 </Field>
+                <div className="mt-3">
+                  <Field label="Deductions (₹)" error={problemAt(problem, "deductions")}>
+                    <Input
+                      ref={field("deductions")}
+                      value={form.deductions}
+                      onChange={(event) => set({ deductions: event.target.value }, "deductions")}
+                      inputMode="numeric"
+                      autoComplete="off"
+                      aria-describedby={rupeesHint}
+                    />
+                  </Field>
+                </div>
+                <p id={rupeesHint} className="mt-1 text-sm text-muted">
+                  {MOVE_OUT_RUPEES_HINT}
+                </p>
               </div>
-              <p id={rupeesHint} className="mt-1 text-sm text-muted">
-                {MOVE_OUT_RUPEES_HINT}
-              </p>
-            </div>
+            )}
 
             <Field label="Notes">
               <TextArea

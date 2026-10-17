@@ -186,6 +186,7 @@ const SCREENS: Array<[string, () => Promise<string> | string]> = [
     () =>
       html(
         createElement(MoveOutForm, {
+          portionName: "Ground floor",
           tenant: "Asha",
           portionId: "p1",
           target: { id: "t-1", expectedUpdatedAt: "x", hasAdvance: true, initialNotes: "" },
@@ -198,10 +199,24 @@ const SCREENS: Array<[string, () => Promise<string> | string]> = [
     () =>
       renderOpen(
         createElement(MoveOutForm, {
+          portionName: "Ground floor",
           tenant: "Asha",
           portionId: "p1",
           target: { id: "t-1", expectedUpdatedAt: "x", hasAdvance: true, initialNotes: "" },
           initial: emptyMoveOutForm("2026-10-05", { advanceStatus: "Held", notes: "" }),
+        }),
+      ),
+  ],
+  [
+    "MoveOutForm, open, with no details on file",
+    () =>
+      renderOpen(
+        createElement(MoveOutForm, {
+          portionName: "Ground floor",
+          tenant: "Asha",
+          portionId: "p1",
+          target: { kind: "record", portionId: "p1", tenant: "Asha" },
+          initial: emptyMoveOutForm("2026-10-05", { advanceStatus: null, notes: "" }),
         }),
       ),
   ],

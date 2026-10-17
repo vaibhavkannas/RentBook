@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildAnyMoveOutRequest,
   buildMoveOutDraftRequest,
   buildMoveOutRequest,
+  buildRecordMoveOutRequest,
   buildTenancyDraftRequest,
   buildTenancyRequest,
   editDraft,
@@ -13,6 +15,7 @@ import {
   startDraft,
   tenancyFormText,
   type MoveOutTarget,
+  type RecordMoveOutTarget,
   type TenancyFormText,
   type TenancyTarget,
 } from "@/lib/tenancy-input";
@@ -526,5 +529,62 @@ describe("move-out drafts", () => {
     );
     editDraft(draft, { refund: "9" });
     expect(draft.form.refund).toBe("");
+  });
+});
+
+describe("a move-out with no details on file", () => {
+  const target: RecordMoveOutTarget = { kind: "record", portionId: "p1", tenant: "Asha" };
+  const form = emptyMoveOutForm("2026-10-20", { advanceStatus: null, notes: "" });
+
+  it("starts from the day and empty notes", () => {
+    expect(form).toEqual({ moveOut: "2026-10-20", advanceStatus: "Held", refund: "", deductions: "", notes: "" });
+  });
+
+  it("sends the portion, the tenant and the day, and notes only when there are some", () => {
+    expect(buildRecordMoveOutRequest(target, form)).toEqual({
+      ok: true,
+      body: { portionId: "p1", tenant: "Asha", moveOut: "2026-10-20" },
+    });
+    expect(buildRecordMoveOutRequest(target, { ...form, notes: "  Left the keys " })).toEqual({
+      ok: true,
+      body: { portionId: "p1", tenant: "Asha", moveOut: "2026-10-20", notes: "Left the keys" },
+    });
+    expect(buildRecordMoveOutRequest(target, { ...form, notes: "   " })).toEqual({
+      ok: true,
+      body: { portionId: "p1", tenant: "Asha", moveOut: "2026-10-20" },
+    });
+  });
+
+  it("sends no id, no outcome, no refund and no deductions, whatever the form holds", () => {
+    const result = buildRecordMoveOutRequest(target, { ...form, advanceStatus: "Refunded", refund: "100", deductions: "5" });
+    expect(result).toEqual({ ok: true, body: { portionId: "p1", tenant: "Asha", moveOut: "2026-10-20" } });
+  });
+
+  it("trims the day, and asks for it when it is blank, naming the field", () => {
+    expect(buildRecordMoveOutRequest(target, { ...form, moveOut: " 2026-10-20 " })).toMatchObject({
+      ok: true,
+      body: { moveOut: "2026-10-20" },
+    });
+    expect(buildRecordMoveOutRequest(target, { ...form, moveOut: "" })).toEqual({
+      ok: false,
+      message: "Move-out date is required.",
+      field: "moveOut",
+    });
+  });
+
+  it("is chosen by the draft's own target: details on file and no details each build their own body", () => {
+    const record = startDraft(target, form);
+    expect(buildAnyMoveOutRequest(record)).toEqual(buildRecordMoveOutRequest(target, form));
+    const onFile: MoveOutTarget = { id: "t-1", expectedUpdatedAt: "x", hasAdvance: false, initialNotes: "" };
+    const close = startDraft(onFile, form);
+    expect(buildAnyMoveOutRequest(close)).toEqual(buildMoveOutRequest(onFile, form));
+  });
+
+  it("builds from the draft, not from what the page shows now", () => {
+    const draft = editDraft(startDraft(target, form), { moveOut: "2026-10-25", notes: "Keys" });
+    expect(buildAnyMoveOutRequest(draft)).toEqual({
+      ok: true,
+      body: { portionId: "p1", tenant: "Asha", moveOut: "2026-10-25", notes: "Keys" },
+    });
   });
 });

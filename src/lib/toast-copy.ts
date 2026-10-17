@@ -1,4 +1,5 @@
-import { formatRupees } from "@/lib/format";
+import { firstVacantMonth } from "@/lib/domain/vacancy";
+import { formatMonthTitle, formatRupees } from "@/lib/format";
 import { listWords } from "@/lib/setup-checks";
 
 /**
@@ -34,8 +35,9 @@ export function prepareToastText(created: readonly string[]): string {
 /** After tenancy details were added or edited. */
 export const DETAILS_SAVED_TOAST = "Details saved";
 
-export function moveOutToastText(tenant: string): string {
-  return `${tenant} has moved out`;
+/** After a move-out: who, and from which month the portion is vacant (the month of the day if it is the 1st, else the next). */
+export function moveOutToastText(tenant: string, portion: string, moveOut: string): string {
+  return `${tenant} has moved out. ${portion} is vacant from ${formatMonthTitle(firstVacantMonth(moveOut))}.`;
 }
 
 /** A payment the sheet saved, as far as its toast is concerned. */

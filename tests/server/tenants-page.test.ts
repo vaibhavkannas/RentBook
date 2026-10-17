@@ -72,7 +72,7 @@ function tenancy(overrides: Partial<Tenancy> = {}): Tenancy {
 }
 
 function data(overrides: Partial<PortionTenants> = {}): PortionTenants {
-  return { portion: PORTION, scheduleTenant: "Asha", current: tenancy(), mismatched: null, past: [], ...overrides };
+  return { portion: PORTION, scheduleTenant: "Asha", current: tenancy(), mismatched: null, past: [], vacantSince: null, ...overrides };
 }
 
 async function render(portionId = "p1", searchParams: Record<string, string | string[] | undefined> = {}): Promise<string> {
@@ -169,12 +169,14 @@ describe("the tenant details page", () => {
     expect(html).not.toContain("tel:");
   });
 
-  it("shows the Add details form, without a Move out section, when there is no current tenancy", async () => {
+  it("shows the Add details form, and a Move out section that needs no details, when there is no current tenancy", async () => {
+    // Deliberate change (3-10): this test said there was no Move out section here. A tenant the Schedule names, with no open
+    // tenancy and no move-out yet, can now be recorded as moved out without adding their details first (see the next describe).
     mocks.getPortionTenants.mockResolvedValue(data({ current: null }));
     const html = await render();
     expect(html).toContain("Add details");
     expect(html).toContain('aria-label="Add tenancy details"');
-    expect(html).not.toContain('id="move-out-heading"');
+    expect(html).toContain('id="move-out-heading"');
     expect(html).not.toContain(">Edit<");
   });
 
@@ -283,6 +285,106 @@ describe("the tenant details page", () => {
     // (A connection problem, code "config", is shown to a member only as "ask the owner": see page-problems.test.ts.)
     mocks.getPortionTenants.mockRejectedValue(new AppError("sheet-structure", "Missing settings."));
     expect(await render()).toContain("Missing settings.");
+  });
+});
+
+describe("the tenant details page: moving out and vacancy", () => {
+  const LEFT = tenancy({ id: "t-gone", rowNumber: 3, moveIn: "", moveOut: "2026-10-20", updatedBy: "owner@example.com" });
+
+  it("says what a move-out does to the Schedule's month screen, in place of 'Your Schedule is not changed'", async () => {
+    const html = await render();
+    expect(html).toContain(
+      "Record that Asha has moved out. Ground floor shows as Vacant from the first month that starts on or after the move-out date, until you add a new tenant. Payments already in your Schedule stay.",
+    );
+    expect(html).not.toContain("Your Schedule is not changed.");
+  });
+
+  it("gives the form of details on file its portion's name, for the toast", async () => {
+    const found = await tree();
+    expect(found.find((element) => element.type === MoveOutForm)?.props.portionName).toBe("Ground floor");
+  });
+
+  describe("a tenant the Schedule names, with no details on file and no move-out yet", () => {
+    beforeEach(() => {
+      mocks.getPortionTenants.mockResolvedValue(data({ current: null, scheduleTenant: "Asha" }));
+    });
+
+    it("shows a Move out section that says details are not needed first", async () => {
+      const html = await render();
+      expect(html).toContain('id="move-out-heading"');
+      expect(html).toContain("Record that Asha has moved out. You don&#x27;t need to add their details first.");
+      expect(html).toContain('aria-label="Move out Asha"');
+      // the Add details form is still there, and above the Move out section
+      expect(html).toContain('aria-label="Add tenancy details"');
+      expect(html.indexOf('aria-label="Add tenancy details"')).toBeLessThan(html.indexOf('id="move-out-heading"'));
+    });
+
+    it("gives the form only the portion and the tenant: it closes no tenancy", async () => {
+      const found = await tree({ month: "2026-10" });
+      const form = found.find((element) => element.type === MoveOutForm);
+      expect(form?.props.target).toEqual({ kind: "record", portionId: "p1", tenant: "Asha" });
+      expect(form?.props.tenant).toBe("Asha");
+      expect(form?.props.portionName).toBe("Ground floor");
+      expect(form?.props.portionId).toBe("p1");
+      expect(form?.props.monthKey).toBe("2026-10");
+      expect(form?.props.initial).toEqual({
+        moveOut: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
+        advanceStatus: "Held",
+        refund: "",
+        deductions: "",
+        notes: "",
+      });
+    });
+
+    it("has no Move out section when the Schedule names no tenant", async () => {
+      mocks.getPortionTenants.mockResolvedValue(data({ current: null, scheduleTenant: null }));
+      const html = await render();
+      expect(html).not.toContain('id="move-out-heading"');
+      expect(html).not.toContain("Record that");
+    });
+
+    it("has none when the portion has an open tenancy for another name, which Add details would close", async () => {
+      mocks.getPortionTenants.mockResolvedValue(
+        data({ current: null, scheduleTenant: "Hari", mismatched: tenancy({ tenant: "Asha" }) }),
+      );
+      expect(await render()).not.toContain('id="move-out-heading"');
+    });
+
+    it("has none once the tenant has moved out, and then says since when the portion is vacant, above Current tenancy", async () => {
+      mocks.getPortionTenants.mockResolvedValue(data({ current: null, past: [LEFT], vacantSince: "2026-10-20" }));
+      const html = await render();
+      expect(html).not.toContain('id="move-out-heading"');
+      expect(html).toContain("Vacant since 20 Oct 2026. Add the next tenant with New tenant on the month screen.");
+      expect(html.indexOf("Vacant since 20 Oct 2026.")).toBeLessThan(html.indexOf('id="current-heading"'));
+      expect(html.indexOf("Tenant in the Schedule: Asha")).toBeLessThan(html.indexOf("Vacant since"));
+    });
+
+    it("keeps the moved-out note and the Add details form for a tenant who has moved out", async () => {
+      mocks.getPortionTenants.mockResolvedValue(data({ current: null, past: [LEFT], vacantSince: "2026-10-20" }));
+      const html = await render();
+      expect(html).toContain("Asha moved out on 20 Oct 2026. Saving details here starts a new tenancy for Asha.");
+      expect(html).toContain('aria-label="Add tenancy details"');
+    });
+
+    it("lists a move-out recorded without details as a past tenant, with no move-in day", async () => {
+      mocks.getPortionTenants.mockResolvedValue(data({ current: null, past: [LEFT], vacantSince: "2026-10-20" }));
+      const html = await render();
+      expect(html).toContain("— to 20 Oct 2026");
+      expect(html).not.toContain("No past tenants yet.");
+    });
+  });
+
+  it("says nothing about a vacancy while the portion is let", async () => {
+    expect(await render()).not.toContain("Vacant since");
+    mocks.getPortionTenants.mockResolvedValue(data({ current: null }));
+    expect(await render()).not.toContain("Vacant since");
+  });
+
+  it("does not say it when the Tenants tab cannot be used", async () => {
+    mocks.getPortionTenants.mockResolvedValue(data({ current: null, tenantsProblem: "Put the header back." }));
+    const html = await render();
+    expect(html).not.toContain("Vacant since");
+    expect(html).not.toContain('id="move-out-heading"');
   });
 });
 

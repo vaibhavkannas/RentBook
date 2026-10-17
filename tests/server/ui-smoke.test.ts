@@ -416,6 +416,7 @@ describe("MoveOutForm", () => {
   it("renders a Move out button that names the tenant, and no form until it is pressed", () => {
     const out = html(
       createElement(MoveOutForm, {
+        portionName: "Ground floor",
         tenant: "Asha",
         portionId: "p1",
         target: { id: "t-1", expectedUpdatedAt: "x", hasAdvance: true, initialNotes: "" },

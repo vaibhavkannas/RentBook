@@ -190,6 +190,30 @@ export type MoveOutRequestBody = {
 export type MoveOutRequest = { ok: true; body: MoveOutRequestBody } | FieldFailure;
 
 /**
+ * The tenant the Schedule names for a portion that has no details on file, whose move-out is recorded without them. The
+ * `kind` tells it from the target of details on file (`MoveOutTarget`, which has an id).
+ */
+export type RecordMoveOutTarget = { kind: "record"; portionId: string; tenant: string };
+
+/** The body of POST /api/tenancies/move-out for a tenant with no details on file. */
+export type RecordMoveOutRequestBody = { portionId: string; tenant: string; moveOut: string; notes?: string };
+
+export type RecordMoveOutRequest = { ok: true; body: RecordMoveOutRequestBody } | FieldFailure;
+
+/**
+ * The body of POST /api/tenancies/move-out for a tenant with no details on file: the portion, the tenant, the day and, when
+ * there are any, the notes. The form's outcome, refund and deductions are not sent: there is no tenancy to put them on.
+ */
+export function buildRecordMoveOutRequest(target: RecordMoveOutTarget, form: MoveOutFormText): RecordMoveOutRequest {
+  const moveOut = form.moveOut.trim();
+  if (moveOut === "") return { ok: false, message: "Move-out date is required.", field: "moveOut" };
+  const body: RecordMoveOutRequestBody = { portionId: target.portionId, tenant: target.tenant, moveOut };
+  const notes = form.notes.trim();
+  if (notes !== "") body.notes = notes;
+  return { ok: true, body };
+}
+
+/**
  * The body of POST /api/tenancies/move-out for a form. What the person left empty or did not change is left out,
  * so the server keeps what is stored (a tenancy with no advance has no outcome; unchanged notes are not rewritten).
  */
@@ -240,4 +264,14 @@ export type MoveOutDraft = Draft<MoveOutTarget, MoveOutFormText>;
 /** The body of POST /api/tenancies/move-out for a draft: its own token, notes baseline and values. */
 export function buildMoveOutDraftRequest(draft: MoveOutDraft): MoveOutRequest {
   return buildMoveOutRequest(draft.seen, draft.form);
+}
+
+/** A move-out draft of either kind: details on file (an id) or no details (a portion and a tenant). */
+export type AnyMoveOutDraft = Draft<MoveOutTarget | RecordMoveOutTarget, MoveOutFormText>;
+
+/** The body of POST /api/tenancies/move-out for a draft of either kind: its own token and values, built for its kind. */
+export function buildAnyMoveOutRequest(draft: AnyMoveOutDraft): MoveOutRequest | RecordMoveOutRequest {
+  return "kind" in draft.seen
+    ? buildRecordMoveOutRequest(draft.seen, draft.form)
+    : buildMoveOutRequest(draft.seen, draft.form);
 }

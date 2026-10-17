@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { latestEntryRow, firstVacantMonth, occupancyFor, vacancyOf } from "@/lib/domain/vacancy";
+import { firstVacantMonth, lastRentMonth, latestEntryRow, occupancyFor, vacancyOf } from "@/lib/domain/vacancy";
 import type { Tenancy } from "@/lib/domain/tenancy";
 import type { ScheduleRow, YearMonth } from "@/lib/domain/types";
 import { parseSchedule } from "@/lib/sheets/schedule";
@@ -229,5 +229,30 @@ describe("latestEntryRow", () => {
     expect(latestEntryRow(ASHA_PAID_OCT, "p1")).toEqual({ month: OCT, entry: { tenant: "Asha", count: 4, amount: 5450 } });
     expect(latestEntryRow(ASHA_PAID_OCT, "p1", OCT)?.month).toEqual({ year: 2026, month: 9 });
     expect(latestEntryRow(ASHA_PAID_OCT, "p4")).toBeNull();
+  });
+});
+
+describe("lastRentMonth", () => {
+  it("is the latest month in which the portion has an entry for this tenant", () => {
+    expect(lastRentMonth(ASHA_PAID_OCT, "p1", "Asha")).toEqual(OCT);
+    expect(lastRentMonth(ASHA_PAID_OCT, "p3", "Chitra")).toEqual({ year: 2026, month: 9 });
+  });
+
+  it("ignores capitals and spaces around the name", () => {
+    expect(lastRentMonth(ASHA_PAID_OCT, "p1", "  aSHA ")).toEqual(OCT);
+  });
+
+  it("is null for a tenant the portion's Schedule never names, and for a portion with no entries", () => {
+    expect(lastRentMonth(ASHA_PAID_OCT, "p1", "Hari")).toBeNull();
+    expect(lastRentMonth(ASHA_PAID_OCT, "p4", "Asha")).toBeNull();
+  });
+
+  it("looks past a later tenant's months to this tenant's own latest", () => {
+    const rows = scheduleWith(
+      [10, [["Asha", 4, 5450], null, null, null, null]],
+      [11, [["Hari", 1, 6000], null, null, null, null]],
+    );
+    expect(lastRentMonth(rows, "p1", "Asha")).toEqual(OCT);
+    expect(lastRentMonth(rows, "p1", "Hari")).toEqual(NOV);
   });
 });

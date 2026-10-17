@@ -79,10 +79,23 @@ const tenancyForm = (mode: "create" | "edit") =>
 const moveOutForm = () =>
   renderOpen(
     createElement(MoveOutForm, {
+      portionName: "Ground floor",
       tenant: "Asha",
       portionId: "p1",
       target: { id: "t-1", expectedUpdatedAt: "x", hasAdvance: true, initialNotes: "" },
       initial: emptyMoveOutForm("2026-10-05", { advanceStatus: "Held", notes: "" }),
+    }),
+  );
+
+/** The move-out form of a tenant with no details on file, open. */
+const recordMoveOutForm = () =>
+  renderOpen(
+    createElement(MoveOutForm, {
+      portionName: "Ground floor",
+      tenant: "Asha",
+      portionId: "p1",
+      target: { kind: "record", portionId: "p1", tenant: "Asha" },
+      initial: emptyMoveOutForm("2026-10-05", { advanceStatus: null, notes: "" }),
     }),
   );
 
@@ -96,6 +109,31 @@ const settingsForm = () =>
       ],
     }),
   );
+
+describe("the move-out form of a tenant with no details on file", () => {
+  it("has the day and notes, and nothing about an advance, a refund or deductions", () => {
+    const out = recordMoveOutForm();
+    expect(out).toContain('aria-label="Move out Asha"');
+    expect(out).toMatch(/<label[^>]*>\s*<span[^>]*>Move-out date<\/span>\s*<input/);
+    expect(out).toMatch(/<label[^>]*>\s*<span[^>]*>Notes<\/span>\s*<textarea/);
+    expect(out).toContain("Record move-out");
+    expect(out).toContain(">Cancel<");
+    for (const absent of ["Refund", "Deductions", "What happened to the advance?", "Whole rupees"]) {
+      expect(out).not.toContain(absent);
+    }
+  });
+
+  it("starts on the day it was given and keeps a conflict to the page, as the other form does", () => {
+    const out = recordMoveOutForm();
+    expect(out).toContain('value="2026-10-05"');
+    expect(out).not.toContain('role="alert"');
+  });
+
+  it("is the form of details on file, still, when it is given a tenancy", () => {
+    expect(moveOutForm()).toContain("What happened to the advance?");
+    expect(moveOutForm()).toContain("Refund (₹)");
+  });
+});
 
 describe("the hints a phone's keyboard takes", () => {
   it("the amount: numbers, a Done key, and no suggestions from the browser", () => {

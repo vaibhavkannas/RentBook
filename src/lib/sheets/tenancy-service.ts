@@ -5,22 +5,25 @@ import {
   isAdvanceStatus,
   MAX_NOTES_LENGTH,
   MAX_RUPEES,
+  newTenancyId,
   pastTenancies,
   sameTenantName,
   validateTenancyFields,
+  validateTenantName,
   type AdvanceStatus,
   type Tenancy,
   type TenancyFields,
 } from "@/lib/domain/tenancy";
 import type { PortionConfig } from "@/lib/domain/types";
-import { isValidIsoDay } from "@/lib/domain/year-month";
+import { lastRentMonth, vacancyOf } from "@/lib/domain/vacancy";
+import { isValidIsoDay, ymKey } from "@/lib/domain/year-month";
 import { conflict, PAGE_OUT_OF_DATE_MESSAGE, sheetStructure, unknownPortion, validation } from "@/lib/errors";
-import { wholeRupeesMessage } from "@/lib/format";
+import { formatMonthTitle, wholeRupeesMessage } from "@/lib/format";
 import { RELOAD_HINT, reloadThen } from "@/lib/recovery-hint";
 import { invalidateCaches, loadSnapshot, type SheetsContext, type Snapshot } from "./service";
 import { withWriteLock } from "./write-lock";
 import { checkNewTenancy, recordNewTenant, type WriteStamp } from "./tenancy-writes";
-import { writeTenancyEdit, writeTenancyMoveOut } from "./tenants-store";
+import { appendTenancy, readTenancies, writeTenancyEdit, writeTenancyMoveOut } from "./tenants-store";
 
 export type SaveTenancyInput = {
   portionId: string;
@@ -44,6 +47,16 @@ export type MoveOutInput = {
   notes?: string;
 };
 
+/** Recording that the Schedule's tenant has moved out, when no details were ever added for them. */
+export type MoveOutWithoutDetailsInput = {
+  portionId: string;
+  /** The tenant the person saw named in the Schedule. */
+  tenant: string;
+  /** YYYY-MM-DD */
+  moveOut: string;
+  notes?: string;
+};
+
 export type PortionTenants = {
   portion: PortionConfig;
   /** Tenant named in the Schedule's latest entry for this portion, or null. */
@@ -53,6 +66,11 @@ export type PortionTenants = {
   /** A current tenancy on file for a different tenant name (will be closed when new details are added). */
   mismatched: Tenancy | null;
   past: Tenancy[];
+  /**
+   * The day the portion's last tenant moved out (YYYY-MM-DD), when the Schedule's tenant has moved out and nothing since says
+   * they stayed (see `vacancyOf`). Null when the portion is not vacant. Always null when the Tenants tab cannot be used.
+   */
+  vacantSince: string | null;
   /**
    * Set when the Tenants tab cannot be used (for example a header was changed): what is wrong. Then there are
    * no tenancies to show, and saving details is refused until the tab is fixed.
@@ -212,8 +230,23 @@ function checkRupees(value: number | null | undefined, label: string): number | 
 }
 
 /**
+ * A move-out cannot come before the first day of the month the tenant's rent was last logged for in the Schedule: that
+ * rent says they lived there. A tenant the Schedule never names for the portion has no such month.
+ */
+function requireMoveOutAfterRent(snapshot: Snapshot, portionId: string, tenant: string, moveOut: string): void {
+  const last = lastRentMonth(snapshot.rows, portionId, tenant);
+  if (last === null || moveOut >= `${ymKey(last)}-01`) return;
+  const title = formatMonthTitle(last);
+  throw validation(
+    `${tenant.trim()} has rent logged for ${title}. Choose a move-out date in ${title} or later, or undo that payment first.`,
+    "moveOut",
+  );
+}
+
+/**
  * Closes a current tenancy: records the move-out date, what happened to the advance, the refund,
- * the deductions and (when given) new notes. The Schedule is not touched.
+ * the deductions and (when given) new notes. The Schedule is not touched; the portion shows as vacant from
+ * the first month on or after the move-out (see vacancy.ts).
  */
 export async function moveOutTenancy(
   ctx: SheetsContext,
@@ -260,6 +293,7 @@ async function moveOutUnchecked(
   if (isValidIsoDay(stored.moveIn) && moveOut < stored.moveIn) {
     throw validation("Move-out date cannot be before the move-in date.", "moveOut");
   }
+  requireMoveOutAfterRent(snapshot, stored.portionId, stored.tenant, moveOut);
 
   // Only a tenancy with an advance has an outcome. A column the person gave nothing for is not written at all,
   // so text typed by hand into it stays; the returned tenancy then shows what the Sheet still holds.
@@ -284,6 +318,89 @@ async function moveOutUnchecked(
 }
 
 /**
+ * Records that the tenant the Schedule names for a portion has moved out, when the Tenants tab has no details for them:
+ * adds one closed row (a new id, the portion, the tenant, no move-in date, the move-out date, the notes, who and when). Reads
+ * fresh and refuses with a conflict when the Schedule no longer names `tenant`, when the portion has an open tenancy, or when
+ * the tenant has already moved out, so a page that is out of date adds nothing. Nothing is overwritten, and the Schedule is
+ * not touched. The row is read back by its id, as the row's number is where Google put it.
+ */
+export async function moveOutWithoutDetails(
+  ctx: SheetsContext,
+  input: MoveOutWithoutDetailsInput,
+  stamp: WriteStamp,
+): Promise<{ tenancy: Tenancy }> {
+  return withWriteLock(async () => {
+    try {
+      return await moveOutWithoutDetailsUnchecked(ctx, input, stamp);
+    } finally {
+      invalidateCaches(ctx);
+    }
+  });
+}
+
+async function moveOutWithoutDetailsUnchecked(
+  ctx: SheetsContext,
+  input: MoveOutWithoutDetailsInput,
+  stamp: WriteStamp,
+): Promise<{ tenancy: Tenancy }> {
+  const tenant = validateTenantName(input.tenant);
+  const moveOut = (input.moveOut ?? "").trim();
+  requireDay(moveOut, "Move-out date");
+  const notes =
+    input.notes === undefined
+      ? ""
+      : cleanText(input.notes, "Notes", { max: MAX_NOTES_LENGTH, allowNewlines: true });
+
+  const snapshot = await loadSnapshot(ctx);
+  requireUsableTenants(snapshot);
+  const portion = requirePortion(snapshot, input.portionId);
+
+  // The person saw one tenant's name; the Schedule must still name that tenant.
+  const scheduleTenant = scheduleTenantOf(snapshot, input.portionId);
+  if (scheduleTenant === null) throw validation("This portion has no tenant yet.");
+  if (!sameTenantName(scheduleTenant, tenant)) {
+    throw conflict(`The tenant for ${portion.name} changed. ${RELOAD_HINT}`);
+  }
+  // With details on file, the tenant is moved out with Move out on those details; and a tenant who has moved out already
+  // is not moved out twice.
+  const open = currentTenancy(snapshot.tenancies, input.portionId);
+  if (open) {
+    throw conflict(`${portion.name} already has details on file for ${open.tenant}. ${reloadThen("check the details")}`);
+  }
+  if (vacancyOf(snapshot.rows, snapshot.tenancies, input.portionId) !== null) {
+    throw conflict(`${scheduleTenant.trim()} has already moved out. ${reloadThen("check the details")}`);
+  }
+  requireMoveOutAfterRent(snapshot, portion.id, scheduleTenant, moveOut);
+
+  const row: Omit<Tenancy, "rowNumber"> = {
+    id: newTenancyId(),
+    portionId: portion.id,
+    tenant: scheduleTenant.trim(),
+    phone: "",
+    moveIn: "",
+    agreementEnd: "",
+    advance: null,
+    advanceDate: "",
+    advanceStatus: null,
+    refund: null,
+    deductions: null,
+    notes,
+    moveOut,
+    updatedBy: stamp.updatedBy,
+    updatedAt: stamp.now.toISOString(),
+  };
+  await appendTenancy(ctx.gateway, row);
+  // Where Google put the row is not known (a blank row inside the tab makes it land there), so find it again by its id.
+  const written = (await readTenancies(ctx.gateway)).findLast((t) => t.id === row.id);
+  if (!written) {
+    throw conflict(
+      `The Tenants tab in your Sheet changed while the move-out was being saved. ${reloadThen("check the details")}`,
+    );
+  }
+  return { tenancy: written };
+}
+
+/**
  * What a portion's tenant page shows. Uses the page-view cache when the context has one
  * (`minFetchedAt` demands data newer than that time), like `getMonthView`.
  */
@@ -303,6 +420,7 @@ export async function getPortionTenants(
       current: null,
       mismatched: null,
       past: [],
+      vacantSince: null,
       tenantsProblem: snapshot.tenantsProblem,
     };
   }
@@ -314,5 +432,6 @@ export async function getPortionTenants(
     current: matches ? onFile : null,
     mismatched: onFile !== null && !matches ? onFile : null,
     past: pastTenancies(snapshot.tenancies, portionId),
+    vacantSince: vacancyOf(snapshot.rows, snapshot.tenancies, portionId)?.since ?? null,
   };
 }

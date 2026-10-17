@@ -85,3 +85,18 @@ export function noCurrentTenancyNote(input: {
   }
   return null;
 }
+
+/** Under "Move out" for details on file: who, and what it does to the portion on the month screen. */
+export function moveOutHint(tenant: string, portion: string): string {
+  return `Record that ${tenant} has moved out. ${portion} shows as Vacant from the first month that starts on or after the move-out date, until you add a new tenant. Payments already in your Schedule stay.`;
+}
+
+/** Under "Move out" for a tenant the Schedule names but who has no details on file. */
+export function recordMoveOutHint(tenant: string): string {
+  return `Record that ${tenant} has moved out. You don't need to add their details first.`;
+}
+
+/** Above "Current tenancy" when the portion's last tenant has moved out: since when, and where the next tenant is added. */
+export function vacantSinceNote(since: string): string {
+  return `Vacant since ${formatDay(since)}. Add the next tenant with New tenant on the month screen.`;
+}

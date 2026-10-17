@@ -29,7 +29,8 @@ describe("the words of each toast", () => {
     expect(code("UndoSheet")).toMatch(/\bundoExitToastText\b/);
     expect(code("SettingsForm")).toMatch(/toast\.show\(SETTINGS_SAVED_TOAST\)/);
     expect(code("TenancyForm")).toMatch(/toast\.show\(DETAILS_SAVED_TOAST\)/);
-    expect(code("MoveOutForm")).toMatch(/toast\.show\(moveOutToastText\(tenant\)\)/);
+    // Deliberate change (3-10): the toast also names the portion and the move-out day, for the month it is vacant from.
+    expect(code("MoveOutForm")).toMatch(/toast\.show\(moveOutToastText\(tenant, portionName, [^)]*\)\)/);
   });
 });
 

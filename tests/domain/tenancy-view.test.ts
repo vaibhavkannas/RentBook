@@ -6,9 +6,12 @@ import {
   lastUpdatedText,
   MOVE_OUT_OUTCOME_HINT,
   MOVE_OUT_RUPEES_HINT,
+  moveOutHint,
   noCurrentTenancyNote,
   phoneHref,
+  recordMoveOutHint,
   tenancyPeriod,
+  vacantSinceNote,
 } from "@/lib/tenancy-view";
 
 describe("advanceSummary", () => {
@@ -177,5 +180,33 @@ describe("the move-out form hints", () => {
 
   it("say that Refund and Deductions are whole rupees and may stay blank", () => {
     expect(MOVE_OUT_RUPEES_HINT).toBe("Whole rupees, leave blank if none.");
+  });
+});
+
+describe("moveOutHint", () => {
+  it("says what a move-out does to the month screen, and that payments already in the Schedule stay", () => {
+    expect(moveOutHint("Asha", "Ground floor")).toBe(
+      "Record that Asha has moved out. Ground floor shows as Vacant from the first month that starts on or after the move-out date, until you add a new tenant. Payments already in your Schedule stay.",
+    );
+  });
+});
+
+describe("recordMoveOutHint", () => {
+  it("says the tenant's details are not needed first", () => {
+    expect(recordMoveOutHint("Asha")).toBe("Record that Asha has moved out. You don't need to add their details first.");
+  });
+});
+
+describe("vacantSinceNote", () => {
+  it("says since when the portion is vacant, and where the next tenant is added", () => {
+    expect(vacantSinceNote("2026-10-20")).toBe(
+      "Vacant since 20 Oct 2026. Add the next tenant with New tenant on the month screen.",
+    );
+  });
+});
+
+describe("tenancyPeriod for a move-out recorded without details", () => {
+  it("shows a dash for the move-in day it does not have", () => {
+    expect(tenancyPeriod("", "2026-10-20")).toBe("— to 20 Oct 2026");
   });
 });

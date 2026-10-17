@@ -102,3 +102,16 @@ export function vacancyOf(rows: ScheduleRow[], tenancies: Tenancy[], portionId: 
   const gone = leaver(rows, tenancies, portionId);
   return gone ? { since: gone.moveOut, previousTenant: gone.tenant } : null;
 }
+
+/**
+ * The latest month in which the portion has an entry for this tenant (their name, ignoring capitals and spaces around it):
+ * the last month their rent was logged. Null when the Schedule never names them for the portion.
+ */
+export function lastRentMonth(rows: ScheduleRow[], portionId: string, tenant: string): YearMonth | null {
+  let best: YearMonth | null = null;
+  for (const row of rows) {
+    const entry = row.entries.get(portionId);
+    if (entry && sameTenantName(entry.tenant, tenant) && (!best || compareYm(row.month, best) > 0)) best = row.month;
+  }
+  return best;
+}

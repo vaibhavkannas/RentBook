@@ -13,13 +13,16 @@ import { LOG_TAB } from "@/lib/sheets/settings-store";
 import {
   getPortionTenants,
   moveOutTenancy,
+  moveOutWithoutDetails,
   saveTenancy,
+  type MoveOutWithoutDetailsInput,
   type SaveTenancyInput,
 } from "@/lib/sheets/tenancy-service";
 import { appendTenancy, readTenancies, TENANTS_TAB } from "@/lib/sheets/tenants-store";
 import { cell, FakeGateway } from "../support/fake-gateway";
 import { baseSchedule, PORTIONS, TOTAL_HEADER } from "../support/fixtures";
 import { loggedLines } from "../support/logs";
+import { ShiftingGateway } from "../support/shifting-gateway";
 
 const NOW = new Date("2026-10-05T04:30:00Z");
 const LATER = new Date("2026-10-06T09:00:00Z");
@@ -1089,9 +1092,11 @@ describe("moveOutTenancy", () => {
   });
 
   it("allows moving out on the move-in day", async () => {
-    const { ctx, tenancy } = await created();
-    await moveOut(ctx, tenancy, { moveOut: "2026-01-15" });
-    expect(await tenancies(ctx)).toMatchObject([{ moveOut: "2026-01-15" }]);
+    // Deliberate change (3-10): Asha has rent logged for September 2026, so the day must be in September or later.
+    // The test used 2026-01-15; it now moves in, and out, on a day in September.
+    const { ctx, tenancy } = await created({ ...FIELDS, moveIn: "2026-09-15" });
+    await moveOut(ctx, tenancy, { moveOut: "2026-09-15" });
+    expect(await tenancies(ctx)).toMatchObject([{ moveOut: "2026-09-15" }]);
   });
 
   it("refuses a move-out before the move-in date and writes nothing", async () => {
@@ -1657,5 +1662,323 @@ describe("logPayment: tenancy details for a new tenant", () => {
     await payNew(ctx, { tenancy: NEW_FIELDS });
     const card = (await getMonthView(ctx, OCT)).cards[0];
     expect(card).toMatchObject({ status: "paid", tenancy: { phone: "98000 12345", moveIn: "2026-10-01", advance: 12000 } });
+  });
+});
+
+/** A plain payment for October (the month after the base Schedule), as the app logs it. */
+const pay = (ctx: SheetsContext, input: Partial<LogPaymentInput> & { portionId: string }) =>
+  logPayment(ctx, { month: OCT, amount: 5450, dateReceived: "2026-10-05", ...input }, PAY_OPTIONS);
+
+describe("moveOutTenancy: the Schedule has the tenant's rent", () => {
+  async function created() {
+    const { fake, ctx } = await ready();
+    const { tenancy } = await create(ctx);
+    fake.calls = [];
+    return { fake, ctx, tenancy };
+  }
+  const moveOutOn = (ctx: SheetsContext, tenancy: Tenancy, day: string) =>
+    moveOutTenancy(ctx, { id: tenancy.id, expectedUpdatedAt: tenancy.updatedAt, moveOut: day }, LATER_OPTIONS);
+
+  it("refuses a day before the first of the month of the tenant's latest Schedule entry, and writes nothing", async () => {
+    const { fake, ctx, tenancy } = await created();
+    const before = snapshotOf(fake);
+    const error = await expectCode(moveOutOn(ctx, tenancy, "2026-08-31"), "validation");
+    expect(error.message).toBe(
+      "Asha has rent logged for September 2026. Choose a move-out date in September 2026 or later, or undo that payment first.",
+    );
+    expect(error.details).toEqual({ field: "moveOut" });
+    expect(snapshotOf(fake)).toEqual(before);
+  });
+
+  it("allows the first day of that month, and any later day", async () => {
+    for (const day of ["2026-09-01", "2026-09-30", "2026-12-25"]) {
+      const { ctx, tenancy } = await created();
+      await moveOutOn(ctx, tenancy, day);
+      expect(await tenancies(ctx)).toMatchObject([{ moveOut: day }]);
+    }
+  });
+
+  it("looks at the tenant's latest entry, which moves on when more rent is logged", async () => {
+    const { ctx, tenancy } = await created();
+    await pay(ctx, { portionId: "p1" });
+    const error = await expectCode(moveOutOn(ctx, tenancy, "2026-09-30"), "validation");
+    expect(error.message).toContain("rent logged for October 2026. Choose a move-out date in October 2026 or later");
+    await moveOutOn(ctx, tenancy, "2026-10-01");
+  });
+
+  it("says the move-in problem first when the day is before the move-in as well", async () => {
+    const { ctx, tenancy } = await created();
+    const error = await expectCode(moveOutOn(ctx, tenancy, "2026-01-14"), "validation");
+    expect(error.message).toBe("Move-out date cannot be before the move-in date.");
+  });
+
+  it("does not hold a tenancy whose tenant has no entry in the Schedule to a month", async () => {
+    // Details typed in by hand for someone the Schedule never names: nothing to compare the day with
+    const { fake, ctx } = await ready();
+    await appendTenancy(fake, row({ id: "t-zed", tenant: "Zed", moveIn: "2026-01-01" }));
+    const [stored] = await tenancies(ctx);
+    await moveOutOn(ctx, stored, "2026-01-31");
+    expect(await tenancies(ctx)).toMatchObject([{ id: "t-zed", moveOut: "2026-01-31" }]);
+  });
+
+  it("compares the tenant's name ignoring capitals and spaces", async () => {
+    const { fake, ctx } = await ready();
+    await appendTenancy(fake, row({ id: "t-asha-caps", tenant: "  ASHA ", moveIn: "2026-01-01" }));
+    const [stored] = await tenancies(ctx);
+    await expectCode(moveOutOn(ctx, stored, "2026-08-31"), "validation");
+  });
+
+  it("leaves the portion vacant from the first month that starts on or after the move-out", async () => {
+    const { ctx, tenancy } = await created();
+    await moveOutOn(ctx, tenancy, "2026-09-30");
+    const view = await getMonthView(ctx, OCT);
+    expect(view.cards[0]).toMatchObject({ status: "vacant", vacancy: { since: "2026-09-30", previousTenant: "Asha" } });
+    expect((await getMonthView(ctx, { year: 2026, month: 9 })).cards[0].status).toBe("paid");
+  });
+});
+
+describe("moveOutWithoutDetails", () => {
+  const input = (overrides: Partial<MoveOutWithoutDetailsInput> = {}): MoveOutWithoutDetailsInput => ({
+    portionId: "p1",
+    tenant: "Asha",
+    moveOut: "2026-09-30",
+    ...overrides,
+  });
+  const record = (ctx: SheetsContext, overrides: Partial<MoveOutWithoutDetailsInput> = {}, options = LATER_OPTIONS) =>
+    moveOutWithoutDetails(ctx, input(overrides), options);
+
+  it("appends one closed row: a new id, the portion, the tenant, a blank move-in, the move-out, notes and who and when", async () => {
+    const { fake, ctx } = await ready();
+    const { tenancy } = await record(ctx, { notes: "Left the keys" });
+
+    expect(fake.calls.filter((call) => call === "appendRow")).toHaveLength(1);
+    expect(fake.calls).not.toContain("updateValues");
+    expect(tenancy.id).toMatch(/^t-[0-9a-f-]{36}$/);
+    expect(await tenancies(ctx)).toEqual([
+      {
+        rowNumber: 2,
+        id: tenancy.id,
+        portionId: "p1",
+        tenant: "Asha",
+        phone: "",
+        moveIn: "",
+        agreementEnd: "",
+        advance: null,
+        advanceDate: "",
+        advanceStatus: null,
+        refund: null,
+        deductions: null,
+        notes: "Left the keys",
+        moveOut: "2026-09-30",
+        updatedBy: "member@example.com",
+        updatedAt: "2026-10-06T09:00:00.000Z",
+      },
+    ]);
+    expect(tenancy).toMatchObject({ rowNumber: 2, moveOut: "2026-09-30", moveIn: "" });
+  });
+
+  it("writes every cell of the row it means, blanks as empty text, and nothing in the cells it has no value for", async () => {
+    const { fake, ctx } = await ready();
+    await record(ctx);
+    const written = fake.tabs.get(TENANTS_TAB)![1];
+    expect(written.slice(1)).toEqual(["p1", "Asha", "", "", "", "", "", "", "", "", "", "2026-09-30", "member@example.com", "2026-10-06T09:00:00.000Z"]);
+  });
+
+  it("writes the tenant as the Schedule names them, whatever the request spelt", async () => {
+    const { ctx } = await ready();
+    await record(ctx, { tenant: "  aSHA " });
+    expect(await tenancies(ctx)).toMatchObject([{ tenant: "Asha" }]);
+  });
+
+  it("changes nothing else: not the Schedule, the Settings or the Payments Log", async () => {
+    const { fake, ctx } = await ready();
+    const before = snapshotOf(fake).filter(([tab]) => tab !== TENANTS_TAB);
+    await record(ctx);
+    expect(snapshotOf(fake).filter(([tab]) => tab !== TENANTS_TAB)).toEqual(before);
+  });
+
+  it("leaves the portion vacant from the first month on or after the move-out, and then refuses a plain log", async () => {
+    const { ctx } = await ready();
+    await record(ctx, { moveOut: "2026-09-30" });
+    expect((await getMonthView(ctx, OCT)).cards[0]).toMatchObject({
+      status: "vacant",
+      vacancy: { since: "2026-09-30", previousTenant: "Asha" },
+    });
+    await expectCode(pay(ctx, { portionId: "p1" }), "conflict");
+    // a new tenant starts it again
+    const result = await logPayment(
+      ctx,
+      { month: OCT, portionId: "p1", amount: 6000, dateReceived: "2026-10-05", newTenantName: "Hari" },
+      PAY_OPTIONS,
+    );
+    expect(result.entry).toEqual({ tenant: "Hari", count: 1, amount: 6000 });
+  });
+
+  it("shows the move-out on the portion's page: past, vacant since, and no current tenancy", async () => {
+    const { ctx } = await ready();
+    await record(ctx, { moveOut: "2026-09-30" });
+    const page = await getPortionTenants(ctx, "p1");
+    expect(page.vacantSince).toBe("2026-09-30");
+    expect(page.current).toBeNull();
+    expect(page.mismatched).toBeNull();
+    expect(page.past).toMatchObject([{ tenant: "Asha", moveIn: "", moveOut: "2026-09-30" }]);
+  });
+
+  describe("refuses, and writes nothing", () => {
+    async function refused(overrides: Partial<MoveOutWithoutDetailsInput>, code: string, setupMore?: (fake: FakeGateway) => Promise<void> | void) {
+      const { fake, ctx } = await ready();
+      await setupMore?.(fake);
+      const before = snapshotOf(fake);
+      const error = await expectCode(record(ctx, overrides), code);
+      expect(snapshotOf(fake)).toEqual(before);
+      return error;
+    }
+
+    it("with a conflict when the Schedule no longer names this tenant", async () => {
+      const error = await refused({ tenant: "Hari" }, "conflict");
+      expect(error.message).toMatch(/^The tenant for First floor, single bedroom changed\./);
+      const typed = await refused({}, "conflict", (fake) => setScheduleTenant(fake, "p1", "Bala"));
+      expect(typed.message).toMatch(/^The tenant for First floor, single bedroom changed\./);
+    });
+
+    it("with a conflict when the portion has an open tenancy, for this tenant or another", async () => {
+      const same = await refused({}, "conflict", (fake) => appendTenancy(fake, row()));
+      expect(same.message).toBe(
+        "First floor, single bedroom already has details on file for Asha. Tap another tab at the bottom of the screen and come back, then check the details.",
+      );
+      const other = await refused({}, "conflict", (fake) => appendTenancy(fake, row({ tenant: "Bala" })));
+      expect(other.message).toContain("already has details on file for Bala");
+    });
+
+    it("with a conflict when the tenant has already moved out (a second phone, a stale page)", async () => {
+      const error = await refused({}, "conflict", (fake) => appendTenancy(fake, row({ moveOut: "2026-09-10" })));
+      expect(error.message).toBe(
+        "Asha has already moved out. Tap another tab at the bottom of the screen and come back, then check the details.",
+      );
+    });
+
+    it("with a validation error when the portion has no tenant yet", async () => {
+      const { fake, ctx } = await ready();
+      const before = snapshotOf(fake);
+      const error = await expectCode(record(ctx, { portionId: "p4", tenant: "Farah" }), "validation");
+      expect(error.message).toBe("This portion has no tenant yet.");
+      expect(snapshotOf(fake)).toEqual(before);
+    });
+
+    it("with the unknown-portion answer for a portion that is not in the Settings", async () => {
+      const error = await refused({ portionId: "p9" }, "validation");
+      expect(error.message).toContain("That portion isn't in your Settings any more.");
+    });
+
+    it("with a sheet-structure error when the Tenants tab cannot be used", async () => {
+      const { fake, ctx } = await ready();
+      fake.tabs.get(TENANTS_TAB)![0][4] = "Moved in";
+      const before = snapshotOf(fake);
+      await expectCode(record(ctx), "sheet-structure");
+      expect(snapshotOf(fake)).toEqual(before);
+    });
+
+    it("with the field moveOut when the day is before the month of the tenant's latest Schedule entry", async () => {
+      const error = await refused({ moveOut: "2026-08-31" }, "validation");
+      expect(error.message).toBe(
+        "Asha has rent logged for September 2026. Choose a move-out date in September 2026 or later, or undo that payment first.",
+      );
+      expect(error.details).toEqual({ field: "moveOut" });
+    });
+
+    it.each([
+      ["a day that does not exist", { moveOut: "2026-02-30" }],
+      ["text for a date", { moveOut: "30 Sep" }],
+      ["a move-out date before 2000", { moveOut: "1999-12-31" }],
+      ["a move-out date after 2100", { moveOut: "2101-01-01" }],
+      ["notes over 500 characters", { notes: "n".repeat(501) }],
+      ["notes with a control character", { notes: "keys\u0007back" }],
+      ["a blank tenant", { tenant: "   " }],
+    ])("with a validation error for %s", async (_name, overrides) => {
+      await refused(overrides, "validation");
+    });
+  });
+
+  it("allows the first day of the month of the latest entry", async () => {
+    const { ctx } = await ready();
+    await record(ctx, { moveOut: "2026-09-01" });
+    expect(await tenancies(ctx)).toMatchObject([{ moveOut: "2026-09-01" }]);
+  });
+
+  it("keeps a note exactly as the person wrote it, trimmed, with line breaks", async () => {
+    const { ctx } = await ready();
+    await record(ctx, { notes: "  Left the keys.\nAdvance returned.  " });
+    expect(await tenancies(ctx)).toMatchObject([{ notes: "Left the keys.\nAdvance returned." }]);
+  });
+
+  describe("how it writes", () => {
+    it("reads fresh, never the page-view cache, and throws the cache away after", async () => {
+      const { fake } = setup();
+      const ctx = withSnapshotCache({ gateway: fake, scheduleTab: "Schedule", totalHeader: TOTAL_HEADER });
+      await getMonthView(ctx, OCT); // the cache now holds a Tenants tab with no tenancy
+      await appendTenancy(fake, row()); // someone adds details for Asha: only a fresh read sees them
+      await expectCode(record(ctx), "conflict");
+      expect((await getMonthView(ctx, OCT)).cards[0].tenancy).not.toBeNull();
+    });
+
+    it("clears the cache, so the next page view shows the vacancy", async () => {
+      const { fake } = setup();
+      const ctx = withSnapshotCache({ gateway: fake, scheduleTab: "Schedule", totalHeader: TOTAL_HEADER });
+      await getMonthView(ctx, OCT);
+      await record(ctx);
+      expect((await getMonthView(ctx, OCT)).cards[0].status).toBe("vacant");
+    });
+
+    it("clears the cache when it refuses, too", async () => {
+      const { fake } = setup();
+      const ctx = withSnapshotCache({ gateway: fake, scheduleTab: "Schedule", totalHeader: TOTAL_HEADER });
+      await getMonthView(ctx, OCT);
+      await expectCode(record(ctx, { tenant: "Hari" }), "conflict");
+      const reads = () => fake.calls.filter((call) => call === "getManyValues").length;
+      const before = reads();
+      await getMonthView(ctx, OCT);
+      expect(reads()).toBe(before + 1);
+    });
+
+    it("refuses the second of two at once, one at a time", async () => {
+      const { fake, ctx } = await ready();
+      fake.delayMs = 4;
+      const first = record(ctx, { moveOut: "2026-09-30" });
+      await new Promise((resolve) => setTimeout(resolve, 1));
+      const second = record(ctx, { moveOut: "2026-10-02" });
+      const results = await Promise.allSettled([first, second]);
+      fake.delayMs = 0;
+      expect(results[0].status).toBe("fulfilled");
+      expect(results[1].status).toBe("rejected");
+      expect(((results[1] as PromiseRejectedResult).reason as AppError).code).toBe("conflict");
+      expect(await tenancies(ctx)).toHaveLength(1);
+    });
+
+    it("refuses with a conflict when the row it appended cannot be found again, and says so", async () => {
+      const { fake, ctx } = await ready();
+      let appended = false;
+      const append = fake.appendRow.bind(fake);
+      fake.appendRow = async (tab, values) => {
+        const result = await append(tab, values);
+        if (tab === TENANTS_TAB) appended = true;
+        return result;
+      };
+      const read = fake.getValues.bind(fake);
+      fake.getValues = async (tab, a1, render) => (appended && tab === TENANTS_TAB ? read(tab, "A1:O1", render) : read(tab, a1, render));
+      const error = await expectCode(record(ctx), "conflict");
+      expect(error.message).toBe(
+        "The Tenants tab in your Sheet changed while the move-out was being saved. Tap another tab at the bottom of the screen and come back, then check the details.",
+      );
+    });
+
+    it("returns the row the Sheet gave it, found again by its id, when a blank row inside the tab makes it land there", async () => {
+      const fake = new ShiftingGateway({ Schedule: baseSchedule() });
+      const ctx: SheetsContext = { gateway: fake, scheduleTab: "Schedule", totalHeader: TOTAL_HEADER };
+      await getSettings(ctx);
+      fake.tabs.get(TENANTS_TAB)!.push([]); // row 2 is blank: Google puts the appended row there
+      const { tenancy } = await record(ctx);
+      expect(tenancy.rowNumber).toBe(2);
+      expect(await tenancies(ctx)).toMatchObject([{ rowNumber: 2, id: tenancy.id, moveOut: "2026-09-30" }]);
+    });
   });
 });

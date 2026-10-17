@@ -61,8 +61,17 @@ describe("the toast after saving settings, tenancy details and a move-out", () =
     expect(DETAILS_SAVED_TOAST).toBe("Details saved");
   });
 
-  it("says who has moved out", () => {
-    expect(moveOutToastText("Asha")).toBe("Asha has moved out");
+  it("says who has moved out, and from which month the portion is vacant", () => {
+    // Deliberate change (3-10): the toast was "Asha has moved out" and now also says what happens to the portion.
+    expect(moveOutToastText("Asha", "Ground floor", "2026-10-20")).toBe(
+      "Asha has moved out. Ground floor is vacant from November 2026.",
+    );
+  });
+
+  it("names the month of the move-out when it is on the 1st, and the month after otherwise, over a year end", () => {
+    expect(moveOutToastText("Asha", "Attic", "2026-11-01")).toBe("Asha has moved out. Attic is vacant from November 2026.");
+    expect(moveOutToastText("Asha", "Attic", "2026-11-02")).toBe("Asha has moved out. Attic is vacant from December 2026.");
+    expect(moveOutToastText("Asha", "Attic", "2026-12-31")).toBe("Asha has moved out. Attic is vacant from January 2027.");
   });
 });
 

@@ -14,6 +14,7 @@ const retryLogRow = vi.hoisted(() =>
 const markWritten = vi.hoisted(() => vi.fn(async () => undefined));
 const saveTenancy = vi.hoisted(() => vi.fn());
 const moveOutTenancy = vi.hoisted(() => vi.fn());
+const moveOutWithoutDetails = vi.hoisted(() => vi.fn());
 const prepareSheet = vi.hoisted(() => vi.fn<(...args: unknown[]) => Promise<{ created: string[] }>>(async () => ({ created: ["Tenants"] })));
 
 vi.mock("@/auth", () => ({ auth }));
@@ -33,6 +34,7 @@ vi.mock("@/lib/sheets/tenancy-service", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/sheets/tenancy-service")>()),
   saveTenancy,
   moveOutTenancy,
+  moveOutWithoutDetails,
 }));
 
 import { AppError, conflict, configError, rateLimited, unavailable, validation } from "@/lib/errors";
@@ -77,6 +79,7 @@ beforeEach(() => {
   markWritten.mockClear();
   saveTenancy.mockReset();
   moveOutTenancy.mockReset();
+  moveOutWithoutDetails.mockReset();
   prepareSheet.mockClear();
 });
 afterEach(() => {
@@ -780,6 +783,95 @@ describe("POST /api/tenancies/move-out", () => {
     await postMoveOut(request(good));
     expect(markWritten.mock.calls).toEqual([["member@example.com"]]);
   });
+
+  describe("with no details on file: the portion, the tenant and the day, with no id", () => {
+    const record = { portionId: "p1", tenant: "Asha", moveOut: "2026-10-20", notes: "Left the keys" };
+    const recorded = { tenancy: { id: "t-new", moveOut: "2026-10-20" } };
+
+    it("rejects a visitor who is not signed in, and a signed-in address that is not on the list", async () => {
+      signedInAs(null);
+      expect((await postMoveOut(request(record))).status).toBe(401);
+      signedInAs("stranger@example.com");
+      expect((await postMoveOut(request(record))).status).toBe(401);
+      expect(moveOutWithoutDetails).not.toHaveBeenCalled();
+      expect(markWritten).not.toHaveBeenCalled();
+    });
+
+    it("lets any listed member record it, with the lower-cased email, and does not close details", async () => {
+      signedInAs("Member@Example.com");
+      moveOutWithoutDetails.mockResolvedValue(recorded);
+      const res = await postMoveOut(request(record));
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({ ok: true, ...recorded });
+      expect(moveOutWithoutDetails).toHaveBeenCalledOnce();
+      expect(moveOutWithoutDetails.mock.calls[0][1]).toEqual(record);
+      expect((moveOutWithoutDetails.mock.calls[0][2] as { updatedBy: string }).updatedBy).toBe("member@example.com");
+      expect(moveOutTenancy).not.toHaveBeenCalled();
+    });
+
+    it("takes the notes as optional", async () => {
+      signedInAs("member@example.com");
+      moveOutWithoutDetails.mockResolvedValue(recorded);
+      const bare = { portionId: record.portionId, tenant: record.tenant, moveOut: record.moveOut };
+      expect((await postMoveOut(request(bare))).status).toBe(200);
+      expect(moveOutWithoutDetails.mock.calls[0][1]).toEqual(bare);
+    });
+
+    it("sends a body with an id to the details on file, and a body without one here, never both", async () => {
+      signedInAs("member@example.com");
+      moveOutTenancy.mockResolvedValue(closed);
+      moveOutWithoutDetails.mockResolvedValue(recorded);
+      await postMoveOut(request(good));
+      await postMoveOut(request(record));
+      expect(moveOutTenancy).toHaveBeenCalledOnce();
+      expect(moveOutWithoutDetails).toHaveBeenCalledOnce();
+    });
+
+    it.each([
+      ["neither an id nor a portion", { tenant: "Asha", moveOut: "2026-10-20" }],
+      ["a portion with no tenant", { portionId: "p1", moveOut: "2026-10-20" }],
+      ["a tenant with no portion", { tenant: "Asha", moveOut: "2026-10-20" }],
+      ["a blank tenant", { ...record, tenant: "  " }],
+      ["a missing move-out date", { ...record, moveOut: undefined }],
+      ["a day that is not a day", { ...record, moveOut: "2026-02-30" }],
+      ["notes that are not text", { ...record, notes: 5 }],
+    ])("answers 400 for %s, and does not call a service", async (_name, body) => {
+      signedInAs("member@example.com");
+      const res = await postMoveOut(request(body));
+      expect(res.status).toBe(400);
+      expect((await res.json()).error.code).toBe("validation");
+      expect(moveOutTenancy).not.toHaveBeenCalled();
+      expect(moveOutWithoutDetails).not.toHaveBeenCalled();
+      expect(markWritten).not.toHaveBeenCalled();
+    });
+
+    it("answers 409 on a conflict and marks the write time, so the page behind it is fresh", async () => {
+      signedInAs("member@example.com");
+      moveOutWithoutDetails.mockRejectedValue(conflict("Asha has already moved out. Tap another tab."));
+      const res = await postMoveOut(request(record));
+      expect(res.status).toBe(409);
+      expect((await res.json()).error).toMatchObject({ code: "conflict" });
+      expect(markWritten.mock.calls).toEqual([["member@example.com"]]);
+    });
+
+    it("answers a day before the tenant's rent with the field, and does not mark the write time", async () => {
+      signedInAs("member@example.com");
+      moveOutWithoutDetails.mockRejectedValue(
+        validation("Asha has rent logged for September 2026. Choose a move-out date in September 2026 or later, or undo that payment first.", "moveOut"),
+      );
+      const res = await postMoveOut(request(record));
+      expect(res.status).toBe(400);
+      expect((await res.json()).error.details).toEqual({ field: "moveOut" });
+      expect(markWritten).not.toHaveBeenCalled();
+    });
+
+    it("marks the write time after a successful record", async () => {
+      signedInAs("member@example.com");
+      moveOutWithoutDetails.mockResolvedValue(recorded);
+      await postMoveOut(request(record));
+      expect(markWritten.mock.calls).toEqual([["member@example.com"]]);
+    });
+  });
 });
 
 function retryTokenRequest(token: unknown) {
@@ -1025,7 +1117,7 @@ describe("request integrity on every route", () => {
     ["PUT /api/settings", putSettings, "PUT", "http://localhost/api/settings"],
     ["POST /api/setup/prepare", postPrepare, "POST", "http://localhost/api/setup/prepare"],
   ];
-  const SERVICES = [saveSettings, logPayment, undoPayment, retryLogRow, saveTenancy, moveOutTenancy, prepareSheet];
+  const SERVICES = [saveSettings, logPayment, undoPayment, retryLogRow, saveTenancy, moveOutTenancy, moveOutWithoutDetails, prepareSheet];
 
   const make = (method: string, url: string, headers: Record<string, string>, body: string) =>
     new Request(url, { method, headers, body });

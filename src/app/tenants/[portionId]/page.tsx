@@ -23,9 +23,12 @@ import {
   advanceOutcome,
   advanceSummary,
   lastUpdatedText,
+  moveOutHint,
   noCurrentTenancyNote,
   phoneHref,
+  recordMoveOutHint,
   tenancyPeriod,
+  vacantSinceNote,
 } from "@/lib/tenancy-view";
 
 // A Google call gives up after 10 seconds; the whole request is cut off after 15.
@@ -112,7 +115,7 @@ export default async function TenantsPage({
     );
   }
 
-  const { portion, scheduleTenant, current, mismatched, past, tenantsProblem } = data;
+  const { portion, scheduleTenant, current, mismatched, past, vacantSince, tenantsProblem } = data;
 
   // The Tenants tab cannot be used (a header was changed): say what is wrong. Rent logging does not need it.
   if (tenantsProblem !== undefined) {
@@ -132,6 +135,9 @@ export default async function TenantsPage({
   const phoneLink = current ? phoneHref(current.phone) : null;
   const advance = current ? advanceSummary(current) : null;
   const note = current ? null : noCurrentTenancyNote({ scheduleTenant, mismatched, lastPast: past[0] });
+  // A tenant the Schedule names, with no open tenancy (so no details to move out) and no move-out yet, can still be recorded
+  // as moved out: the details are not needed first.
+  const canRecordMoveOut = !current && !mismatched && scheduleTenant !== null && !vacantSince;
 
   return (
     <Page>
@@ -144,6 +150,8 @@ export default async function TenantsPage({
       <p className="mt-1 text-sm text-muted">
         {scheduleTenant === null ? "No tenant recorded yet." : `Tenant in the Schedule: ${scheduleTenant}`}
       </p>
+
+      {vacantSince && <p className="mt-2 text-sm font-medium">{vacantSinceNote(vacantSince)}</p>}
 
       <Card as="section" aria-labelledby="current-heading" className="mt-4">
         <h2 id="current-heading" className="font-medium">
@@ -208,12 +216,11 @@ export default async function TenantsPage({
           <h2 id="move-out-heading" className="font-medium">
             Move out
           </h2>
-          <p className="mt-1 text-sm text-muted">
-            Record that {current.tenant} has moved out. Your Schedule is not changed.
-          </p>
+          <p className="mt-1 text-sm text-muted">{moveOutHint(current.tenant, portion.name)}</p>
           <MoveOutForm
             key={`move-out-${current.id}`}
             tenant={current.tenant}
+            portionName={portion.name}
             portionId={portion.id}
             noticeShown={changed}
             monthKey={monthKey}
@@ -224,6 +231,25 @@ export default async function TenantsPage({
               initialNotes: current.notes,
             }}
             initial={emptyMoveOutForm(today, current)}
+          />
+        </Card>
+      )}
+
+      {canRecordMoveOut && (
+        <Card as="section" aria-labelledby="move-out-heading" className="mt-4">
+          <h2 id="move-out-heading" className="font-medium">
+            Move out
+          </h2>
+          <p className="mt-1 text-sm text-muted">{recordMoveOutHint(scheduleTenant)}</p>
+          <MoveOutForm
+            key={`record-move-out-${scheduleTenant}`}
+            tenant={scheduleTenant}
+            portionName={portion.name}
+            portionId={portion.id}
+            noticeShown={changed}
+            monthKey={monthKey}
+            target={{ kind: "record", portionId: portion.id, tenant: scheduleTenant }}
+            initial={emptyMoveOutForm(today, { advanceStatus: null, notes: "" })}
           />
         </Card>
       )}

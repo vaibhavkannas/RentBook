@@ -209,6 +209,63 @@ describe("moveOutBody", () => {
   });
 });
 
+describe("moveOutBody: a move-out with no details on file", () => {
+  const record = { portionId: "p1", tenant: "Asha", moveOut: "2026-10-20" };
+
+  it("takes the portion, the tenant, the day and notes, with no id", () => {
+    expect(moveOutBody.parse(record)).toEqual(record);
+    expect(moveOutBody.parse({ ...record, tenant: "  Asha ", notes: " Left the keys.\nAdvance returned. " })).toEqual({
+      portionId: "p1",
+      tenant: "Asha",
+      moveOut: "2026-10-20",
+      notes: "Left the keys.\nAdvance returned.",
+    });
+  });
+
+  it("still takes the body for details on file as it was, and gives back only what it was sent", () => {
+    const full = { ...moveOut, advanceStatus: "Refunded", refund: 18000, deductions: 2000, notes: "Left the keys" };
+    expect(moveOutBody.parse(full)).toEqual(full);
+    expect(moveOutBody.parse(moveOut)).toEqual(moveOut);
+    expect(Object.keys(moveOutBody.parse(moveOut)).sort()).toEqual(["expectedUpdatedAt", "id", "moveOut"]);
+  });
+
+  it("is the details on file when it has an id, whatever else it carries", () => {
+    expect(moveOutBody.parse({ ...moveOut, portionId: "p1", tenant: "Asha" })).toEqual(moveOut);
+  });
+
+  it("leaves out what only a move-out of details on file has", () => {
+    expect(moveOutBody.parse({ ...record, refund: 5, deductions: 6, advanceStatus: "Held", expectedUpdatedAt: undefined })).toEqual(record);
+  });
+
+  it("refuses a body that has neither an id nor a portion and a tenant, saying the page is out of date", () => {
+    const outOfDate = "This page is out of date. Tap another tab at the bottom of the screen and come back, then try again.";
+    expect(problem(moveOutBody, { moveOut: "2026-10-20" })).toBe(`id: ${outOfDate}`);
+    expect(problem(moveOutBody, { portionId: "p1", moveOut: "2026-10-20" })).toBe(`id: ${outOfDate}`);
+    expect(problem(moveOutBody, { tenant: "Asha", moveOut: "2026-10-20" })).toBe(`id: ${outOfDate}`);
+    expect(problem(moveOutBody, { ...moveOut, expectedUpdatedAt: undefined })).toBe(`expectedUpdatedAt: ${outOfDate}`);
+  });
+
+  it("refuses a tenant name that is blank, too long or has a line break, like any new tenant's", () => {
+    expect(problem(moveOutBody, { ...record, tenant: "   " })).toBe("tenant: Tenant name must be 1 to 60 characters.");
+    expect(problem(moveOutBody, { ...record, tenant: "a".repeat(61) })).toBe("tenant: Tenant name must be 1 to 60 characters.");
+    expect(problem(moveOutBody, { ...record, tenant: "As\nha" })).toBe(
+      "tenant: Tenant name cannot have line breaks or other control characters.",
+    );
+  });
+
+  it("refuses a portion id that is empty or over 20 characters, and a day that is not a real one", () => {
+    expect(problem(moveOutBody, { ...record, portionId: "" })).toMatch(/^portionId: /);
+    expect(problem(moveOutBody, { ...record, portionId: "p".repeat(21) })).toMatch(/^portionId: /);
+    expect(problem(moveOutBody, { ...record, moveOut: "2026-02-30" })).toBe("moveOut: Move-out date isn't a real date.");
+    expect(problem(moveOutBody, { ...record, moveOut: "2101-01-01" })).toBe("moveOut: Move-out date must be a date from 2000 to 2100.");
+    expect(problem(moveOutBody, { ...record, moveOut: "" })).toBe("moveOut: Move-out date is required.");
+  });
+
+  it("refuses notes over 500 characters", () => {
+    expect(problem(moveOutBody, { ...record, notes: "n".repeat(501) })).toBe("notes: Notes can have at most 500 characters.");
+  });
+});
+
 describe("settingsBody", () => {
   it("takes portion names trimmed, 1 to 60 characters, with no control characters", () => {
     const named = (name: string) => ({ portions: [{ ...settings.portions[0], name }] });
