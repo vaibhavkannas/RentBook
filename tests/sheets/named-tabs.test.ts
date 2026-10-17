@@ -369,6 +369,59 @@ describe("realTitles", () => {
   });
 });
 
+describe("configuredTabName", () => {
+  it("gives the name the owner asked for an app tab, and the app's own name for a name it does not know", () => {
+    const gateway = new NamedTabsGateway(new FakeGateway({}), { ...DEFAULTS, settings: "My Settings", tenants: "RentBook Tenants" });
+    expect(gateway.configuredTabName(SETTINGS_TAB)).toBe("My Settings");
+    expect(gateway.configuredTabName(LOG_TAB)).toBe(LOG_TAB);
+    expect(gateway.configuredTabName(TENANTS_TAB)).toBe("RentBook Tenants");
+    expect(gateway.configuredTabName("Schedule")).toBe("Schedule");
+    expect(gateway.configuredTabName("Something else")).toBe("Something else");
+  });
+});
+
+describe("a Settings tab that is not there, under a name of the owner's own", () => {
+  const SETTINGS_MISSING_DEFAULT =
+    "The Settings tab is missing. Restore it from File > Version history or rename it back. RentBook will not recreate it because that would reset your rent cycle lengths and hike percentages.";
+
+  async function refusal(names: Partial<TabNames>, tabs: Record<string, unknown[][]>): Promise<AppError> {
+    const gateway = new NamedTabsGateway(new FakeGateway(tabs), { ...DEFAULTS, ...names });
+    const error = await ensureTabs(gateway, "Schedule").then(
+      () => null,
+      (e: unknown) => e,
+    );
+    expect(error).toBeInstanceOf(AppError);
+    return error as AppError;
+  }
+
+  it("is named in the refusal, so the owner knows which tab to restore or rename back", async () => {
+    const error = await refusal({ settings: "My Settings" }, { Schedule: baseSchedule(), [LOG_TAB]: [[...LOG_HEADERS]] });
+    expect(error.code).toBe("sheet-structure");
+    expect(error.message).toBe(
+      'The Settings tab, "My Settings", is missing. Restore it from File > Version history or rename it back. RentBook will not recreate it because that would reset your rent cycle lengths and hike percentages.',
+    );
+  });
+
+  it("is told as before when the tab has its usual name, through the wrapper and without it", async () => {
+    const tabs = { Schedule: baseSchedule(), [TENANTS_TAB]: [[...TENANT_HEADERS]] };
+    expect((await refusal({}, tabs)).message).toBe(SETTINGS_MISSING_DEFAULT);
+    const bare = await ensureTabs(new FakeGateway(tabs), "Schedule").then(
+      () => null,
+      (e: unknown) => e as AppError,
+    );
+    expect(bare?.message).toBe(SETTINGS_MISSING_DEFAULT);
+  });
+
+  it("is named by its configured name even when a tab with the app's own name is in the Sheet", async () => {
+    // "Settings" is somebody's own tab: SETTINGS_TAB points elsewhere, so it is not ours and is not listed.
+    const error = await refusal(
+      { settings: "My Settings" },
+      { Schedule: baseSchedule(), [SETTINGS_TAB]: [["the owner's own notes"]], [LOG_TAB]: [[...LOG_HEADERS]] },
+    );
+    expect(error.message).toContain('"My Settings"');
+  });
+});
+
 describe("tabNamesProblem", () => {
   it("is null for the four default names and for four names that differ", () => {
     expect(tabNamesProblem(DEFAULTS)).toBeNull();

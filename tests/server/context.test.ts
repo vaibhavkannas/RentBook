@@ -53,3 +53,29 @@ describe("getSheetsContext", () => {
     expect(fake.calls).toEqual([]);
   });
 });
+
+describe("sheetsGatewayFor", () => {
+  async function gatewayFor(env: Record<string, string>, google: SheetsGateway, sheetId?: string) {
+    vi.resetModules();
+    const { GoogleSheetsGateway } = await import("@/lib/sheets/google-gateway");
+    vi.mocked(GoogleSheetsGateway.fromServiceAccount).mockReturnValue(google as never);
+    const { sheetsGatewayFor } = await import("@/lib/server/context");
+    const { readEnv } = await import("@/lib/server/env");
+    const gateway = sheetsGatewayFor(readEnv({ ...BASE, ...env }), sheetId);
+    return { gateway, fromServiceAccount: vi.mocked(GoogleSheetsGateway.fromServiceAccount) };
+  }
+
+  it("is what the scripts use: the Google gateway for the environment's Sheet, under the app's tab names", async () => {
+    const fake = new FakeGateway({ rent: [], "my settings": [], "Payments Log": [], Tenants: [] });
+    const { gateway, fromServiceAccount } = await gatewayFor({ SCHEDULE_TAB: "Rent", SETTINGS_TAB: "My Settings" }, fake);
+    expect(fromServiceAccount).toHaveBeenCalledWith("{}", "sheet-id");
+    expect(await gateway.listTabs()).toEqual(["Rent", "Settings", "Payments Log", "Tenants"]);
+  });
+
+  it("can be pointed at another Sheet, such as the test copy, and still finds the tabs by their names", async () => {
+    const fake = new FakeGateway({ Schedule: [["x"]] });
+    const { gateway, fromServiceAccount } = await gatewayFor({}, fake, "test-copy-id");
+    expect(fromServiceAccount).toHaveBeenCalledWith("{}", "test-copy-id");
+    expect(await gateway.getValues("Schedule", "A1", "UNFORMATTED_VALUE")).toEqual([["x"]]);
+  });
+});

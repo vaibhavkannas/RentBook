@@ -5,7 +5,7 @@ import { sheetStructure, tabMissing, unknownPortion, validation } from "@/lib/er
 import { logEvent } from "@/lib/server/log";
 import { colLetter } from "./a1";
 import { isBlankCell } from "./cells";
-import type { CellWrite, SheetsGateway } from "./gateway";
+import { namesTabs, type CellWrite, type SheetsGateway } from "./gateway";
 import { headerKey } from "./headers";
 import { findHeaderRowIndex, shorten } from "./schedule";
 import { addTabIfMissing } from "./tabs";
@@ -57,6 +57,11 @@ const AMOUNT_HEADER = /^amount\s*(\d*)$/;
 /** The number a Tenant, Count or Amount header ends in ("" when it has none), or null when it is not that kind of header. */
 const numberOf = (pattern: RegExp, header: string) => pattern.exec(headerKey(header))?.[1] ?? null;
 
+const duplicateHeader = (name: string) =>
+  sheetStructure(
+    `Header "${name}" appears more than once in the Schedule tab. Give each portion its own headers, for example Tenant, Count, Amount, then Tenant2, Count2, Amount2.`,
+  );
+
 /**
  * Builds default portion settings from the Schedule header row: every "Tenant*" header must be followed by a
  * "Count*" and an "Amount*" header. Straight after the Tenant header they are taken whatever their numbers; with
@@ -68,6 +73,8 @@ export function inferPortions(headerRow: unknown[]): PortionConfig[] {
   const cells = headerRow.map((cell) => String(cell ?? "").trim());
   const portions: PortionConfig[] = [];
   const seen = new Set<string>();
+  // The columns taken as a portion's Count and Amount.
+  const chosen: number[] = [];
   cells.forEach((header, index) => {
     if (/^tenant/.test(headerKey(header)) && numberOf(TENANT_HEADER, header) === null) {
       throw sheetStructure(
@@ -77,9 +84,7 @@ export function inferPortions(headerRow: unknown[]): PortionConfig[] {
     const number = numberOf(TENANT_HEADER, header);
     if (number === null) return;
     if (seen.has(header.toLowerCase())) {
-      throw sheetStructure(
-        `Header "${header}" appears more than once in the Schedule tab. Give each portion its own headers, for example Tenant, Count, Amount, then Tenant2, Count2, Amount2.`,
-      );
+      throw duplicateHeader(header);
     }
     const [count, amount] = pairWith(cells, index, number);
     if (count === null || amount === null) {
@@ -89,13 +94,10 @@ export function inferPortions(headerRow: unknown[]): PortionConfig[] {
     }
     for (const name of [header, cells[count], cells[amount]]) {
       const key = name.toLowerCase();
-      if (seen.has(key)) {
-        throw sheetStructure(
-          `Header "${name}" appears more than once in the Schedule tab. Give each portion its own headers, for example Tenant, Count, Amount, then Tenant2, Count2, Amount2.`,
-        );
-      }
+      if (seen.has(key)) throw duplicateHeader(name);
       seen.add(key);
     }
+    chosen.push(count, amount);
     const position = portions.length;
     portions.push({
       id: `p${position + 1}`,
@@ -109,6 +111,12 @@ export function inferPortions(headerRow: unknown[]): PortionConfig[] {
   });
   if (portions.length === 0) {
     throw sheetStructure('No "Tenant" columns were found in the Schedule header row.');
+  }
+  // The Settings keep the header text and the Schedule is matched by it later. A Count or an Amount that another
+  // column's header reads the same as is refused: renaming the first of them would quietly re-point the portion
+  // at the other.
+  for (const at of chosen) {
+    if (cells.filter((other) => headerKey(other) === headerKey(cells[at])).length > 1) throw duplicateHeader(cells[at]);
   }
   return portions;
 }
@@ -153,9 +161,13 @@ export function resetBootstrap(gateway: SheetsGateway): void {
   bootstrapped.delete(gateway);
 }
 
-// A function, not a constant: the product's name is read when the message is made (wave 3 reads it from the Config tab).
-const settingsMissing = () =>
-  `The Settings tab is missing. Restore it from File > Version history or rename it back. ${getBrand().name} will not recreate it because that would reset your rent cycle lengths and hike percentages.`;
+/**
+ * Why a Settings tab that went missing, beside the other app tabs, is never recreated (the Set up page says the same).
+ * `tab` is what the owner called it (SETTINGS_TAB), named when it is not the usual "Settings".
+ * A function, not a constant: the product's name is read when the message is made (wave 3 reads it from the Config tab).
+ */
+export const settingsMissing = (tab: string = SETTINGS_TAB) =>
+  `The ${tab === SETTINGS_TAB ? "Settings tab" : `Settings tab, "${tab}",`} is missing. Restore it from File > Version history or rename it back. ${getBrand().name} will not recreate it because that would reset your rent cycle lengths and hike percentages.`;
 
 const isBlankRow = (row: unknown[]) => row.every(isBlankCell);
 
@@ -163,7 +175,7 @@ const isBlankRow = (row: unknown[]) => row.every(isBlankCell);
  * True when a Settings tab holds nothing but, at most, its header row, so it is safe to fill in. Anything
  * else (a note, a header that is not ours, rows without a portion id) is left exactly as it is.
  */
-function settingsIsEmpty(values: unknown[][]): boolean {
+export function settingsIsEmpty(values: unknown[][]): boolean {
   const [header = [], ...rest] = values;
   const headerOnly = isBlankRow(header) || String(header[0] ?? "").trim().toLowerCase() === "portion";
   return headerOnly && rest.every(isBlankRow);
@@ -238,7 +250,7 @@ export async function ensureTabs(gateway: SheetsGateway, scheduleTab: string): P
 
   const hasSettings = tabs.includes(SETTINGS_TAB);
   if (!hasSettings && (tabs.includes(LOG_TAB) || tabs.includes(TENANTS_TAB))) {
-    throw sheetStructure(settingsMissing());
+    throw sheetStructure(settingsMissing(namesTabs(gateway) ? gateway.configuredTabName(SETTINGS_TAB) : SETTINGS_TAB));
   }
   if (hasSettings) {
     // An empty answer is read once more before it is believed: seeding writes over A1:G6, so a read that came

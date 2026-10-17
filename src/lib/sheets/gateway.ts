@@ -49,3 +49,15 @@ export interface SheetsGateway {
     overrides: RowOverride[],
   ): Promise<void>;
 }
+
+/**
+ * Implemented by a gateway that finds the app's tabs under other names (see named-tabs.ts), for code that has to say
+ * which tab it means to the owner: the name the owner gave the tab the app knows as `appName`.
+ */
+export interface TabNaming {
+  configuredTabName(appName: string): string;
+}
+
+/** True for a gateway that can say what the owner called the app's tabs. */
+export const namesTabs = (gateway: SheetsGateway): gateway is SheetsGateway & TabNaming =>
+  typeof (gateway as Partial<TabNaming>).configuredTabName === "function";

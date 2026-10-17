@@ -104,6 +104,27 @@ describe("inferPortions: other columns between a portion's three", () => {
     );
   });
 
+  it("refuses a Count or an Amount whose header text another column in the header row has too, so a later rename cannot re-point it", () => {
+    for (const row of [
+      headers("Tenant", "Count", "Count", "Amount"),
+      headers("Tenant", "Count", "Amount", "Count"),
+      headers("Tenant", "Count", "Amount", "Amount"),
+      headers("Tenant", "Count", "Amount", "count"),
+      headers("Tenant", "Count", "Amount", " Amount "),
+      headers("Tenant", "Count", "Amount", "Amount\u200b"),
+      headers("Tenant", "Count", "Amount", "Amount\u00a0"),
+      headers("Tenant", "Phone", "Count", "Amount", "Notes", "Count"),
+    ]) {
+      expect(() => inferPortions(row), JSON.stringify(row)).toThrow(/Header "(Count|Amount)" appears more than once/);
+    }
+  });
+
+  it("still takes a Count and an Amount whose text is its own, with other columns around them", () => {
+    expect(columnsOf(inferPortions(headers("Tenant", "Phone", "Count", "Amount", "Notes", "Total")))).toEqual([
+      ["Tenant", "Count", "Amount"],
+    ]);
+  });
+
   it("still ignores Count and Amount columns that belong to no Tenant column", () => {
     expect(columnsOf(inferPortions(headers("Tenant", "Count", "Amount", "Count2", "Amount2")))).toEqual([
       ["Tenant", "Count", "Amount"],

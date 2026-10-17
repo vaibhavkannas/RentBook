@@ -1,5 +1,5 @@
 import { AppError, configError } from "@/lib/errors";
-import type { CellWrite, RangeRequest, RowOverride, SheetsGateway, ValueRender } from "./gateway";
+import type { CellWrite, RangeRequest, RowOverride, SheetsGateway, TabNaming, ValueRender } from "./gateway";
 import { headerKey } from "./headers";
 import { LOG_TAB, resetBootstrap, SETTINGS_TAB } from "./settings-store";
 import { TENANTS_TAB } from "./tenants-store";
@@ -58,7 +58,7 @@ type Entry = { key: TabKey; logical: string; configured: string };
  * tab in its details) and then resets the app's tab check for itself, which the Google gateway cannot: that check is
  * remembered per gateway, and the app holds this one.
  */
-export class NamedTabsGateway implements SheetsGateway {
+export class NamedTabsGateway implements SheetsGateway, TabNaming {
   private readonly entries: Entry[];
   /** The real title of each tab found, by the app's name for it; null until the Sheet's tabs have been listed. */
   private found: Map<string, string> | null = null;
@@ -119,6 +119,11 @@ export class NamedTabsGateway implements SheetsGateway {
       if (logical !== undefined) return [logical];
       return appNames.has(title) ? [] : [title];
     });
+  }
+
+  /** What the owner called the tab the app knows as `appName`: its configured name, or `appName` itself for a name the wrapper does not know. */
+  configuredTabName(appName: string): string {
+    return this.entries.find((entry) => entry.logical === appName)?.configured ?? appName;
   }
 
   /** The real title of each of the four tabs, or null for one that was not found. Always read from the Sheet. */

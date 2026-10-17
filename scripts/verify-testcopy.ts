@@ -33,9 +33,9 @@ import {
 } from "@/lib/domain/tenancy";
 import { isValidIsoDay } from "@/lib/domain/year-month";
 import { AppError } from "@/lib/errors";
+import { sheetsGatewayFor } from "@/lib/server/context";
 import { readEnv } from "@/lib/server/env";
 import { colLetter } from "@/lib/sheets/a1";
-import { GoogleSheetsGateway } from "@/lib/sheets/google-gateway";
 import { readMonthRowsReadOnly, testCopyProblem } from "@/lib/sheets/recon";
 import { columnsOf, parseSchedule } from "@/lib/sheets/schedule";
 import {
@@ -88,7 +88,7 @@ async function main() {
     throw new Error("Refusing to run: TEST_SHEET_ID is the same as SHEET_ID (the real Sheet).");
   }
 
-  const gateway = GoogleSheetsGateway.fromServiceAccount(env.serviceAccountJson, testSheetId);
+  const gateway = sheetsGatewayFor(env, testSheetId);
 
   // Read-only: the month views below would create missing tabs, so look before anything can write.
   const problem = testCopyProblem(

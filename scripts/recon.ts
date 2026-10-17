@@ -8,13 +8,14 @@
  * import "server-only", which throws outside a Next server build unless that condition is set.
  */
 import { AppError } from "@/lib/errors";
+import { sheetsGatewayFor } from "@/lib/server/context";
 import { readEnv } from "@/lib/server/env";
-import { GoogleSheetsGateway } from "@/lib/sheets/google-gateway";
 import { describeSheet } from "@/lib/sheets/recon";
 
 async function main() {
   const env = readEnv(process.env);
-  const gateway = GoogleSheetsGateway.fromServiceAccount(env.serviceAccountJson, env.sheetId);
+  // The same gateway the app uses, so a Schedule tab or an app tab with another name is found here as it is there.
+  const gateway = sheetsGatewayFor(env);
   const report = await describeSheet(gateway, env.scheduleTab, env.totalHeader);
   console.log(JSON.stringify(report, null, 2));
   if (report.problems.length > 0) {
