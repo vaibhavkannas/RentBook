@@ -21,6 +21,7 @@ import {
   monthCell,
   PORTIONS,
   scheduleRow,
+  seededSettingsGrid,
   settingsGrid,
   settingsGridWithActive,
   TOTAL_HEADER,
@@ -202,7 +203,7 @@ describe("planAddPortion: the owner's Sheet", () => {
   });
 
   it("leaves the Active cell blank, so the portion is on, whether or not the Settings tab has an Active column", async () => {
-    for (const settings of [settingsGrid(), settingsGrid().map((row) => row.slice(0, 7))]) {
+    for (const settings of [seededSettingsGrid(), settingsGrid()]) {
       const plan = planAddPortion(await inputFor(world(settings)), NEW);
       expect(plan.settingsWrites[0].a1).toBe("A7:G7");
       const after = await applied(world(settings), plan.settingsWrites);
@@ -566,7 +567,7 @@ describe("planAddPortion: the input it is given", () => {
 
 describe("planSetActive", () => {
   it("switches a portion off by writing No in its H cell, and Active in H1 when H1 is blank", async () => {
-    const fake = world(settingsGrid().map((row) => row.slice(0, 7))); // the owner's: H1 blank
+    const fake = world(settingsGrid()); // the owner's: H1 blank
     const writes = planSetActive(await inputFor(fake), "p4", false);
     expect(writes).toEqual([
       { tab: SETTINGS_TAB, a1: "H1", values: [["Active"]] },
@@ -604,7 +605,7 @@ describe("planSetActive", () => {
   it("writes nothing to switch on a portion that is already on, with an Active column or without one", async () => {
     expect(planSetActive(await inputFor(world(settingsGridWithActive({ p1: "Yes" }))), "p1", true)).toEqual([]);
     expect(planSetActive(await inputFor(world(settingsGridWithActive())), "p3", true)).toEqual([]);
-    expect(planSetActive(await inputFor(world(settingsGrid().map((row) => row.slice(0, 7)))), "p3", true)).toEqual([]);
+    expect(planSetActive(await inputFor(world(settingsGrid())), "p3", true)).toEqual([]);
   });
 
   it("writes nothing to switch off a portion that is already off", async () => {
@@ -645,12 +646,12 @@ describe("planSetActive", () => {
   });
 
   it("refuses to claim a column that already holds the owner's own values under a blank H1: Active would turn them into settings", async () => {
-    const grid = settingsGrid().map((row) => row.slice(0, 7));
+    const grid = settingsGrid();
     grid[2][7] = "No";
     const error = await refusal(async () => planSetActive(await inputFor(world(grid)), "p4", false));
     expect(error.message).toContain('Column H of the Settings tab holds "No".');
     // and with H1 blank and H empty everywhere, it is fine
-    expect(planSetActive(await inputFor(world(settingsGrid().map((row) => row.slice(0, 7)))), "p4", false)).toHaveLength(2);
+    expect(planSetActive(await inputFor(world(settingsGrid())), "p4", false)).toHaveLength(2);
   });
 
   it("quotes what H holds in printable, shortened form", async () => {
@@ -721,7 +722,7 @@ describe("planReorder", () => {
   });
 
   it("writes only the rows that change", async () => {
-    const { writes } = await reordered(["p1", "p2", "p4", "p3", "p5"]);
+    const { writes } = await reordered(["p1", "p2", "p4", "p3", "p5"], settingsGridWithActive());
     expect(writes.map((write) => write.a1)).toEqual(["A4:H4", "A5:H5"]);
   });
 
@@ -761,7 +762,7 @@ describe("planReorder", () => {
       ["p2", false], ["p1", true], ["p3", false], ["p4", false], ["p5", false],
     ]);
 
-    const owners = settingsGrid().map((row) => row.slice(0, 7));
+    const owners = settingsGrid();
     owners[1][7] = "kept with the row"; // H2 holds a note of the owner's, under a blank H1
     const without = await reordered(["p2", "p1", "p3", "p4", "p5"], owners);
     expect(without.writes.map((write) => write.a1)).toEqual(["A2:G2", "A3:G3"]);

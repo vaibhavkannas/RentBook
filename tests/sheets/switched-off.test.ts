@@ -11,6 +11,7 @@ import {
   PORTIONS,
   scheduleRow,
   scheduleWithoutPortion,
+  seededSettingsGrid,
   settingsGrid,
   settingsGridWithActive,
   TOTAL_HEADER,
@@ -22,7 +23,7 @@ const NOV = { year: 2026, month: 11 };
 const OPTIONS = { now: new Date("2026-10-05T04:30:00Z"), retryDelayMs: 0, loggedBy: "owner@example.com" };
 
 /** The owner's Settings tab as it is today: the seven headers A to G, and H1 blank. (The fixture's own header row has the eighth, Active.) */
-const ownerSettings = (): unknown[][] => settingsGrid().map((row) => row.slice(0, 7));
+const ownerSettings = settingsGrid;
 
 function sheet(settings: unknown[][] = ownerSettings(), schedule: unknown[][] = baseSchedule()) {
   const fake = new FakeGateway({ Schedule: schedule, [SETTINGS_TAB]: settings });
@@ -150,7 +151,7 @@ describe("the Active column", () => {
     const grid = fake.tabs.get(SETTINGS_TAB)!;
     expect(grid[0]).toEqual(SETTINGS_HEADERS);
     expect(grid.slice(1).every((row) => row.length === 7)).toBe(true);
-    expect(grid).toEqual(settingsGrid());
+    expect(grid).toEqual(seededSettingsGrid());
     expect(await readSettings(fake)).toEqual(PORTIONS);
   });
 });

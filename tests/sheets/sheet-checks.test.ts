@@ -623,7 +623,7 @@ describe("the Settings tab (step 5)", () => {
   });
 
   it("counts none off for a Settings tab with no Active column, as before", async () => {
-    const grid = settingsGrid().map((row) => row.slice(0, 7)); // the owner's: seven headers, H1 blank
+    const grid = settingsGrid(); // the owner's: seven headers, H1 blank
     grid[2][7] = "No";
     const { facts } = await run(sheet({ [SETTINGS_TAB]: grid }));
     expect(facts).toMatchObject({ portionsOn: 5, portionsOff: 0 });

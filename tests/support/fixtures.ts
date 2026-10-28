@@ -20,10 +20,13 @@ export const PORTIONS: PortionConfig[] = [
   hikePercent: 5,
 }));
 
-/** A Settings tab as the app seeds it: the header and one row per portion. */
+/**
+ * The owner's Settings tab as it is today: the seven headers A to G (H1 blank, no Active column) and one row per portion. The
+ * tests that stand for the owner's Sheet use this one; a test that needs the Active header takes `seededSettingsGrid`.
+ */
 export function settingsGrid(): unknown[][] {
   return [
-    [...SETTINGS_HEADERS],
+    SETTINGS_HEADERS.slice(0, 7),
     ...PORTIONS.map((p) => [
       p.id,
       p.name,
@@ -34,6 +37,13 @@ export function settingsGrid(): unknown[][] {
       p.hikePercent,
     ]),
   ];
+}
+
+/** A Settings tab as the app seeds it now: the eight headers (H1 reads Active) and one row per portion, every H cell blank. */
+export function seededSettingsGrid(): unknown[][] {
+  const grid = settingsGrid();
+  grid[0] = [...SETTINGS_HEADERS];
+  return grid;
 }
 
 export const SCHEDULE_HEADERS = [
@@ -104,8 +114,7 @@ export function baseSchedule(style: MonthStyle = "text"): unknown[][] {
  * portion that is not named keeps a blank H cell, which means on).
  */
 export function settingsGridWithActive(flags: Record<string, unknown> = {}): unknown[][] {
-  const grid = settingsGrid();
-  grid[0][7] = "Active";
+  const grid = seededSettingsGrid();
   PORTIONS.forEach((portion, index) => {
     if (portion.id in flags) grid[index + 1][7] = flags[portion.id];
   });

@@ -37,7 +37,7 @@ const ORDER_NOT_SAVED =
 const STALE_IDS = "Your portions changed since this page loaded. Tap another tab at the bottom of the screen and come back, then try again.";
 
 /** The owner's Settings tab as it is today: the seven headers A to G, H1 blank. */
-const ownerSettings = (): unknown[][] => settingsGrid().map((row) => row.slice(0, 7));
+const ownerSettings = settingsGrid;
 
 /**
  * A FakeGateway that can play someone else (a person typing in the Sheet, a second server) or a Google that misbehaves:
@@ -584,7 +584,7 @@ describe("setPortionActive: switching off", () => {
     expect((await failure(setPortionActive(ctx, { id: "p9", active: false, today: TODAY }))).code).toBe("validation");
     expect((await failure(setPortionActive(ctx, { id: "p4", active: false, today: "yesterday" }))).code).toBe("validation");
     expect(wrote(fake)).toEqual([]);
-    const taken = settingsGrid().map((row) => row.slice(0, 7));
+    const taken = settingsGrid();
     taken[0][7] = "Notes";
     const other = await ready({ settings: taken });
     const error = await failure(setPortionActive(other.ctx, { id: "p4", active: false, today: TODAY }));
