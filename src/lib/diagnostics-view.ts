@@ -139,7 +139,9 @@ export function diagnosticsRows(input: DiagnosticsInput): DiagnosticsSection[] {
     rows: [
       scheduleRow,
       row("Settings", "settings", "settings", () =>
-        facts?.portionsOn == null ? "can't be read (see Set up)" : `${plural(facts.portionsOn, "portion", "portions")} on, ${facts.portionsOff ?? 0} switched off`,
+        facts?.portionsOn == null
+          ? "can't be read (see Set up)"
+          : `${plural(facts.portionsOn, "portion", "portions")} on, ${facts.portionsOff ?? 0} switched off${facts.activeCellsToFix ? `, ${plural(facts.activeCellsToFix, "Active cell", "Active cells")} to fix` : ""}`,
       ),
       row("Payments Log", "log", "log", () => {
         const entries = facts?.logRows ?? 0;

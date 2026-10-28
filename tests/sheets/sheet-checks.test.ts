@@ -168,6 +168,7 @@ describe("a healthy Sheet", () => {
       lastMonth: "2026-09",
       portionsOn: 5,
       portionsOff: 0,
+      activeCellsToFix: 0,
       seedPortions: null,
       logRows: 2,
       lastSavedAt: SAVED_2,
@@ -260,6 +261,7 @@ describe("the connection", () => {
       lastMonth: null,
       portionsOn: null,
       portionsOff: null,
+      activeCellsToFix: null,
       seedPortions: null,
       logRows: null,
       lastSavedAt: null,
@@ -620,6 +622,43 @@ describe("the Settings tab (step 5)", () => {
   it("still fails for a portion that is on whose columns were deleted", async () => {
     const fake = sheet({ Schedule: scheduleWithoutPortion(baseSchedule(), "p4"), [SETTINGS_TAB]: settingsGridWithActive() });
     expect(byId((await run(fake)).checks, "settings")).toMatchObject({ status: "fail" });
+  });
+
+  it("warns about an Active cell that is not Yes or No, naming the cell and not what it holds, and counts it", async () => {
+    const { checks, facts } = await run(sheet({ [SETTINGS_TAB]: settingsGridWithActive({ p2: "secret-note", p4: "x" }) }));
+    const settings = byId(checks, "settings");
+    expect(settings.status).toBe("warn");
+    expect(settings.detail).toBe(
+      "5 portions, each with its Tenant, Count and Amount columns. Cells H3 and H5 are not Yes or No, so those portions count as on.",
+    );
+    expect(settings.fix).toBe("Type Yes or No in H3 and H5, or empty them.");
+    expect(JSON.stringify(checks)).not.toContain("secret-note");
+    expect(facts).toMatchObject({ portionsOn: 5, portionsOff: 0, activeCellsToFix: 2 });
+    // the step after it is not held up: the Settings tab is readable
+    expect(byId(checks, "portion-settings").status).toBe("ok");
+  });
+
+  it("says it for one cell in the singular, and for more than five by counting the rest", async () => {
+    const one = await run(sheet({ [SETTINGS_TAB]: settingsGridWithActive({ p3: "nope" }) }));
+    expect(byId(one.checks, "settings").detail).toBe(
+      "5 portions, each with its Tenant, Count and Amount columns. Cell H4 is not Yes or No, so that portion counts as on.",
+    );
+    expect(byId(one.checks, "settings").fix).toBe("Type Yes or No in H4, or empty it.");
+    const grid = settingsGridWithActive();
+    for (let row = 7; row <= 14; row++) grid.push([`p${row}`, `Extra ${row}`, `Tenant${row}`, `Count${row}`, `Amount${row}`, 11, 5, "x"]);
+    const schedule = baseSchedule();
+    for (let row = 7; row <= 14; row++) (schedule[2] as string[]).push(`Tenant${row}`, `Count${row}`, `Amount${row}`);
+    const many = await run(sheet({ [SETTINGS_TAB]: grid, Schedule: schedule }));
+    expect(byId(many.checks, "settings").detail).toContain("Cells H7, H8, H9, H10, H11 and 3 more are not Yes or No, so those portions count as on.");
+    expect(many.facts.activeCellsToFix).toBe(8);
+  });
+
+  it("counts none, and stays OK, for a Settings tab whose Active cells are Yes, No or empty, or that has no Active column", async () => {
+    for (const settings of [settingsGridWithActive({ p2: "No", p3: "Yes", p4: false }), settingsGrid(), (() => { const g = settingsGrid(); g[2][7] = "x"; return g; })()]) {
+      const { checks, facts } = await run(sheet({ [SETTINGS_TAB]: settings }));
+      expect(byId(checks, "settings").status).toBe("ok");
+      expect(facts.activeCellsToFix).toBe(0);
+    }
   });
 
   it("counts none off for a Settings tab with no Active column, as before", async () => {

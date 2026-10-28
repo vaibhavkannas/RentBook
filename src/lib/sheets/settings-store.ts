@@ -64,6 +64,23 @@ export const isOffFlag = (cell: unknown) => OFF_FLAGS.has(headerKey(cell));
 /** True for an Active cell that is a flag: one of the off flags, or yes, active, on or true. */
 export const isActiveFlag = (cell: unknown) => OFF_FLAGS.has(headerKey(cell)) || ON_FLAGS.has(headerKey(cell));
 
+/**
+ * The 1-based Settings rows of portions whose Active cell holds something that is not a flag (yes, no, on, off, true, false and so on):
+ * a typo such as "N" or "nope". The app reads such a cell as on, so nothing disappears by mistake, and says nothing; this is
+ * what the Set up page warns about, and what a switch of any portion is refused for. Only under an Active header, and a cell
+ * of spaces counts (the app never writes over one). A note row has no portion headers and is not a portion.
+ */
+export function activeCellsToFix(values: unknown[][]): number[] {
+  if (!hasActiveColumn(values)) return [];
+  const rows: number[] = [];
+  values.slice(1).forEach((row, offset) => {
+    if ([row[2], row[3], row[4]].some(isBlankCell) || isBlankCell(row[0])) return;
+    const cell = row[ACTIVE_COLUMN];
+    if (cell !== undefined && cell !== null && cell !== "" && !isActiveFlag(cell)) rows.push(offset + 2);
+  });
+  return rows;
+}
+
 /** True when the Settings tab's header row has an Active column (H1 reads Active, by the looser header rule). */
 export const hasActiveColumn = (values: unknown[][]) => headerKey(values[0]?.[ACTIVE_COLUMN]) === headerKey(ACTIVE_HEADER);
 
@@ -285,7 +302,8 @@ export async function ensureTabs(gateway: SheetsGateway, scheduleTab: string): P
     throw sheetStructure(settingsMissing(namesTabs(gateway) ? gateway.configuredTabName(SETTINGS_TAB) : SETTINGS_TAB));
   }
   if (hasSettings) {
-    // An empty answer is read once more before it is believed: seeding writes over A1:G6, so a read that came
+    // An empty answer is read once more before it is believed: seeding writes over A1:H6 (its header row has eight cells, so it
+    // writes "Active" into H1 of a tab that holds at most a header row; portion rows stay seven cells), so a read that came
     // back empty by mistake must never be what decides to replace the owner's settings.
     let settings = await gateway.getValues(SETTINGS_TAB, SETTINGS_RANGE, "UNFORMATTED_VALUE");
     if (settingsIsEmpty(settings)) {

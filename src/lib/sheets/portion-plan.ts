@@ -272,20 +272,30 @@ export function planAddPortion(input: PlanInput, request: NewPortion): AddPlan {
   };
 }
 
-/** The refusal for a cell in column H that RentBook cannot read as the Active setting. */
-const columnHTaken = (value: unknown) =>
+/**
+ * The refusals for column H. They name the cell (H1, H3) and never what it holds: what the owner typed there is theirs, and a
+ * validation message is logged in full. Each says what to do: type Yes or No in a cell under the Active header, move the owner's
+ * own column out of the way otherwise.
+ */
+const activeHeaderTaken = () =>
   validation(
-    `Column H of the Settings tab holds "${shorten(String(value))}". ${getBrand().name} keeps the Active setting there. Move that column further right, then try again.`,
+    `Cell H1 of the Settings tab holds other text. ${getBrand().name} keeps the Active setting in column H: move that column further right, then try again.`,
   );
+const activeCellInUse = (sheetRow: number) =>
+  validation(
+    `Cell H${sheetRow} of the Settings tab already holds something. ${getBrand().name} keeps the Active setting in column H: move that column further right, then try again.`,
+  );
+const activeCellNotAFlag = (sheetRow: number) =>
+  validation(`Cell H${sheetRow} of the Settings tab is not Yes or No. Type Yes or No in that cell, then try again.`);
 
 /** "a", "a and b" or "a, b and c". */
 const list = (items: string[]) => (items.length < 2 ? items.join("") : `${items.slice(0, -1).join(", ")} and ${items.at(-1)}`);
 
 /**
- * The cells to write to switch a portion off ("No" in its Active cell) or on ("Yes"), and "Active" in H1 when H1 is blank. Nothing
- * when the portion already is as asked. Refused when column H holds anything else than an Active header and flags: H1 with other
- * text, a cell that is not a flag, or (under a blank H1) any cell at all, because writing the header would turn the owner's own
- * values into settings. Switching a portion on is refused when its three Schedule headers are not all in the header row once, since
+ * The cells to write to switch a portion off ("No" in its Active cell) or on ("Yes"), and "Active" in H1 when H1 is empty, first (the
+ * service writes it in a request of its own). Nothing when the portion already is as asked. Refused when column H holds anything
+ * else than an Active header and flags: H1 with other text, a cell that is not Yes or No, or (under an empty H1) any cell at all,
+ * because writing the header would turn the owner's own values into settings. Switching a portion on is refused when its three Schedule headers are not all in the header row once, since
  * every page would then fail to read the Sheet.
  */
 export function planSetActive(input: PlanInput, id: string, active: boolean): CellWrite[] {
@@ -293,12 +303,14 @@ export function planSetActive(input: PlanInput, id: string, active: boolean): Ce
   const target = rows.find((row) => row.portion.id === id);
   if (target === undefined) throw unknownPortion();
 
-  const header = input.settings[0]?.[ACTIVE_COLUMN];
+  // A cell with only spaces in it is taken, like any other: the app never writes over something.
   const hasHeader = hasActiveColumn(input.settings);
-  if (!hasHeader && !isBlankCell(header)) throw columnHTaken(header);
+  if (!hasHeader && !isEmpty(input.settings[0]?.[ACTIVE_COLUMN])) throw activeHeaderTaken();
   for (const { sheetRow } of rows) {
     const cell = input.settings[sheetRow - 1]?.[ACTIVE_COLUMN];
-    if (!isBlankCell(cell) && !(hasHeader && isActiveFlag(cell))) throw columnHTaken(cell);
+    if (isEmpty(cell)) continue;
+    if (!hasHeader) throw activeCellInUse(sheetRow);
+    if (!isActiveFlag(cell)) throw activeCellNotAFlag(sheetRow);
   }
 
   const off = hasHeader && isOffFlag(input.settings[target.sheetRow - 1]?.[ACTIVE_COLUMN]);

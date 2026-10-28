@@ -28,6 +28,7 @@ const FACTS: SheetFacts = {
   lastMonth: "2026-11",
   portionsOn: 4,
   portionsOff: 1,
+  activeCellsToFix: 0,
   seedPortions: null,
   logRows: 120,
   lastSavedAt: "2026-10-05T04:30:00.000Z",
@@ -146,6 +147,17 @@ describe("the Tabs section", () => {
       "Payments Log: 120 entries, last saved 5 Oct, 10:00 am",
       "Tenants: 9 rows, 4 current",
     ]);
+  });
+
+  it("counts the Active cells that are not Yes or No, so the owner knows to look at Set up", () => {
+    expect(texts("tabs", { facts: { ...FACTS, activeCellsToFix: 2 } })[1]).toBe(
+      "Settings: 4 portions on, 1 switched off, 2 Active cells to fix",
+    );
+    expect(texts("tabs", { facts: { ...FACTS, activeCellsToFix: 1 } })[1]).toBe(
+      "Settings: 4 portions on, 1 switched off, 1 Active cell to fix",
+    );
+    expect(texts("tabs", { facts: { ...FACTS, activeCellsToFix: 0 } })[1]).toBe("Settings: 4 portions on, 1 switched off");
+    expect(texts("tabs", { facts: { ...FACTS, activeCellsToFix: null } })[1]).toBe("Settings: 4 portions on, 1 switched off");
   });
 
   it("says one of each in the singular", () => {

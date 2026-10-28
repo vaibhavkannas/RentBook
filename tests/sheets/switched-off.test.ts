@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { PortionCard } from "@/lib/domain/types";
 import { AppError } from "@/lib/errors";
 import { getMonthView, loadSnapshot, logPayment, undoPayment, type SheetsContext } from "@/lib/sheets/service";
-import { ensureTabs, readSettings, SETTINGS_HEADERS, SETTINGS_RANGE, SETTINGS_TAB } from "@/lib/sheets/settings-store";
+import { activeCellsToFix, ensureTabs, readSettings, SETTINGS_HEADERS, SETTINGS_RANGE, SETTINGS_TAB } from "@/lib/sheets/settings-store";
 import { getPortionTenants, moveOutWithoutDetails, saveTenancy } from "@/lib/sheets/tenancy-service";
 import { cell, FakeGateway } from "../support/fake-gateway";
 import {
@@ -386,5 +386,42 @@ describe("tenant details for a portion that is switched off", () => {
     const { ctx } = await warm(settingsGridWithActive({ p4: "No" }));
     await moveOutWithoutDetails(ctx, { portionId: "p4", tenant: "Dev", moveOut: "2026-09-30" }, STAMP);
     expect((await getPortionTenants(ctx, "p4")).vacantSince).toBe("2026-09-30");
+  });
+});
+
+describe("Active cells that are not Yes or No", () => {
+  it.each([["x"], ["N"], ["0"], ["No."], ["nope"], ["disabled"], [0], [5]])(
+    "read %j as on, as before, and are named for the Set up page to warn about",
+    async (value) => {
+      const grid = settingsGridWithActive({ p3: value });
+      const { fake } = sheet(grid);
+      expect(await readSettings(fake)).toEqual(PORTIONS);
+      expect(activeCellsToFix(grid)).toEqual([4]);
+    },
+  );
+
+  it("names every such cell, as the Settings row it is on, and none that is empty or a flag", () => {
+    const grid = settingsGridWithActive({ p1: "Yes", p2: "No", p3: "maybe", p4: false, p5: "x" });
+    expect(activeCellsToFix(grid)).toEqual([4, 6]);
+    expect(activeCellsToFix(settingsGridWithActive({ p1: "on", p2: "OFF", p3: "inactive", p4: true, p5: "" }))).toEqual([]);
+    expect(activeCellsToFix(settingsGridWithActive())).toEqual([]);
+  });
+
+  it("counts a cell of spaces, which the app would not write over", () => {
+    expect(activeCellsToFix(settingsGridWithActive({ p2: "  " }))).toEqual([3]);
+  });
+
+  it("names none when H1 is not Active: the column is not the app's then", () => {
+    const grid = settingsGrid();
+    grid[2][7] = "x";
+    expect(activeCellsToFix(grid)).toEqual([]);
+    grid[0][7] = "Notes";
+    expect(activeCellsToFix(grid)).toEqual([]);
+  });
+
+  it("does not count a note row under the table", () => {
+    const grid = settingsGridWithActive();
+    grid[7] = [undefined, undefined, undefined, undefined, undefined, undefined, undefined, "a note in column H"];
+    expect(activeCellsToFix(grid)).toEqual([]);
   });
 });

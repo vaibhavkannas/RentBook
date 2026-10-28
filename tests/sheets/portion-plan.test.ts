@@ -625,40 +625,64 @@ describe("planSetActive", () => {
     expect(error.message).toContain("That portion isn't in your Settings any more.");
   });
 
-  it("refuses when H1 holds other text, naming it, and writes nothing", async () => {
+  const H1_TAKEN =
+    "Cell H1 of the Settings tab holds other text. RentBook keeps the Active setting in column H: move that column further right, then try again.";
+  const NOT_YES_OR_NO = (cell: string) => `Cell ${cell} of the Settings tab is not Yes or No. Type Yes or No in that cell, then try again.`;
+  const IN_USE = (cell: string) =>
+    `Cell ${cell} of the Settings tab already holds something. RentBook keeps the Active setting in column H: move that column further right, then try again.`;
+
+  it("refuses when H1 holds other text, naming the cell and not what it holds, and writes nothing", async () => {
     const grid = settingsGrid();
     grid[0][7] = "Notes";
     for (const active of [true, false]) {
       const error = await refusal(async () => planSetActive(await inputFor(world(grid)), "p2", active));
       expect(error.code).toBe("validation");
-      expect(error.message).toBe(
-        'Column H of the Settings tab holds "Notes". RentBook keeps the Active setting there. Move that column further right, then try again.',
-      );
+      expect(error.message).toBe(H1_TAKEN);
+      expect(error.message).not.toContain("Notes");
     }
   });
 
-  it("refuses when a portion's H cell holds something that is not a flag, even a portion it was not asked about", async () => {
-    const grid = settingsGridWithActive({ p4: "maybe" });
-    const error = await refusal(async () => planSetActive(await inputFor(world(grid)), "p2", false));
-    expect(error.message).toBe(
-      'Column H of the Settings tab holds "maybe". RentBook keeps the Active setting there. Move that column further right, then try again.',
-    );
+  it("refuses when a portion's H cell holds something that is not Yes or No, even a portion it was not asked about, and says what to type", async () => {
+    for (const value of ["maybe", "x", "N", "0", "No.", "nope", "disabled", 0, 5]) {
+      const grid = settingsGridWithActive({ p4: value });
+      const error = await refusal(async () => planSetActive(await inputFor(world(grid)), "p2", false));
+      expect(error.code).toBe("validation");
+      expect(error.message).toBe(NOT_YES_OR_NO("H5")); // the cell, never what it holds
+    }
+  });
+
+  it("names the first such cell, in sheet order, when there are several", async () => {
+    const grid = settingsGridWithActive({ p5: "x", p3: "y" });
+    const error = await refusal(async () => planSetActive(await inputFor(world(grid)), "p1", false));
+    expect(error.message).toBe(NOT_YES_OR_NO("H4"));
+  });
+
+  it("treats a cell of spaces as taken, not as blank: it is never written over", async () => {
+    for (const [grid, cell] of [
+      [(() => { const g = settingsGrid(); g[0][7] = "   "; return g; })(), "H1"],
+      [(() => { const g = settingsGridWithActive(); g[2][7] = "  "; return g; })(), "H3"],
+    ] as const) {
+      const error = await refusal(async () => planSetActive(await inputFor(world(grid)), "p4", false));
+      expect(error.message).toBe(cell === "H1" ? H1_TAKEN : NOT_YES_OR_NO(cell));
+    }
+    const blankH1 = settingsGrid();
+    blankH1[2][7] = " ";
+    expect((await refusal(async () => planSetActive(await inputFor(world(blankH1)), "p4", false))).message).toBe(IN_USE("H3"));
   });
 
   it("refuses to claim a column that already holds the owner's own values under a blank H1: Active would turn them into settings", async () => {
     const grid = settingsGrid();
     grid[2][7] = "No";
     const error = await refusal(async () => planSetActive(await inputFor(world(grid)), "p4", false));
-    expect(error.message).toContain('Column H of the Settings tab holds "No".');
+    expect(error.message).toBe(IN_USE("H3"));
+    expect(error.message).not.toContain("No.");
     // and with H1 blank and H empty everywhere, it is fine
     expect(planSetActive(await inputFor(world(settingsGrid())), "p4", false)).toHaveLength(2);
   });
 
-  it("quotes what H holds in printable, shortened form", async () => {
-    const grid = settingsGrid();
-    grid[0][7] = `${"x".repeat(60)}\nmore`;
-    const error = await refusal(async () => planSetActive(await inputFor(world(grid)), "p2", false));
-    expect(error.message).toContain(`holds "${"x".repeat(40)}...".`);
+  it("puts the Active header first, so a request that is cut short after its first range cannot leave a flag under a blank H1", async () => {
+    const writes = planSetActive(await inputFor(world(settingsGrid())), "p4", false);
+    expect(writes.map((write) => write.a1)).toEqual(["H1", "H5"]);
   });
 
   describe("switching on a portion whose columns may be gone", () => {

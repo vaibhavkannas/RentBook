@@ -50,8 +50,17 @@ class Interfering extends FakeGateway {
   afterEnsure: (() => void) | null = null;
   drop = new Set<string>();
   failWrites = new Set<string>();
+  /** Every request sent to updateValues, in order (what was asked, not what was stored). */
+  requests: CellWrite[][] = [];
+  /** When set, updateValues requests after this many have been sent fail, like a connection that went away. */
+  failUpdatesAfter: number | null = null;
 
   async updateValues(writes: CellWrite[]) {
+    this.requests.push(structuredClone(writes));
+    if (this.failUpdatesAfter !== null && this.requests.length > this.failUpdatesAfter) {
+      this.calls.push("updateValues");
+      throw new Error("Google went away");
+    }
     if (writes.some((write) => this.failWrites.has(write.tab))) {
       this.calls.push("updateValues");
       throw new Error("Google said no");
@@ -83,6 +92,7 @@ async function ready(setup: Setup = {}) {
   // The first read adds the app's other tabs. A Sheet the app cannot read (a test's) still has them after it fails.
   await loadSnapshot(plain).catch(() => undefined);
   fake.calls.length = 0;
+  fake.requests.length = 0;
   return { fake, ctx };
 }
 
@@ -471,7 +481,7 @@ describe("setPortionActive: switching off", () => {
     expect(fake.tabs.get(SETTINGS_TAB)![0][7]).toBe("Active");
     expect(fake.tabs.get(SETTINGS_TAB)![3][7]).toBe("No");
     expect(result.portions.map((p) => [p.id, p.inactive ?? false])).toEqual([["p1", false], ["p2", false], ["p3", true], ["p4", false], ["p5", false]]);
-    expect(wrote(fake)).toEqual(["updateValues"]);
+    expect(wrote(fake)).toEqual(["ensureColumnCount", "updateValues", "updateValues"]);
   });
 
   it("then shows it only in a month where it has an entry, and the month's totals without it", async () => {
@@ -505,10 +515,50 @@ describe("setPortionActive: switching off", () => {
     expect(changedCells(new FakeGateway({ [SETTINGS_TAB]: settingsGridWithActive() }), fake, SETTINGS_TAB)).toEqual(["H5"]);
   });
 
-  it("makes its calls in this order: the snapshot, both tabs with FORMULA, the write, the read back, the portions", async () => {
+  it("makes its calls in this order when it writes the Active header too: room for column H, H1 in a request of its own, the flag, the read back, the portions", async () => {
     const { fake, ctx } = await ready();
     await setPortionActive(ctx, { id: "p4", active: false, today: TODAY });
+    expect(fake.calls).toEqual(["getManyValues", "getManyValues", "ensureColumnCount", "updateValues", "updateValues", "getManyValues", "getValues"]);
+    expect(fake.requests.map((request) => request.map((write) => write.a1))).toEqual([["H1"], ["H5"]]);
+  });
+
+  it("makes its calls in this order when the tab has its Active header already: one request, no widening", async () => {
+    const { fake, ctx } = await ready({ settings: settingsGridWithActive() });
+    await setPortionActive(ctx, { id: "p4", active: false, today: TODAY });
     expect(fake.calls).toEqual(["getManyValues", "getManyValues", "updateValues", "getManyValues", "getValues"]);
+  });
+
+  it("leaves nothing that blocks a later switch when the request is cut off between the header and the flag", async () => {
+    const { fake, ctx } = await ready();
+    await moveOutWithoutDetails(ctx, { portionId: "p3", tenant: "Chitra", moveOut: "2026-09-20" }, { now: OPTIONS.now, updatedBy: "owner@example.com" });
+    fake.requests.length = 0;
+    fake.failUpdatesAfter = 1;
+    await expect(setPortionActive(ctx, { id: "p4", active: false, today: TODAY })).rejects.toThrow("Google went away");
+    // H1 is Active, no flag was written: every portion is still on, and the app reads the Sheet as before
+    expect(fake.tabs.get(SETTINGS_TAB)![0][7]).toBe("Active");
+    expect(fake.tabs.get(SETTINGS_TAB)!.slice(1).map((row) => row[7])).toEqual([undefined, undefined, undefined, undefined, undefined]);
+    expect((await getSettings(ctx)).some((p) => p.inactive)).toBe(false);
+    fake.failUpdatesAfter = null;
+    // and the retry (or a switch of any other portion) goes through
+    const result = await setPortionActive(ctx, { id: "p4", active: false, today: TODAY });
+    expect(result.portions.find((p) => p.id === "p4")?.inactive).toBe(true);
+    expect((await setPortionActive(ctx, { id: "p3", active: false, today: TODAY })).portions.filter((p) => p.inactive).map((p) => p.id)).toEqual(["p3", "p4"]);
+  });
+
+  it("makes room for column H first when the Settings tab is only seven columns wide", async () => {
+    const { fake, ctx } = await ready({ gridColumns: { [SETTINGS_TAB]: 7 } });
+    await setPortionActive(ctx, { id: "p4", active: false, today: TODAY });
+    expect(fake.gridColumns.get(SETTINGS_TAB)).toBe(8);
+    expect(fake.tabs.get(SETTINGS_TAB)![4][7]).toBe("No");
+  });
+
+  it("writes nothing when the room cannot be made", async () => {
+    const { fake, ctx } = await ready({ gridColumns: { [SETTINGS_TAB]: 7 } });
+    const before = snapshotOf(fake);
+    fake.failOn.add("ensureColumnCount");
+    await expect(setPortionActive(ctx, { id: "p4", active: false, today: TODAY })).rejects.toThrow("ensureColumnCount failed");
+    expect(fake.requests).toEqual([]);
+    expect(snapshotOf(fake)).toEqual(before);
   });
 
   it("is refused for a portion that has a tenant, naming the portion and the tenant, and writes nothing", async () => {
@@ -655,7 +705,8 @@ describe("setPortionActive: switching off", () => {
     taken[0][7] = "Notes";
     const other = await ready({ settings: taken });
     const error = await failure(setPortionActive(other.ctx, { id: "p4", active: false, today: TODAY }));
-    expect(error.message).toContain('Column H of the Settings tab holds "Notes".');
+    expect(error.message).toContain("Cell H1 of the Settings tab holds other text.");
+    expect(error.message).not.toContain("Notes");
     expect(wrote(other.fake)).toEqual([]);
   });
 

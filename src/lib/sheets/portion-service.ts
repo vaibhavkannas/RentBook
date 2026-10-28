@@ -20,7 +20,7 @@ import {
   type PlanInput,
 } from "./portion-plan";
 import { invalidateCaches, loadSnapshot, type SheetsContext, type Snapshot } from "./service";
-import { readSettings, SETTINGS_TAB } from "./settings-store";
+import { ACTIVE_COLUMN, readSettings, SETTINGS_TAB } from "./settings-store";
 import { withWriteLock } from "./write-lock";
 
 /**
@@ -31,6 +31,9 @@ import { withWriteLock } from "./write-lock";
  */
 
 const SET_UP_HINT = " Set up shows what is wrong.";
+
+/** The Settings cell that holds the Active header; a plan that has to write it lists it first. */
+const ACTIVE_HEADER_CELL = "H1";
 
 /** The cells a plan reads: the Schedule's and the Settings tab's, wide enough for a new portion's columns and a free row. */
 const SCHEDULE_RANGE = "A1:ZZ";
@@ -240,7 +243,16 @@ export async function setPortionActive(ctx: SheetsContext, input: SetPortionActi
     if (writes.length === 0) return { portions: snapshot.portions };
     if (!input.active) requireCanSwitchOff(snapshot, portion, input.today);
 
-    await ctx.gateway.updateValues(writes);
+    // The header goes first, in a request of its own (and after room for column H on a Settings tab that stops at G): a flag
+    // under a blank H1 would block every later switch, and a request that is cut off must not be able to leave one there.
+    const [first, ...rest] = writes;
+    if (first.a1 === ACTIVE_HEADER_CELL) {
+      await ctx.gateway.ensureColumnCount(SETTINGS_TAB, ACTIVE_COLUMN + 1);
+      await ctx.gateway.updateValues([first]);
+      if (rest.length > 0) await ctx.gateway.updateValues(rest);
+    } else {
+      await ctx.gateway.updateValues(writes);
+    }
     if (!(await holdsWritten(ctx, writes))) {
       throw conflict(`${portion.name} may not have been switched ${input.active ? "on" : "off"}. Check column H of the Settings tab, then try again.`);
     }

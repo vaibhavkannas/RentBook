@@ -12,6 +12,7 @@ import { findHeader, headerKey } from "./headers";
 import { DEFAULT_TAB_NAMES, TAB_VARIABLES, type AppTab, type TabKey } from "./tab-names";
 import { findHeaderRowIndex, parseSchedule, shorten, type ScheduleLayout } from "./schedule";
 import {
+  activeCellsToFix,
   inferPortions,
   LOG_TAB,
   logHeaderUpgrade,
@@ -45,6 +46,8 @@ export type SheetFacts = {
   /** Portions that are on, and switched off. */
   portionsOn: number | null;
   portionsOff: number | null;
+  /** Active cells in the Settings tab that hold something that is not Yes or No (read as on); 0 when the tab has no Active column. */
+  activeCellsToFix: number | null;
   /** The portions Prepare my Sheet would put in a new Settings tab, from the Schedule's header; null when none is to be made. */
   seedPortions: number | null;
   logRows: number | null;
@@ -112,6 +115,7 @@ function blankFacts(): SheetFacts {
     lastMonth: null,
     portionsOn: null,
     portionsOff: null,
+    activeCellsToFix: null,
     seedPortions: null,
     logRows: null,
     lastSavedAt: null,
@@ -122,6 +126,24 @@ function blankFacts(): SheetFacts {
 }
 
 const plural = (count: number, one: string, many: string) => `${count} ${count === 1 ? one : many}`;
+
+/** What to tell the owner about Active cells that are not Yes or No: where they are (up to five, then how many more), and what to do. */
+function activeCellsAdvice(rows: number[]): { detail: string; fix: string } {
+  const names = rows.map((row) => `H${row}`);
+  const shown = names.slice(0, 5);
+  const more = names.length - shown.length;
+  const where =
+    more > 0
+      ? `${shown.join(", ")} and ${more} more`
+      : shown.length < 2
+        ? shown.join("")
+        : `${shown.slice(0, -1).join(", ")} and ${shown[shown.length - 1]}`;
+  const one = rows.length === 1;
+  return {
+    detail: `${one ? "Cell" : "Cells"} ${where} ${one ? "is" : "are"} not Yes or No, so ${one ? "that portion counts" : "those portions count"} as on.`,
+    fix: `Type Yes or No in ${where}, or empty ${one ? "it" : "them"}.`,
+  };
+}
 
 /** The Settings check's words: the portions that are on, each with its columns, and how many are switched off (none said when none are). */
 const portionsText = (on: number, off: number) =>
@@ -391,8 +413,10 @@ export async function checkSheet(
       portions = read.value;
       const off = portions.filter((portion) => portion.inactive).length;
       const on = portions.length - off;
+      const toFix = activeCellsToFix(settingsGrid);
       facts.portionsOn = on;
       facts.portionsOff = off;
+      facts.activeCellsToFix = toFix.length;
       if (view === null) {
         settingsCheck = make("settings", "skip", WAITING);
       } else {
@@ -413,11 +437,11 @@ export async function checkSheet(
           for (const cols of columns.value.layout.portionCols.values()) {
             portionColumns.add(cols.tenant).add(cols.count).add(cols.amount);
           }
-          settingsCheck = make(
-            "settings",
-            "ok",
-            foundAs("settings", portionsText(on, off)),
-          );
+          const advice = toFix.length > 0 ? activeCellsAdvice(toFix) : null;
+          settingsCheck =
+            advice === null
+              ? make("settings", "ok", foundAs("settings", portionsText(on, off)))
+              : make("settings", "warn", foundAs("settings", `${portionsText(on, off)} ${advice.detail}`), advice.fix);
         }
       }
     }
@@ -530,7 +554,7 @@ export async function checkSheet(
   // Step 6 follows the Settings tab.
   const reminder = "Check each portion's payments per cycle and hike before the first payment.";
   checks.push(
-    settingsCheck.status === "ok"
+    settingsCheck.status === "ok" || settingsCheck.status === "warn"
       ? make("portion-settings", "ok", reminder)
       : settingsCheck.status === "todo"
         ? make("portion-settings", "todo", reminder)
