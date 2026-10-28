@@ -469,6 +469,13 @@ describe("a portion that is switched off", () => {
     expect(out).toMatch(/<p class="[^"]*text-muted[^"]*">Switched off in Portion settings\.<\/p>/);
   });
 
+  it("keeps Log payment on its card while the rent is owed (a pending card), with the same line", () => {
+    const out = board([card({ inactive: true })]);
+    expect(out).toContain("Switched off in Portion settings.");
+    expect(out).toContain("Log payment");
+    expect(out).toContain("Pending");
+  });
+
   it("says nothing about it on a card that is on", () => {
     expect(board([card({ status: "paid", entry: { tenant: "Dev", count: 2, amount: 7000 }, next: null })])).not.toContain("Switched off");
   });

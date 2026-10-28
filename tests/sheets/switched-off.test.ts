@@ -3,7 +3,7 @@ import type { PortionCard } from "@/lib/domain/types";
 import { AppError } from "@/lib/errors";
 import { getMonthView, loadSnapshot, logPayment, undoPayment, type SheetsContext } from "@/lib/sheets/service";
 import { ensureTabs, readSettings, SETTINGS_HEADERS, SETTINGS_RANGE, SETTINGS_TAB } from "@/lib/sheets/settings-store";
-import { getPortionTenants } from "@/lib/sheets/tenancy-service";
+import { getPortionTenants, moveOutWithoutDetails } from "@/lib/sheets/tenancy-service";
 import { cell, FakeGateway } from "../support/fake-gateway";
 import {
   baseSchedule,
@@ -21,6 +21,7 @@ const OCT = { year: 2026, month: 10 };
 const SEP = { year: 2026, month: 9 };
 const NOV = { year: 2026, month: 11 };
 const OPTIONS = { now: new Date("2026-10-05T04:30:00Z"), retryDelayMs: 0, loggedBy: "owner@example.com" };
+const STAMP = { now: OPTIONS.now, updatedBy: "owner@example.com" };
 
 /** The owner's Settings tab as it is today: the seven headers A to G, and H1 blank. (The fixture's own header row has the eighth, Active.) */
 const ownerSettings = settingsGrid;
@@ -157,7 +158,7 @@ describe("the Active column", () => {
 });
 
 describe("the month screen with a portion switched off", () => {
-  /** September has Dev in p4 (payments 1 and 2 in August and September); October has no entry for p4. */
+  /** Dev is in p4 in August and September (payments 1 and 2); October has no entry for p4, and no move-out is on file. */
   function withHistory() {
     const schedule = baseSchedule();
     schedule[3] = scheduleRow(monthCell("text", 2026, 8), [["Asha", 2, 5450], ["Bala", 10, 12700], ["Chitra", 4, 9000], ["Dev", 1, 7000], null], 4);
@@ -165,18 +166,38 @@ describe("the month screen with a portion switched off", () => {
     return sheet(settingsGridWithActive({ p4: "No" }), schedule);
   }
 
-  it("shows the portion only in a month where it has an entry, as a paid card marked switched off", async () => {
+  it("shows the portion in a month where it has an entry, as a paid card marked switched off", async () => {
     const { ctx } = withHistory();
     const sept = await getMonthView(ctx, SEP);
     expect(sept.cards.map((card) => card.portionId)).toEqual(["p1", "p2", "p3", "p4", "p5"]);
     expect(sept.cards[3]).toMatchObject({ portionId: "p4", status: "paid", inactive: true, entry: { tenant: "Dev", count: 2, amount: 7000 } });
     expect(sept.received).toBe(32250 + 7000);
     expect(sept.paidCount).toBe(5);
+  });
+
+  it("keeps its card in the months after, while its tenant is still the tenant in the Schedule: switching it off never hides rent", async () => {
+    const { ctx } = withHistory();
+    for (const month of [OCT, NOV]) {
+      const view = await getMonthView(ctx, month);
+      expect(view.cards.map((card) => card.portionId)).toEqual(["p1", "p2", "p3", "p4", "p5"]);
+      expect(view.cards[3]).toMatchObject({ portionId: "p4", status: "pending", inactive: true, next: { tenant: "Dev", count: 3 } });
+    }
+    expect((await getMonthView(ctx, OCT)).due).toBe(5450 + 13335 + 9000 + 7000 + 5100);
+  });
+
+  it("has no card for it from the month it is vacant, and still has the earlier months", async () => {
+    const { ctx } = withHistory();
+    await moveOutWithoutDetails(ctx, { portionId: "p4", tenant: "Dev", moveOut: "2026-09-30" }, STAMP);
     const oct = await getMonthView(ctx, OCT);
     expect(oct.cards.map((card) => card.portionId)).toEqual(["p1", "p2", "p3", "p5"]);
     expect(oct.due).toBe(5450 + 13335 + 9000 + 5100);
-    const nov = await getMonthView(ctx, NOV);
-    expect(nov.cards.map((card) => card.portionId)).toEqual(["p1", "p2", "p3", "p5"]);
+    expect((await getMonthView(ctx, NOV)).cards.map((card) => card.portionId)).toEqual(["p1", "p2", "p3", "p5"]);
+    expect((await getMonthView(ctx, SEP)).cards.map((card) => card.portionId)).toEqual(["p1", "p2", "p3", "p4", "p5"]);
+  });
+
+  it("has no card for a switched-off portion that never had a tenant", async () => {
+    const { ctx } = sheet(settingsGridWithActive({ p4: "No" }));
+    expect((await getMonthView(ctx, OCT)).cards.map((card) => card.portionId)).toEqual(["p1", "p2", "p3", "p5"]);
   });
 
   it("marks only the switched-off portion's card", async () => {
@@ -217,8 +238,17 @@ describe("logging a payment for a portion that is switched off", () => {
     return error as AppError;
   }
 
-  it("refuses a new entry, with the portion's name, and writes nothing", async () => {
-    const { ctx, fake } = await warm(settingsGridWithActive({ p4: "No" }), history());
+  /** Dev has moved out of p4 (on 30 September), so October is vacant: the portion is genuinely off. */
+  async function devLeft() {
+    const made = sheet(settingsGridWithActive({ p4: "No" }), history());
+    await moveOutWithoutDetails(made.ctx, { portionId: "p4", tenant: "Dev", moveOut: "2026-09-30" }, STAMP);
+    await loadSnapshot(made.ctx);
+    made.fake.calls.length = 0;
+    return made;
+  }
+
+  it("refuses a plain log for a month the portion is vacant in, with its name, and writes nothing", async () => {
+    const { ctx, fake } = await devLeft();
     const before = structuredClone([...fake.tabs]);
     const error = await refusal(logPayment(ctx, PAY, OPTIONS));
     expect(error.code).toBe("conflict");
@@ -229,16 +259,27 @@ describe("logging a payment for a portion that is switched off", () => {
     expect(structuredClone([...fake.tabs])).toEqual(before);
   });
 
-  it("refuses a New tenant for it as well", async () => {
+  it("refuses a plain log for a switched-off portion that never had a tenant", async () => {
+    const { ctx } = sheet(settingsGridWithActive({ p4: "No" }));
+    expect((await refusal(logPayment(ctx, { ...PAY, month: SEP }, OPTIONS))).message).toBe(REFUSAL);
+  });
+
+  it("takes a plain log for a month whose tenant is still there: the rent is owed, the card is on the screen, and it is logged", async () => {
+    const { ctx, fake } = await warm(settingsGridWithActive({ p4: "No" }), history());
+    const result = await logPayment(ctx, PAY, OPTIONS);
+    expect(result.entry).toEqual({ tenant: "Dev", count: 3, amount: 7000 });
+    expect(result.logRow[8]).toBe("Logged");
+    expect(cell(fake, "Schedule", "M", 6)).toBe(7000);
+    expect((await getMonthView(ctx, OCT)).cards[3]).toMatchObject({ portionId: "p4", status: "paid", inactive: true });
+  });
+
+  it("refuses a New tenant for it, whether the tenant is still there or not, and writes nothing", async () => {
     const { ctx, fake } = await warm(settingsGridWithActive({ p4: "No" }), history());
     const error = await refusal(logPayment(ctx, { ...PAY, newTenantName: "Hari" }, OPTIONS));
     expect(error.message).toBe(REFUSAL);
     expect(fake.calls).not.toContain("updateValues");
-  });
-
-  it("refuses it for a portion that never had an entry, and for a month with a row already", async () => {
-    const { ctx } = sheet(settingsGridWithActive({ p4: "No" }));
-    expect((await refusal(logPayment(ctx, { ...PAY, month: SEP, newTenantName: "Hari" }, OPTIONS))).message).toBe(REFUSAL);
+    const gone = await devLeft();
+    expect((await refusal(logPayment(gone.ctx, { ...PAY, newTenantName: "Hari" }, OPTIONS))).message).toBe(REFUSAL);
   });
 
   it("still edits an entry it has, and says so in the log", async () => {

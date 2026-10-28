@@ -693,19 +693,68 @@ describe("deriveMonthView with a portion that is switched off", () => {
     month: { year: 2026, month },
     entries: new Map([["p1", p1], ["p2", p2]]),
   });
+  // Dev paid in August and September; October has no entry for p2.
   const history = [
     rowOf(8, 3, entry("Asha", 1, 5000), entry("Dev", 1, 7000)),
     rowOf(9, 4, entry("Asha", 2, 5000), entry("Dev", 2, 7000)),
     rowOf(10, 5, entry("Asha", 3, 5000), null),
   ];
   const portions = [{ ...PORTIONS[0] }, { ...PORTIONS[1], inactive: true }];
+  const left = (moveOut: string): Tenancy => ({
+    rowNumber: 2,
+    id: "t-dev",
+    portionId: "p2",
+    tenant: "Dev",
+    phone: "",
+    moveIn: "2026-01-01",
+    agreementEnd: "",
+    advance: null,
+    advanceDate: "",
+    advanceStatus: null,
+    refund: null,
+    deductions: null,
+    notes: "",
+    moveOut,
+    updatedBy: "owner@example.com",
+    updatedAt: "2026-09-30T05:00:00.000Z",
+  });
 
-  it("has no card for it in a month where it has no entry, so nothing is due for it", () => {
-    const view = deriveMonthView(history, portions, { year: 2026, month: 10 });
+  it("has no card for it from the month it is vacant, so nothing is due for it", () => {
+    const tenancies = [left("2026-09-30")];
+    const view = deriveMonthView(history, portions, { year: 2026, month: 10 }, tenancies);
     expect(view.cards.map((c) => c.portionId)).toEqual(["p1"]);
     expect(view.due).toBe(5000);
     expect(view.received).toBe(5000);
-    expect(deriveMonthView(history, portions, { year: 2026, month: 11 }).cards.map((c) => c.portionId)).toEqual(["p1"]);
+    expect(deriveMonthView(history, portions, { year: 2026, month: 11 }, tenancies).cards.map((c) => c.portionId)).toEqual(["p1"]);
+  });
+
+  it("keeps a card for it in a month where its tenant is still there and nothing is logged, so a slip never hides rent", () => {
+    // no move-out on file: the Schedule's last tenant is still the tenant in October, November and every month after
+    for (const month of [10, 11, 12]) {
+      const view = deriveMonthView(history, portions, { year: 2026, month });
+      expect(view.cards.map((c) => c.portionId)).toEqual(["p1", "p2"]);
+      expect(card(view, "p2")).toMatchObject({ status: "pending", inactive: true, next: { tenant: "Dev", count: 3, suggestedAmount: 7000 }, rentReference: 7000 });
+    }
+    const october = deriveMonthView(history, portions, { year: 2026, month: 10 });
+    expect(october.due).toBe(5000 + 7000);
+    expect(october.received).toBe(5000);
+    expect(october.paidCount).toBe(1);
+  });
+
+  it("keeps a card for the months before the move-out that have no entry, and the one the tenant left in", () => {
+    // moved out on 20 October: October is still due (the tenant lived there after the 1st), November is vacant
+    const tenancies = [left("2026-10-20")];
+    expect(deriveMonthView(history, portions, { year: 2026, month: 10 }, tenancies).cards.map((c) => c.portionId)).toEqual(["p1", "p2"]);
+    expect(deriveMonthView(history, portions, { year: 2026, month: 11 }, tenancies).cards.map((c) => c.portionId)).toEqual(["p1"]);
+    // moved out on the 1st: October is already vacant
+    expect(deriveMonthView(history, portions, { year: 2026, month: 10 }, [left("2026-10-01")]).cards.map((c) => c.portionId)).toEqual(["p1"]);
+  });
+
+  it("has no card for a switched-off portion that never had a tenant", () => {
+    const never = [{ ...PORTIONS[0] }, { ...PORTIONS[3], inactive: true }];
+    const sheet = [{ rowNumber: 3, month: { year: 2026, month: 10 }, entries: new Map([["p1", entry("Asha", 1, 5000)], ["p4", null]]) }];
+    const view = deriveMonthView(sheet, never, { year: 2026, month: 10 });
+    expect(view.cards.map((c) => c.portionId)).toEqual(["p1"]);
   });
 
   it("has a paid card for it, marked switched off, in a month where it has an entry", () => {

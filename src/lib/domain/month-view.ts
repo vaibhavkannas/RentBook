@@ -96,9 +96,12 @@ export function deriveMonthView(
   month: YearMonth,
   tenancies: Tenancy[] = [],
 ): MonthView {
-  // A switched-off portion is on the screen only in a month it has an entry for (its history, not its rent): in any other month
-  // it has no card, so it adds nothing to what is due.
-  const shown = portions.filter((portion) => !portion.inactive || findEntryForMonth(rows, portion.id, month));
+  // A switched-off portion is on the screen in a month it has an entry for (its history) and in any month it is still let in, by
+  // the vacancy rule (its tenant has not moved out), so switching it off, or switching it off by hand, can never hide rent that
+  // is owed. From the month it is vacant, or if it never had a tenant, it has no card and adds nothing to what is due.
+  const shown = portions.filter(
+    (portion) => !portion.inactive || occupancyFor(rows, tenancies, portion.id, month).state === "occupied",
+  );
   const cards: PortionCard[] = shown.map((portion) => {
     const entry = findEntryForMonth(rows, portion.id, month);
     // A portion whose last tenant has moved out has nothing due: no rent suggested, nothing to log or undo.
@@ -140,7 +143,7 @@ export function deriveMonthView(
           ? summarize(current)
           : null,
       vacancy: null,
-      // Only on the card of a switched-off portion (which has an entry in this month, so it is never vacant above).
+      // Only on the card of a switched-off portion (which is let in this month, so it is never vacant above).
       ...(portion.inactive ? { inactive: true } : {}),
     };
   });

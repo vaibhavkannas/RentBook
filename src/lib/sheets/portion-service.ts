@@ -1,9 +1,10 @@
+import { deriveMonthView, findLatestEntry } from "@/lib/domain/month-view";
 import { currentTenancy } from "@/lib/domain/tenancy";
-import { findLatestEntry } from "@/lib/domain/month-view";
-import type { PortionConfig } from "@/lib/domain/types";
+import type { PortionConfig, YearMonth } from "@/lib/domain/types";
 import { occupancyFor } from "@/lib/domain/vacancy";
-import { addMonths, isValidIsoDay } from "@/lib/domain/year-month";
+import { addMonths, compareYm, isValidIsoDay } from "@/lib/domain/year-month";
 import { AppError, conflict, sheetStructure, unknownPortion, validation } from "@/lib/errors";
+import { formatMonthTitle } from "@/lib/format";
 import { RELOAD_HINT } from "@/lib/recovery-hint";
 import { colLetter } from "./a1";
 import type { CellWrite } from "./gateway";
@@ -185,9 +186,26 @@ export type SetPortionActiveInput = {
 };
 
 /**
+ * The first month, from the Schedule's first month up to and including today's, in which the portion is let (by the vacancy
+ * rule: no entry, and its tenant has not moved out by the 1st) and nothing is logged for it: the rent that is still owed. It is
+ * the month view's own rule (a pending card), so what is found here is exactly what would be on the screen as due. Null when there
+ * is none.
+ */
+function firstUnpaidMonth(snapshot: Snapshot, portion: PortionConfig, today: YearMonth): YearMonth | null {
+  const first = snapshot.rows.reduce<YearMonth | null>((least, row) => (least === null || compareYm(row.month, least) < 0 ? row.month : least), null);
+  if (first === null) return null;
+  for (let month = first; compareYm(month, today) <= 0; month = addMonths(month, 1)) {
+    const card = deriveMonthView(snapshot.rows, [portion], month, snapshot.tenancies).cards[0];
+    if (card?.status === "pending") return month;
+  }
+  return null;
+}
+
+/**
  * Why a portion that is on may not be switched off yet, or nothing. It must have no open tenancy and be vacant, or never have had
- * a tenant, in the month after today's month (so a tenant who moves out on the 1st of next month already lets it be switched off).
- * Another portion must stay on. A Tenants tab that cannot be read refuses: a tenant cannot be ruled out.
+ * a tenant, in the month after today's month (so a tenant who moves out on the 1st of next month already lets it be switched off),
+ * and no month up to and including today's may have rent owed and not logged (the card would leave the screen, and the rent with
+ * it). Another portion must stay on. A Tenants tab that cannot be read refuses: a tenant cannot be ruled out.
  */
 function requireCanSwitchOff(snapshot: Snapshot, portion: PortionConfig, today: string): void {
   if (snapshot.tenantsProblem !== undefined) throw sheetStructure(snapshot.tenantsProblem);
@@ -197,6 +215,10 @@ function requireCanSwitchOff(snapshot: Snapshot, portion: PortionConfig, today: 
   if (open !== null || occupancy.state === "occupied") {
     const tenant = open?.tenant || findLatestEntry(snapshot.rows, portion.id)?.tenant || "";
     throw conflict(`${portion.name} still has a tenant${tenant === "" ? "" : ` (${tenant})`}. Record the move-out on the tenant page first.`);
+  }
+  const unpaid = firstUnpaidMonth(snapshot, portion, { year, month });
+  if (unpaid !== null) {
+    throw conflict(`${portion.name} has no rent logged for ${formatMonthTitle(unpaid)}. Log it before switching the portion off.`);
   }
   if (snapshot.portions.every((other) => other.id === portion.id || other.inactive)) {
     throw validation("Keep at least one portion switched on.");

@@ -25,6 +25,7 @@ import {
 // failure at each step leaves behind, what a refusal leaves untouched, and that the app reads the result.
 
 const OCT = { year: 2026, month: 10 };
+const SEP = { year: 2026, month: 9 };
 const TODAY = "2026-10-05";
 const NEW = { name: "Back room", cycleLength: 11, hikePercent: 5 };
 const OPTIONS = { now: new Date("2026-10-05T04:30:00Z"), retryDelayMs: 0, loggedBy: "owner@example.com" };
@@ -532,26 +533,92 @@ describe("setPortionActive: switching off", () => {
     expect(wrote(fake)).toEqual([]);
   });
 
+  const rent = (ctx: SheetsContext, month: { year: number; month: number }, date: string) =>
+    logPayment(ctx, { month, portionId: "p3", amount: 9000, dateReceived: date }, OPTIONS);
+  const STAMP = { now: OPTIONS.now, updatedBy: "owner@example.com" };
+  const UNPAID = (month: string) => `Second floor, single bedroom has no rent logged for ${month}. Log it before switching the portion off.`;
+
   it("looks at the month after today's: a move-out on the 1st of next month already leaves it vacant, a later day does not", async () => {
-    // today is 5 October, so the month looked at is November
-    const stamp = { now: OPTIONS.now, updatedBy: "owner@example.com" };
+    // today is 5 October, so the month looked at is November; October's rent is logged, as it must be
     const first = await ready();
-    await moveOutWithoutDetails(first.ctx, { portionId: "p3", tenant: "Chitra", moveOut: "2026-11-01" }, stamp);
+    await moveOutWithoutDetails(first.ctx, { portionId: "p3", tenant: "Chitra", moveOut: "2026-11-01" }, STAMP);
+    await rent(first.ctx, OCT, "2026-10-05");
     expect((await setPortionActive(first.ctx, { id: "p3", active: false, today: TODAY })).portions.find((p) => p.id === "p3")?.inactive).toBe(true);
 
     const later = await ready();
-    await moveOutWithoutDetails(later.ctx, { portionId: "p3", tenant: "Chitra", moveOut: "2026-11-02" }, stamp);
+    await moveOutWithoutDetails(later.ctx, { portionId: "p3", tenant: "Chitra", moveOut: "2026-11-02" }, STAMP);
+    await rent(later.ctx, OCT, "2026-10-05");
     later.fake.calls.length = 0;
     const error = await failure(setPortionActive(later.ctx, { id: "p3", active: false, today: TODAY }));
     expect(error.message).toContain("still has a tenant (Chitra)");
     expect(wrote(later.fake)).toEqual([]);
   });
 
-  it("moves with today's date: the same move-out is enough a month later", async () => {
+  it("moves with today's date: the same move-out is enough a month later, once the months up to then are logged", async () => {
     const { ctx } = await ready();
-    await moveOutWithoutDetails(ctx, { portionId: "p3", tenant: "Chitra", moveOut: "2026-11-02" }, { now: OPTIONS.now, updatedBy: "owner@example.com" });
+    await moveOutWithoutDetails(ctx, { portionId: "p3", tenant: "Chitra", moveOut: "2026-11-02" }, STAMP);
+    await rent(ctx, OCT, "2026-10-05");
+    await rent(ctx, { year: 2026, month: 11 }, "2026-11-05");
     await expect(setPortionActive(ctx, { id: "p3", active: false, today: "2026-10-31" })).rejects.toBeInstanceOf(AppError);
     expect((await setPortionActive(ctx, { id: "p3", active: false, today: "2026-11-15" })).portions.find((p) => p.id === "p3")?.inactive).toBe(true);
+  });
+
+  describe("rent that is still owed", () => {
+    it("refuses while this month's rent is not logged, though the move-out is recorded for the end of the month: the card would vanish", async () => {
+      // Chitra's move-out is recorded on 5 October for 31 October, and October is unpaid
+      const { fake, ctx } = await ready();
+      await moveOutWithoutDetails(ctx, { portionId: "p3", tenant: "Chitra", moveOut: "2026-10-31" }, STAMP);
+      fake.calls.length = 0;
+      const before = snapshotOf(fake);
+      const error = await failure(setPortionActive(ctx, { id: "p3", active: false, today: TODAY }));
+      expect(error.code).toBe("conflict");
+      expect(error.message).toBe(UNPAID("October 2026"));
+      expect(error.message).not.toContain("Chitra");
+      expect(wrote(fake)).toEqual([]);
+      expect(snapshotOf(fake)).toEqual(before);
+      // October still shows what is due
+      expect((await getMonthView(ctx, OCT)).due).toBe(5450 + 13335 + 9000 + 5100);
+    });
+
+    it("allows it once October is logged, and October's card then stays on the screen as a paid card", async () => {
+      const { ctx } = await ready();
+      await moveOutWithoutDetails(ctx, { portionId: "p3", tenant: "Chitra", moveOut: "2026-10-31" }, STAMP);
+      await rent(ctx, OCT, "2026-10-05");
+      await setPortionActive(ctx, { id: "p3", active: false, today: TODAY });
+      const oct = await getMonthView(ctx, OCT);
+      expect(oct.cards.find((card) => card.portionId === "p3")).toMatchObject({ status: "paid", inactive: true });
+      expect((await getMonthView(ctx, { year: 2026, month: 11 })).cards.map((card) => card.portionId)).toEqual(["p1", "p2", "p4", "p5"]);
+    });
+
+    it("refuses while an earlier month is unpaid: a tenant who left in September without paying September", async () => {
+      const schedule = baseSchedule();
+      schedule[4] = scheduleRow(monthCell("text", 2026, 9), [["Asha", 3, 5450], ["Bala", 11, 12700], null, null, ["Esha", 1, 5100]], 5);
+      const { fake, ctx } = await ready({ schedule });
+      await moveOutWithoutDetails(ctx, { portionId: "p3", tenant: "Chitra", moveOut: "2026-09-15" }, STAMP);
+      fake.calls.length = 0;
+      const error = await failure(setPortionActive(ctx, { id: "p3", active: false, today: TODAY }));
+      expect(error.message).toBe(UNPAID("September 2026"));
+      expect(wrote(fake)).toEqual([]);
+      // the month is owed, so it can be logged; then the portion can be switched off
+      await rent(ctx, SEP, "2026-09-15");
+      expect((await setPortionActive(ctx, { id: "p3", active: false, today: TODAY })).portions.find((p) => p.id === "p3")?.inactive).toBe(true);
+    });
+
+    it("names the earliest unpaid month when there are several", async () => {
+      const schedule = baseSchedule();
+      schedule[4] = scheduleRow(monthCell("text", 2026, 9), [["Asha", 3, 5450], ["Bala", 11, 12700], null, null, ["Esha", 1, 5100]], 5);
+      const { ctx } = await ready({ schedule });
+      await moveOutWithoutDetails(ctx, { portionId: "p3", tenant: "Chitra", moveOut: "2026-10-31" }, STAMP);
+      // Chitra paid August and nothing since: September and October are both owed
+      expect((await failure(setPortionActive(ctx, { id: "p3", active: false, today: TODAY }))).message).toBe(UNPAID("September 2026"));
+    });
+
+    it("does not count a month where the portion was not yet let, or a paid month, as unpaid", async () => {
+      // Chitra paid August and September and left on 20 September: nothing is owed
+      const { ctx } = await ready();
+      await moveOutWithoutDetails(ctx, { portionId: "p3", tenant: "Chitra", moveOut: "2026-09-20" }, STAMP);
+      expect((await setPortionActive(ctx, { id: "p3", active: false, today: TODAY })).portions.find((p) => p.id === "p3")?.inactive).toBe(true);
+    });
   });
 
   it("keeps at least one portion on", async () => {
@@ -611,18 +678,33 @@ describe("setPortionActive: switching on", () => {
     expect((await getMonthView(ctx, OCT)).cards.map((card) => card.portionId)).toEqual(["p1", "p2", "p3", "p4", "p5"]);
   });
 
-  it("brings back a portion with its history: the months it had entries in read as they did", async () => {
+  it("brings back a portion with its history: it was on the screen all along while its tenant was there, and loses only the mark", async () => {
     const schedule = baseSchedule();
     schedule[4] = scheduleRow(monthCell("text", 2026, 9), [["Asha", 3, 5450], ["Bala", 11, 12700], ["Chitra", 5, 9000], ["Dev", 1, 7000], ["Esha", 1, 5100]], 5);
     const { ctx } = await ready({ settings: settingsGridWithActive({ p4: "No" }), schedule });
     const before = await getMonthView(ctx, OCT);
-    expect(before.cards.map((card) => card.portionId)).toEqual(["p1", "p2", "p3", "p5"]);
+    expect(before.cards.map((card) => [card.portionId, card.status, "inactive" in card])).toEqual([
+      ["p1", "pending", false], ["p2", "pending", false], ["p3", "pending", false], ["p4", "pending", true], ["p5", "pending", false],
+    ]);
     await setPortionActive(ctx, { id: "p4", active: true, today: TODAY });
     const after = await getMonthView(ctx, OCT);
-    expect(after.cards.map((card) => [card.portionId, card.status])).toEqual([
-      ["p1", "pending"], ["p2", "pending"], ["p3", "pending"], ["p4", "pending"], ["p5", "pending"],
+    expect(after.cards.map((card) => [card.portionId, card.status, "inactive" in card])).toEqual([
+      ["p1", "pending", false], ["p2", "pending", false], ["p3", "pending", false], ["p4", "pending", false], ["p5", "pending", false],
     ]);
     expect(after.cards[3].next).toMatchObject({ tenant: "Dev", count: 2 });
+    expect(after.due).toBe(before.due);
+  });
+
+  it("brings back a vacant portion as a vacant card, and the card of a month it had rent in is as it was", async () => {
+    const { ctx } = await ready();
+    await moveOutWithoutDetails(ctx, { portionId: "p3", tenant: "Chitra", moveOut: "2026-09-20" }, { now: OPTIONS.now, updatedBy: "owner@example.com" });
+    await setPortionActive(ctx, { id: "p3", active: false, today: TODAY });
+    expect((await getMonthView(ctx, OCT)).cards.map((card) => card.portionId)).toEqual(["p1", "p2", "p4", "p5"]);
+    await setPortionActive(ctx, { id: "p3", active: true, today: TODAY });
+    const oct = await getMonthView(ctx, OCT);
+    expect(oct.cards.map((card) => [card.portionId, card.status])).toEqual([
+      ["p1", "pending"], ["p2", "pending"], ["p3", "vacant"], ["p4", "needs-tenant"], ["p5", "pending"],
+    ]);
   });
 
   it("writes nothing for a portion that is on already, with an Active column or without one", async () => {

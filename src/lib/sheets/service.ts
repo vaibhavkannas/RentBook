@@ -398,9 +398,14 @@ async function logPaymentUnchecked(
       );
     }
   }
-  // A switched-off portion takes no new rent (its entries can still be edited and undone), whoever the tenant would be.
+  // A switched-off portion takes no new tenant, and no rent for a month it is genuinely off in (vacant, or never let). Its entries can
+  // still be edited and undone, and a month it is still let in (its tenant has not moved out) is owed and can be logged: the
+  // month view keeps its card there, so a switch-off can never hide rent.
   if (portion.inactive && !existing) {
-    throw conflict(`${portion.name} is switched off in Portion settings. Switch it back on to log rent for it.`);
+    const owed = newTenant === undefined && occupancyFor(loaded.rows, loaded.tenancies, portion.id, input.month).state === "occupied";
+    if (!owed) {
+      throw conflict(`${portion.name} is switched off in Portion settings. Switch it back on to log rent for it.`);
+    }
   }
   // A portion whose last tenant has moved out has nobody to take this month's rent from: a plain log would carry the
   // leaver's name and count on. A new tenant is how it starts again, and that is not refused.
