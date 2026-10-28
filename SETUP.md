@@ -55,8 +55,11 @@ Copy `.env.example` to `.env.local` and fill it in. Put each value directly afte
 | `ALLOWED_EMAILS` | The Google accounts allowed to sign in, separated by commas. The first one is the owner and is the only person who can change Portion settings. |
 | `GOOGLE_SERVICE_ACCOUNT_JSON` | The key file as one line. Use the second command below and paste |
 | `SHEET_ID` | From step 1 (the test copy) |
-| `SCHEDULE_TAB` | Name of the tab that holds the month rows. Defaults to `Schedule` if left out |
-| `TOTAL_HEADER` | Exact header text of the monthly total column. No default: it must match the header exactly, including capitals and spaces |
+| `SCHEDULE_TAB` | Name of the tab that holds the month rows. Defaults to `Schedule` if left out. A tab that differs only by capitals or spaces is found too |
+| `TOTAL_HEADER` | Optional. The header text of the monthly total column, if your Schedule has one. It must appear once in the header row; capitals and extra spaces do not matter. When it is set, RentBook keeps that column up to date: a total that adds the row up with a formula is copied to each new month, and a total you typed is worked out and written. When it is left out, RentBook writes no total, so a total you type yourself goes out of date as you log payments |
+| `SETTINGS_TAB` | Optional. What RentBook's own settings tab is called in your Sheet. Defaults to `Settings`. Read "Giving RentBook's own tabs other names" below before you set it |
+| `LOG_TAB` | Optional. What RentBook's own payments log tab is called. Defaults to `Payments Log`. Read the same note before you set it |
+| `TENANTS_TAB` | Optional. What RentBook's own tenant details tab is called. Defaults to `Tenants`. Read the same note before you set it |
 
 Commands, in PowerShell:
 
@@ -72,7 +75,9 @@ Replace the path in the second command with the real location of your key file. 
 
 Check that `git status` does not list `.env.local`.
 
-Each portion needs its own header names on the Schedule header row: `Tenant`, `Count`, `Amount`, then `Tenant2`, `Count2`, `Amount2`, and so on. RentBook copies them into the `Settings` tab the first time it runs. If you rename a Schedule header later, copy the new name into the `Settings` tab as well.
+**Giving RentBook's own tabs other names.** `SETTINGS_TAB`, `LOG_TAB` and `TENANTS_TAB` are for a Sheet that already uses one of those names for something else, or where you simply want other names. If RentBook's tab is already in your Sheet and you want it called something else, rename your own tab in your Sheet first, then set the variable. If you set a name that is not in your Sheet yet, RentBook starts a new tab with that name and leaves your old tab alone. It does this on the first page view after you set the name (not only when you tap Prepare my Sheet), and a new Settings tab starts with the default values: 11 payments per cycle and a 5% hike for every portion. So set the variable only after the rename. A tab name can have at most 100 characters. `SCHEDULE_TAB` and the three names must each name a different tab, and `SCHEDULE_TAB` can't be `Settings`, `Payments Log` or `Tenants`: RentBook keeps those names for its own tabs, even when it stores them under another name.
+
+Each portion needs its own header names on the Schedule header row: `Tenant`, `Count`, `Amount`, then `Tenant2`, `Count2`, `Amount2`, and so on. RentBook copies them into the `Settings` tab the first time it runs. If you rename a Schedule header later, copy the new name into the `Settings` tab as well. Once the `Settings` tab exists, the names in it decide, and they can be anything: see "Your Sheet's layout" below.
 
 Install and check the Sheet before the first save. You need Node 22 or newer.
 
@@ -86,6 +91,40 @@ npm run recon
 On Windows PowerShell, use `npm.cmd` in place of `npm`, and run it from the project folder. On a company laptop you may also need the certificate setting below. See "Windows and company-network problems".
 
 Before the first save, open More and then Portion settings in the app and set each portion's payments per cycle (or tick "Count never resets") and the hike at each new cycle (%). The app cannot edit a payment count, so a wrong setting here writes a wrong count. Do the same again after you switch to the live Sheet, because it gets its own fresh `Settings` tab with default values.
+
+## Check your setup in the app
+
+Once the app opens and you can sign in, the owner can check the connection from the app itself: open More, then **Set up**. Set up and Diagnostics are the owner's. Anyone else who opens them is told they are for the owner and sees nothing more.
+
+Set up only reads. It shows six steps, each with a pill (OK, Check, Fix, To do or Waiting), and under each what was found and, for Check and Fix, what to do:
+
+1. Sign-in
+2. Google service account
+3. Your Sheet
+4. Schedule tab
+5. RentBook's tabs
+6. Portion settings
+
+The page shows no secret, key, token or setting value and no tenant data: only tab titles, header texts, counts, times, and the service account's address (the one you share the Sheet with, step 4). Under the steps, "What your Sheet needs" lists the rules in "Your Sheet's layout" below. Tap **Check again** after you fix something.
+
+**Prepare my Sheet.** When one of RentBook's own tabs (Settings, Payments Log or Tenants, under the names you gave them) is missing, or is there but empty, and the service account, the Sheet and the Schedule tab are not failing, Set up offers a Prepare my Sheet button. It adds the missing tabs with their headers and fills in an empty one. It starts Settings from your Schedule's header row, with 11 payments per cycle and a 5% hike for each portion, so check them in Portion settings before the first payment. It also fills in a blank H1 or I1 of the Payments Log. It never changes a cell that already holds something and never deletes anything, and only the owner can tap it. The app does the same on its first page view, so Prepare my Sheet is the way to see it happen, and to see what is wrong if it cannot.
+
+**Diagnostics.** More, then **Diagnostics**, shows how the app and your Sheet are doing: the version, when this server started, how many checks are OK (with a link to Set up), whether the Sheet answers and how fast, what each tab holds (counts and times), and how many problems this server has logged since it started. Each server instance counts its own and starts again from zero when it restarts, and Vercel may run several. It shows counts, times and tab names only: no secret and no tenant data.
+
+## Your Sheet's layout
+
+RentBook works with a Sheet laid out a little differently from the owner's example. These are the rules that remain. The Set up page shows the same list under "What your Sheet needs".
+
+- **Schedule tab.** Your month rows are on one tab, called Schedule or the name you set in SCHEDULE_TAB. A tab that differs only by capitals or spaces is found too.
+- **Header row.** One of the first 25 rows of that tab is the header row. It has Month in it and, for each portion, a Tenant, a Count and an Amount header. Capitals, extra spaces and no-break spaces do not matter.
+- **Portion columns.** Each of those headers must appear once in the header row. Other columns may sit between a portion's three, and a portion's columns can be anywhere in the row. To start Settings for you, Prepare my Sheet needs each portion's three headers to read Tenant, Count and Amount in that order, with the same number after them for the later portions (Tenant2, Count2, Amount2). Once Settings exists, the names in it decide, and they can be anything.
+- **Total column.** The total column is optional. Set TOTAL_HEADER to its header (it must appear once) and RentBook keeps it up to date. Leave it out and no total is written, so a total you type yourself will not be kept up to date.
+- **Month rows.** Each month has one row. The Month cell is a date or text such as Oct-26, the months are in order, and the row under the last month is empty, so RentBook can add the next one there. It reads columns A to ZZ.
+- **Settings tab.** RentBook's own tab. The headers are in row 1 of columns A to G, and column H, headed Active, says which portions are switched off (No). The portions are in rows 2 to 50. Each portion has its own id (letters, numbers, - and _), and the Tenant, Count and Amount header texts must match the Schedule's header row. A note typed under the table is ignored.
+- **Payments Log tab.** RentBook's own tab, used by column position, A to I. If column H or I already has another heading, RentBook still writes there (who logged the payment, and what was done) and leaves your heading alone.
+- **Tenants tab.** RentBook's own tab. It has 15 headers in columns A to O, in a fixed order; capitals and spaces do not matter. Columns to the right of O are yours.
+- **Naming a tab.** To give one of RentBook's own tabs another name (SETTINGS_TAB, LOG_TAB, TENANTS_TAB), rename the tab in your Sheet first, then set the variable. A name that is not in your Sheet yet makes RentBook start a new tab, with the default values for Settings, and leave your old one alone.
+- **What the app never does.** RentBook adds to your Sheet and never deletes a row, a column or a tab.
 
 ## Windows and company-network problems
 
@@ -158,7 +197,7 @@ Older deployments have a single `ALLOWED_EMAIL`. The app still reads it, but onl
 3. Delete `ALLOWED_EMAIL`.
 4. Redeploy on Vercel, and restart `npm run dev` locally.
 
-The first time the new version loads, it adds two new header columns, "Logged by" and "Action", to the Payments Log tab by itself. Older log rows keep those two cells empty; the Activity screen shows each of them as an "Entry" with "who: not recorded". You do not need to edit the tab.
+The first time the new version loads, it adds two new header columns, "Logged by" and "Action", to the Payments Log tab by itself, into H1 and I1 when those cells are blank. If H1 or I1 already holds another heading, RentBook leaves your heading alone and still writes the person and the action in those columns (the tab is used by column position). Older log rows keep those two cells empty; the Activity screen shows each of them as an "Entry" with "who: not recorded". You do not need to edit the tab.
 
 ## Tenant details
 
@@ -166,7 +205,7 @@ RentBook keeps each portion's tenancy details (phone, move-in date, agreement en
 
 ### Before you deploy
 
-- If your live Sheet already has a tab called `Tenants` that holds something else, rename that tab before you deploy (for example to `Tenants old`). RentBook uses the name `Tenants` for its own tab, so it would otherwise try to use yours, and could add its headers to it.
+- If your live Sheet already has a tab called `Tenants` that holds something else, rename that tab before you deploy (for example to `Tenants old`), or set `TENANTS_TAB` to another name for RentBook's own tab (a name that is not in your Sheet yet makes RentBook start a new tab with that name, which is what you want here). RentBook uses the name `Tenants` for its own tab unless `TENANTS_TAB` says otherwise, so it would otherwise try to use yours, and could add its headers to it.
 - Old cell comments on the Schedule are not imported. If you want to keep what they say, copy it into the `Notes` of the tenant's details after you deploy.
 
 ### How to use it
@@ -174,15 +213,15 @@ RentBook keeps each portion's tenancy details (phone, move-in date, agreement en
 1. On the month screen, each portion card that has a tenant has a small link under the tenant's name: **Details** when the tenant already has details, **Add details** when not. Tap it to open that portion's details page.
 2. **Add details:** on the details page, under Current tenancy, fill in the move-in date and whatever else you know, then tap Save details. Only the move-in date is needed. It starts as today, so change it if the tenant moved in earlier.
 3. **Edit:** tap Edit under the details, change what you want, then tap Save details. Only what you changed is written to the Sheet.
-4. **Move out:** tap Move out, choose the move-out date, say what happened to the advance (Refunded, Adjusted or Held), type the refund and deductions if there are any, then tap Record move-out. The tenant moves to Past tenants on the same page. Your Schedule is not changed.
-5. **New tenant:** tap New tenant on the month screen. The sheet has an optional "Tenancy details (optional)" section. Open it to add the move-in date, advance, advance date, agreement end and phone together with the first payment. Leave it closed to add the details later from the card. Either way, a previous tenant of that portion who still has open details is marked as moved out for you.
+4. **Move out:** tap Move out, choose the move-out date, say what happened to the advance (Refunded, Adjusted or Held), type the refund and deductions if there are any, then tap Record move-out. The tenant moves to Past tenants on the same page, and the portion shows as Vacant from the month the date leaves vacant. A tenant with no details on file can be moved out too, without adding details first. See "Moving out and vacant portions" below for what a move-out writes and does.
+5. **New tenant:** tap New tenant on the month screen (or Add tenant on a vacant portion's card). The sheet has an optional "Tenancy details (optional)" section. Open it to add the move-in date, advance, advance date, agreement end and phone together with the first payment. Leave it closed to add the details later from the card. Either way, a previous tenant of that portion who still has open details is marked as moved out for you, unless the new tenant has the same name: that is the same person starting a count again, so their open details are left as they are.
 6. If a screen shows "This changed just now", someone else (or another tab of yours) changed the same details. The page has already loaded the latest version. Check it, then make your change again.
 
-Undoing a New tenant payment does not reverse tenancy changes. The previous tenant's details stay marked as moved out, and the new tenant's details stay as they are. If you need to put that right, open the details page and use Edit, or edit the row in the `Tenants` tab.
+Undoing a New tenant's first payment takes back what it did to the previous tenant's details: see "Moving out and vacant portions" below. It leaves the new tenant's details as they are. If you need to change those, open the details page and use Edit, or edit the row in the `Tenants` tab.
 
 ### The `Tenants` tab
 
-- The tab must keep these 15 headers in columns A to O, in this order: `Tenancy ID`, `Portion`, `Tenant`, `Phone`, `Move-in date`, `Agreement end`, `Advance`, `Advance date`, `Advance status`, `Refund`, `Deductions`, `Notes`, `Move-out date`, `Updated by`, `Updated at`. If one is missing or different, the tenant details pages show a message that names it, and no tenant details are saved until you put the header back. Logging rent, undo, Activity and Settings keep working. The app checks the headers every time it reads the tab, so the pages work again within about 15 seconds of putting the header right. You may add your own columns to the right of column O. The app ignores them.
+- The tab must keep these 15 headers in columns A to O, in this order (capitals and extra spaces do not matter): `Tenancy ID`, `Portion`, `Tenant`, `Phone`, `Move-in date`, `Agreement end`, `Advance`, `Advance date`, `Advance status`, `Refund`, `Deductions`, `Notes`, `Move-out date`, `Updated by`, `Updated at`. If one is missing or different, the tenant details pages show a message that names it, and no tenant details are saved until you put the header back. Logging rent, undo, Activity and Settings keep working. The app checks the headers every time it reads the tab, so the pages work again within about 15 seconds of putting the header right. You may add your own columns to the right of column O. The app ignores them.
 - You can edit rows by hand. When the app saves a change it writes only the columns that change belongs to, so what you typed in the other columns of that row stays. Leave `Tenancy ID` alone: it is how the app finds the row.
 - Type the date columns (`Move-in date`, `Agreement end`, `Advance date`, `Move-out date`) as plain text in the form `YYYY-MM-DD`, for example `2026-10-07`. The app also reads real Sheet dates, so a cell that Google Sheets turned into a date still works.
 - `Advance status` must be exactly `Held`, `Refunded` or `Adjusted` (capital first letter). Leave it blank when there is no advance. Any other text is ignored.
@@ -191,10 +230,66 @@ Undoing a New tenant payment does not reverse tenancy changes. The previous tena
 - A card shows a tenancy's details only while its `Tenant` is the name the Schedule shows for that portion (capitals and surrounding spaces do not matter).
 - `Updated by` and `Updated at` are written by the app. `Updated at` is also how it notices that someone changed a row after you opened it.
 
+## Moving out and vacant portions
+
+When a tenant leaves, record it on the portion's tenant page, under Move out. A move-out never changes your Schedule. It writes to the `Tenants` tab only:
+
+- With details on file, Move out closes the tenant's row: it fills in the Move-out date, what happened to the advance, the refund, the deductions and the notes you give, and who did it and when.
+- Without details (you never tapped Add details), Move out still works. It adds one row to the `Tenants` tab with the tenant's name as your Schedule has it, the move-out date, your notes, and who did it and when, and nothing else.
+- A move-out date cannot be before the first day of the month the tenant's rent was last logged for in your Schedule. Choose a date in that month or later, or undo that payment first.
+
+**What Vacant means.** A portion is vacant in a month when its last tenant's move-out date in the `Tenants` tab is on or before the 1st of that month, and no rent is logged for that tenant in a later month. Moving out on the 1st makes that month vacant. Any later day leaves that month due, and the next month vacant. It needs a move-out record whose tenant name matches the tenant your Schedule last names for the portion (capitals and surrounding spaces do not matter). A portion that has never had a tenant also shows as Vacant.
+
+**What you see.**
+
+- A vacant portion's card shows a Vacant pill, "Vacant since" the move-out day and who moved out, a Past tenants link and an Add tenant button, which opens New tenant for that portion. It has no rent to log and adds nothing to what is due for the month.
+- The month summary counts only the portions that are let: "3 of 4 portions · 1 vacant".
+- A plain Log payment for a vacant month is refused with a message that says to add the new tenant with New tenant. New tenant starts the new tenant at payment 1 and can add their details at the same time.
+- A move-out dated after today has not happened yet: the tenant's page says when they will move out, and the rent stays due until the month it leaves vacant.
+
+**Ending a vacancy by hand.** Adding details for the same tenant name on the tenant page ends it, and so does clearing the Move-out date of that tenant's row in the `Tenants` tab (a blank Move-out date means the tenancy is current). New tenant ends it too, by starting someone new.
+
+**Undoing a New tenant.** A New tenant closes the previous tenant's open details, so the previous tenant is not left looking current. Undo of a New tenant's first payment reopens what that request closed: it clears the Move-out date of those rows and writes who undid it and when into Updated by and Updated at. It reopens only a row that carries the same moment and person as that payment's Payments Log row and was closed on the day that request closes on. It never reopens a move-out you recorded with Move out, and it reopens nothing while the portion has another open tenancy. If the payment's Payments Log entry never saved, there is nothing to match and nothing is reopened. If the reopening itself fails, the undo still stands and the row stays closed until you clear its Move-out date by hand.
+
+### If a portion shows Vacant and it should not
+
+A mistaken New tenant is best put right with Undo. If you instead corrected it by logging the old tenant again as New tenant with Replace, the old tenant's row stays closed, because the Sheet cannot tell that from a real move-out. The portion then shows Vacant, with an Add tenant button, though the old tenant is still there. To put it right, open the portion's tenant page and tap Add details for that tenant (adding details for the same name ends the vacancy), or clear the Move-out date of that row in the `Tenants` tab by hand.
+
+### Before you deploy
+
+Do this once, on your live Sheet, before you use this version on it (an owner step; the app cannot do it for you). Older versions of RentBook closed an open `Tenants` row (they filled its Move-out date) when you logged a New tenant with the same name as the tenant already there, and did not reopen it when you undid a New tenant. This version reads a closed row whose tenant is still the one your Schedule last names as a move-out, so such a row would show a tenant who still lives there as Vacant and take their rent out of what is due. Look through your `Tenants` tab for closed rows like that and clear their Move-out date by hand. Try it on your test copy first (step 1).
+
+## Adding, switching off and reordering portions
+
+The owner can add a portion, switch one off and change the order of the portions in the app: More, then **Portion settings**. Each change takes its turn with every other change, reads your Sheet fresh, writes plain values (never formulas), reads back what it wrote, and never deletes a row, a column or a tab, or writes over a cell that holds something. Try them on your test copy first (step 1).
+
+**Before you use them (owner step).** Switching a portion off uses a new, optional column H of the `Settings` tab, headed "Active". The older app never used column H. Before you switch a portion off, check that H1 is blank and column H is empty. If column H holds anything else, RentBook refuses to switch a portion off, says so, and changes nothing. RentBook writes "Active" in H1 itself the first time you switch a portion off, and "No" in the portion's H cell (and "Yes" when you switch it back on). A Settings tab whose H1 is blank, or says anything but Active, is read exactly as before: every portion is on.
+
+**Add a portion.** Tap Add a portion under the form, type the name, set the payments per cycle (or tick Count never resets) and the hike, then tap Add portion. RentBook adds three headers, Tenant, Count and Amount with the next free number after your last portion (for example Tenant6, Count6 and Amount6), to the right of everything already in your Schedule, in the header row, so after your Total column, and a row to the Settings tab under the last portion. It then tells you which Schedule columns it used. Nothing else in your Sheet changes. You can have up to 20 portions.
+
+- RentBook never edits a Total formula. If your total adds the amounts up with a formula, it tells you which column to add to it yourself. If your total holds typed numbers, or you have no total column, there is nothing to add.
+- If you already added the three headers yourself (exactly as RentBook would name them, side by side, over empty columns), it uses them instead of adding more.
+- It writes the three headers first and the Settings row last. If something fails between the two, only the headers are left. The app ignores headers that have no Settings row, and your next try uses them.
+- It reads columns A to ZZ. If there is no room for three more columns, or no free row in Settings up to row 50, it says so and changes nothing.
+
+**Switch off.** Tap Switch off on the portion's card in Portion settings, then Switch off again to confirm. A switched-off portion leaves the month screen and the New tenant list. Its payments stay in your Schedule and Payments Log, its tenants stay on its tenant page, and it is listed under Switched off, where Switch on brings it back. Its history stays. It still shows, marked as switched off, in a past month where it has a payment, and no new payment can be logged for it until you switch it back on. A portion can be switched off only when it is vacant and nothing is owed. If it cannot be switched off, the message says what is in the way (for example a tenant who is still there: record the move-out on the tenant page first). At least one portion stays on.
+
+**Change order.** With two or more portions, tap Change order, move portions up or down, then tap Save order. The month screen lists the portions in that order. RentBook rewrites only the Settings rows whose portion changes (columns A to G, or A to H when there is an Active column). Your Schedule's columns do not move. A Settings row that has a formula in those columns cannot be moved, and anything else you keep in a Settings row, such as its formatting or notes to the right of the portion's cells, stays in that row. It does not move with the portion.
+
+**What is not supported.** These are by-hand jobs in your Sheet, or not possible: deleting a portion or its history, renaming a portion's Schedule headers or moving its columns, changing its id, and editing a Total formula. Also not supported: more than 20 portions, Settings rows past row 50, and using Settings column H for anything but Active.
+
+**To remove a portion completely, in this order.**
+
+1. Switch it off in the app.
+2. Delete its three columns in the Schedule only if you do not want its history. Keep a copy of your Sheet first (File, Make a copy). Delete all three, never just some: the app can read a switched-off portion whose three headers are all gone, but not one with only some of them left. Google Sheets leaves #REF! in a Total formula that used a deleted column, so fix that formula by hand.
+3. Then delete its Settings row (its row in the Settings tab).
+
+Its rows in the Tenants tab and the Payments Log stay. RentBook does not give its id (for example `p4`) to a new portion while the Tenants tab still has rows for it.
+
 ## 7. Deploy to Vercel
 
 1. Sign in at https://vercel.com with GitHub, choose Add New, then Project, and import `vaibhavkannas/RentBook`.
-2. Under Environment Variables add every name from step 6: `AUTH_SECRET`, `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET`, `AUTH_URL` (for Production only, set to the production address), `ALLOWED_EMAILS` (the owner first), `GOOGLE_SERVICE_ACCOUNT_JSON` (paste it as one line, with no quotes), `SHEET_ID`, `SCHEDULE_TAB` and `TOTAL_HEADER`. Use the test copy's `SHEET_ID` for the first deploy. Add them for Production and Preview, except the three secrets (`GOOGLE_SERVICE_ACCOUNT_JSON`, `AUTH_SECRET` and `AUTH_GOOGLE_SECRET`), which are set up as described in "Keeping your secrets safe" below. A deployment that still has the older single `ALLOWED_EMAIL` keeps working until `ALLOWED_EMAILS` is set.
+2. Under Environment Variables add every name from step 6: `AUTH_SECRET`, `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET`, `AUTH_URL` (for Production only, set to the production address), `ALLOWED_EMAILS` (the owner first), `GOOGLE_SERVICE_ACCOUNT_JSON` (paste it as one line, with no quotes), `SHEET_ID` and `SCHEDULE_TAB`, and the optional `TOTAL_HEADER`, `SETTINGS_TAB`, `LOG_TAB` and `TENANTS_TAB` if you use them. Use the test copy's `SHEET_ID` for the first deploy. Add them for Production and Preview, except the three secrets (`GOOGLE_SERVICE_ACCOUNT_JSON`, `AUTH_SECRET` and `AUTH_GOOGLE_SECRET`), which are set up as described in "Keeping your secrets safe" below. A deployment that still has the older single `ALLOWED_EMAIL` keeps working until `ALLOWED_EMAILS` is set.
 3. Deploy. A first import deploys the production branch (`main`). Work on a branch gets its own preview URL until its pull request is merged.
 4. Google does not accept wildcard redirect URIs. In Google Cloud, edit the OAuth client that the deployment uses and add `https://<host>/api/auth/callback/google` for every host you sign in on. The production URL goes on the live client. A preview URL goes on the separate Preview client described in "Keeping your secrets safe" (item 2), not on the live one. Until that client exists, only the Production deployment can sign anyone in.
 5. Open the URL on your phone, sign in, and use the browser menu's Add to Home Screen.
