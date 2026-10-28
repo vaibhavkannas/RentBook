@@ -1,3 +1,5 @@
+import type { PortionConfig } from "@/lib/domain/types";
+
 export type SettingsRowInput = {
   id: string;
   name: string;
@@ -56,4 +58,26 @@ export function parseSettingsRows(rows: SettingsRowInput[]): ParsedSettings {
     portions.push({ id: row.id, name, cycleLength, hikePercent: Number(hike) });
   }
   return { ok: true, portions };
+}
+
+/** The form's row for a portion, from what the Sheet holds. A portion with no cycle ticks "Count never resets" and leaves the usual 11 behind it. */
+export const rowFromPortion = (p: PortionConfig): SettingsRowInput => ({
+  id: p.id,
+  name: p.name,
+  cycle: p.cycleLength === null ? "11" : String(p.cycleLength),
+  never: p.cycleLength === null,
+  hike: String(p.hikePercent),
+});
+
+/** The portions that are on: the form edits those only. A switched-off portion has its own place on the screen. */
+export const onPortions = (portions: readonly PortionConfig[]): PortionConfig[] => portions.filter((portion) => !portion.inactive);
+
+/**
+ * The form's rows after the portions changed (one was added, switched off or on, or the order was saved): a row for each portion
+ * that is on, in the order of `portions`. A portion that already has a row keeps it, with whatever was typed in it and not yet
+ * saved; a portion that has none gets one from what the Sheet holds; a portion that is off or gone loses its row.
+ */
+export function reconcileRows(current: readonly SettingsRowInput[], portions: readonly PortionConfig[]): SettingsRowInput[] {
+  const typed = new Map(current.map((row) => [row.id, row]));
+  return onPortions(portions).map((portion) => typed.get(portion.id) ?? rowFromPortion(portion));
 }

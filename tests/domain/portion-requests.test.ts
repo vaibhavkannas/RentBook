@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   ADD_PORTION_FIELDS,
+  addedPortionText,
   buildAddPortionRequest,
   moveInOrder,
   orderPositionText,
@@ -141,5 +142,29 @@ describe("orderPositionText", () => {
   it("says where the portion is now, counting from 1", () => {
     expect(orderPositionText("Ground floor", 0, 5)).toBe("Ground floor is now 1 of 5.");
     expect(orderPositionText("Roof room", 4, 5)).toBe("Roof room is now 5 of 5.");
+  });
+});
+
+describe("addedPortionText", () => {
+  const columns = [
+    { header: "Tenant6", letter: "R" },
+    { header: "Count6", letter: "S" },
+    { header: "Amount6", letter: "T" },
+  ];
+
+  it("says the portion was added and where its three columns are in the Schedule", () => {
+    expect(addedPortionText("Roof room", columns)).toBe(
+      "Roof room added. Its columns in your Schedule are Tenant6 (R), Count6 (S) and Amount6 (T).",
+    );
+  });
+
+  it("copes with columns that are not side by side, and with two letters", () => {
+    expect(
+      addedPortionText("Annex", [
+        { header: "Tenant 7", letter: "AC" },
+        { header: "Count 7", letter: "AD" },
+        { header: "Amount 7", letter: "AE" },
+      ]),
+    ).toBe("Annex added. Its columns in your Schedule are Tenant 7 (AC), Count 7 (AD) and Amount 7 (AE).");
   });
 });

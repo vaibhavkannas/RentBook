@@ -20,6 +20,9 @@ export const UNDO_NO_CONFIRMATION = `Couldn't confirm that the undo went through
 /** Prepare my Sheet: the answer never arrived, so some of the tabs may or may not have been made. */
 export const PREPARE_NO_CONFIRMATION = `Couldn't confirm that your Sheet was prepared. Check your connection. ${reloadThen("check Set up")}`;
 
+/** Portion settings: the answer never arrived, so adding, switching off or on, or reordering a portion may or may not have been done. */
+export const PORTION_NO_CONFIRMATION = `Couldn't confirm that the change went through. Check your connection. ${reloadThen("check Portion settings")}`;
+
 export const SETTINGS_NO_CONFIRMATION = "Couldn't reach the server. Try again.";
 
 export const SIGNED_OUT_MESSAGE = `You've been signed out. ${SIGN_IN_HINT}`;

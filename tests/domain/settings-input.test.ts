@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { parseSettingsRows, type SettingsRowInput } from "@/lib/settings-input";
+import type { PortionConfig } from "@/lib/domain/types";
+import { onPortions, parseSettingsRows, reconcileRows, rowFromPortion, type SettingsRowInput } from "@/lib/settings-input";
 
 const row = (patch: Partial<SettingsRowInput> = {}): SettingsRowInput => ({
   id: "p1",
@@ -84,5 +85,67 @@ describe("parseSettingsRows", () => {
     const result = parseSettingsRows([row(), row({ id: "p2", cycle: "abc" }), row({ id: "p3", name: "" })]);
     expect(result).toMatchObject({ ok: false, rowId: "p2", field: "cycle" });
     expect(result).not.toHaveProperty("portions");
+  });
+});
+
+const portion = (patch: Partial<PortionConfig> = {}): PortionConfig => ({
+  id: "p1",
+  name: "Ground floor",
+  tenantHeader: "Tenant",
+  countHeader: "Count",
+  amountHeader: "Amount",
+  cycleLength: 11,
+  hikePercent: 5,
+  ...patch,
+});
+
+describe("rowFromPortion", () => {
+  it("fills the form row from what the Sheet holds, as text", () => {
+    expect(rowFromPortion(portion())).toEqual({ id: "p1", name: "Ground floor", cycle: "11", never: false, hike: "5" });
+    expect(rowFromPortion(portion({ hikePercent: 7.5 })).hike).toBe("7.5");
+  });
+
+  it("ticks Count never resets for a portion with no cycle length, and leaves a usual cycle in the box behind it", () => {
+    expect(rowFromPortion(portion({ cycleLength: null }))).toEqual({ id: "p1", name: "Ground floor", cycle: "11", never: true, hike: "5" });
+  });
+});
+
+describe("onPortions", () => {
+  it("keeps the portions that are on, in order, and leaves out the ones switched off", () => {
+    const all = [portion({ id: "p1" }), portion({ id: "p2", inactive: true }), portion({ id: "p3" })];
+    expect(onPortions(all).map((p) => p.id)).toEqual(["p1", "p3"]);
+    expect(onPortions([])).toEqual([]);
+  });
+});
+
+describe("reconcileRows", () => {
+  const typed = (patch: Partial<SettingsRowInput>) => row({ ...patch });
+
+  it("keeps what was typed for a portion that is still on, even when the Sheet says something else", () => {
+    const rows = [typed({ id: "p1", name: "Ground (typed)", hike: "9" })];
+    expect(reconcileRows(rows, [portion({ id: "p1", name: "Ground floor" })])).toEqual(rows);
+  });
+
+  it("takes a row for each portion that is on from the Sheet when nothing was typed for it (a portion just added or switched on)", () => {
+    const rows = [typed({ id: "p1" })];
+    const next = reconcileRows(rows, [portion({ id: "p1" }), portion({ id: "p6", name: "Roof room", cycleLength: null, hikePercent: 0 })]);
+    expect(next).toEqual([rows[0], { id: "p6", name: "Roof room", cycle: "11", never: true, hike: "0" }]);
+  });
+
+  it("drops the row of a portion that was switched off, and has no row for one that never was on", () => {
+    const rows = [typed({ id: "p1" }), typed({ id: "p2", name: "First floor" })];
+    expect(reconcileRows(rows, [portion({ id: "p1" }), portion({ id: "p2", inactive: true })])).toEqual([rows[0]]);
+  });
+
+  it("follows the order of the portions, so a new order puts the rows in it, typed text and all", () => {
+    const rows = [typed({ id: "p1", name: "A (typed)" }), typed({ id: "p2", name: "B (typed)" })];
+    const next = reconcileRows(rows, [portion({ id: "p2" }), portion({ id: "p1" })]);
+    expect(next.map((r) => r.name)).toEqual(["B (typed)", "A (typed)"]);
+  });
+
+  it("never changes the rows it is given", () => {
+    const rows = Object.freeze([typed({ id: "p1" })]);
+    expect(() => reconcileRows(rows, [portion({ id: "p1" }), portion({ id: "p2" })])).not.toThrow();
+    expect(rows).toHaveLength(1);
   });
 });

@@ -21,10 +21,14 @@ const TALKING = files.filter((name) => withoutComments(read(name)).includes('"/a
 describe("the components that send requests to the server", () => {
   it("are found by reading the folder", () => {
     expect(TALKING).toEqual([
+      "AddPortionSheet.tsx",
       "MoveOutForm.tsx",
       "PaymentSheet.tsx",
+      "PortionOrder.tsx",
       "PrepareSheet.tsx",
       "SettingsForm.tsx",
+      "SwitchOffSheet.tsx",
+      "SwitchedOffPortions.tsx",
       "TenancyForm.tsx",
       "UndoSheet.tsx",
     ]);
@@ -49,6 +53,14 @@ describe("the components that send requests to the server", () => {
   it("SettingsForm saves with a PUT through it, as the settings route expects", () => {
     const code = withoutComments(read("SettingsForm.tsx"));
     expect(code).toMatch(/(?:sendJson|postJson)<[^>]*>\(\s*"\/api\/settings"[^;]*\bmethod: "PUT"/);
+  });
+
+  it("the portion screens send their changes as the routes expect: a POST to add, a PUT to switch off or on and to reorder", () => {
+    expect(withoutComments(read("AddPortionSheet.tsx"))).toMatch(/(?:sendJson|postJson)<[^>]*>\(\s*"\/api\/portions"\s*,\s*request\.body\s*\)/);
+    for (const name of ["SwitchOffSheet.tsx", "SwitchedOffPortions.tsx"]) {
+      expect(withoutComments(read(name)), name).toMatch(/(?:sendJson|postJson)<[^>]*>\(\s*"\/api\/portions\/active"[^;]*\bmethod: "PUT"/);
+    }
+    expect(withoutComments(read("PortionOrder.tsx"))).toMatch(/(?:sendJson|postJson)<[^>]*>\(\s*"\/api\/portions\/order"[^;]*\bmethod: "PUT"/);
   });
 
   it("PaymentSheet hands the amount as typed to the builder (which reads it with amountFromText), and shows the refusal of an amount that is not a number before it sends", () => {

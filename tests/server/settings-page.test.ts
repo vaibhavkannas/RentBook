@@ -70,6 +70,17 @@ describe("the portion settings page", () => {
     expect(html).toContain("Save settings");
   });
 
+  it("shows a portion that is switched off in its own section, with a way to switch it on, and gives it no fields", async () => {
+    mocks.getSettings.mockResolvedValue([...portions, { ...portions[0], id: "p2", name: "Roof room", inactive: true }]);
+    const html = await render();
+    expect(html).toContain("Settings for Ground floor");
+    expect(html).not.toContain("Settings for Roof room");
+    expect(html).toContain("Switched off");
+    expect(html).toContain('aria-label="Switch on Roof room"');
+    expect(html).toContain("Change order");
+    expect(html).toContain("Add a portion");
+  });
+
   it("keeps the month in its Try again link when the Settings tab cannot be read", async () => {
     mocks.getSettings.mockRejectedValue(new Error("down"));
     const log = vi.spyOn(console, "error").mockImplementation(() => {});

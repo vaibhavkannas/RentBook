@@ -1,4 +1,6 @@
+import type { PortionConfig } from "@/lib/domain/types";
 import { parseSettingsRows } from "@/lib/settings-input";
+import { listWords } from "@/lib/setup-checks";
 
 /**
  * What the Portion settings screen sends for a new portion, and the moves of the order editor. The screens only gather
@@ -54,3 +56,37 @@ export const sameOrder = (a: readonly string[], b: readonly string[]): boolean =
 /** What the order editor says after a move: where the portion is now (`index` counts from 0). */
 export const orderPositionText = (name: string, index: number, total: number): string =>
   `${name} is now ${index + 1} of ${total}.`;
+
+/**
+ * When a portion may be switched off, in words that stay true if the rule gets stricter: the Sheet says exactly what is in the way
+ * when it refuses, and the screen shows that.
+ */
+export const SWITCH_OFF_RULE = "A portion can be switched off only when it is vacant and nothing is owed.";
+
+/** The error part of an answer from the portion routes. */
+type PortionApiError = { code: string; message: string; details?: Record<string, unknown> };
+
+/** The answer of POST /api/portions: the portion, the Schedule columns it was given, and what to add to a Total formula. */
+export type AddPortionApiBody = {
+  ok: boolean;
+  error?: PortionApiError;
+  portion?: PortionConfig;
+  columns?: { header: string; letter: string }[];
+  totalNote?: string | null;
+};
+
+/** What the Add a portion sheet keeps once the portion is in the Sheet (the answer of POST /api/portions, when it worked). */
+export type AddedPortionResult = {
+  portion: PortionConfig;
+  columns: { header: string; letter: string }[];
+  /** What to add to the Schedule's Total formula by hand, or null when there is nothing to add. */
+  totalNote: string | null;
+};
+
+/** The answer of PUT /api/portions/active and /api/portions/order: the portions as the Sheet now has them. */
+export type PortionsApiBody = { ok: boolean; error?: PortionApiError; portions?: PortionConfig[] };
+
+/** What the Add a portion sheet says once the portion is in the Sheet: its name, and where its three columns are. */
+export function addedPortionText(name: string, columns: readonly { header: string; letter: string }[]): string {
+  return `${name} added. Its columns in your Schedule are ${listWords(columns.map((column) => `${column.header} (${column.letter})`))}.`;
+}

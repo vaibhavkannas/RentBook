@@ -4,6 +4,7 @@ import {
   apiErrorMessage,
   OFFLINE_MESSAGE,
   PAYMENT_NO_CONFIRMATION,
+  PORTION_NO_CONFIRMATION,
   PREPARE_NO_CONFIRMATION,
   SIGNED_OUT_MESSAGE,
   SLOW_HINT_MESSAGE,
@@ -37,7 +38,7 @@ describe("the texts for a request that got no answer", () => {
   });
 
   it("every text that sends a person to bring the screen up to date uses the one recovery phrase", () => {
-    for (const text of [TIMEOUT_MESSAGE, PAYMENT_NO_CONFIRMATION, UNDO_NO_CONFIRMATION, PREPARE_NO_CONFIRMATION]) {
+    for (const text of [TIMEOUT_MESSAGE, PAYMENT_NO_CONFIRMATION, UNDO_NO_CONFIRMATION, PREPARE_NO_CONFIRMATION, PORTION_NO_CONFIRMATION]) {
       expect(text.toLowerCase()).toContain(RELOAD_STEP);
       expect(text).not.toMatch(/refresh|reload/i);
     }
@@ -46,6 +47,12 @@ describe("the texts for a request that got no answer", () => {
   it("sends a person who has been signed out to a tab, and does not say to come back: they land on the sign-in page", () => {
     expect(SIGNED_OUT_MESSAGE).toContain(SIGN_IN_HINT);
     expect(SIGNED_OUT_MESSAGE).not.toMatch(/come back|refresh|reload/i);
+  });
+
+  it("says a change to the portions may or may not have been made, and to check Portion settings", () => {
+    expect(PORTION_NO_CONFIRMATION).toBe(
+      "Couldn't confirm that the change went through. Check your connection. Tap another tab at the bottom of the screen and come back, then check Portion settings.",
+    );
   });
 
   it("keeps today's texts for an answer that never arrived", () => {
