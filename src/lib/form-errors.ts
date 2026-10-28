@@ -56,7 +56,10 @@ const TENANCY_FIELDS = ["phone", "moveIn", "agreementEnd", "advance", "advanceDa
 /** The fields the move-out request names on their own. */
 const MOVE_OUT_FIELDS = ["moveOut", "refund", "deductions"];
 
-/** The settings' fields a request names as `portions.N.X`, and what the form calls them. */
+/**
+ * The portion fields of a request, and what the forms call them. The settings request names them as `portions.N.X` (one
+ * row for each portion), the Add a portion request on their own (`name`).
+ */
 const PORTION_FIELDS: Record<string, string> = { name: "name", cycleLength: "cycle", hikePercent: "hike" };
 
 /**
@@ -69,6 +72,7 @@ export function fieldFromServer(path: unknown): { field: string; row: number | n
   if (path === "dateReceived") return { field: "date", row: null };
   if (path === "newTenantName") return { field: "tenantName", row: null };
   if (MOVE_OUT_FIELDS.includes(path)) return { field: path, row: null };
+  if (Object.hasOwn(PORTION_FIELDS, path)) return { field: PORTION_FIELDS[path], row: null };
   const tenancy = /^(?:tenancy|fields)\.([A-Za-z]+)$/.exec(path);
   if (tenancy) return TENANCY_FIELDS.includes(tenancy[1]) ? { field: tenancy[1], row: null } : null;
   const portion = /^portions\.(\d+)\.([A-Za-z]+)$/.exec(path);

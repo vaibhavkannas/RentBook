@@ -152,6 +152,9 @@ describe("the pages and routes under src/app", () => {
         "api/payments/route.ts",
         "api/payments/log-retry/route.ts",
         "api/payments/undo/route.ts",
+        "api/portions/route.ts",
+        "api/portions/active/route.ts",
+        "api/portions/order/route.ts",
         "api/settings/route.ts",
         "api/setup/prepare/route.ts",
         "api/tenancies/route.ts",
@@ -171,6 +174,26 @@ describe("the pages and routes under src/app", () => {
       .map((entry) => guardProblem(entry.file, readFileSync(path.join(APP_DIR, entry.file), "utf8")))
       .filter((problem): problem is string => problem !== null);
     expect(problems).toEqual([]);
+  });
+
+  it("keep the owner's own routes and pages to the owner: requireOwner, never only requireUser", () => {
+    const OWNER_ONLY = [
+      "api/settings/route.ts",
+      "api/setup/prepare/route.ts",
+      "api/portions/route.ts",
+      "api/portions/active/route.ts",
+      "api/portions/order/route.ts",
+    ];
+    for (const file of OWNER_ONLY) {
+      const source = readFileSync(path.join(APP_DIR, file), "utf8");
+      expect(guardsImported(source), file).toEqual(["requireOwner"]);
+      const code = withoutCommentsAndStrings(source);
+      expect(callCount(code, "requireOwner"), file).toBe(1);
+      // the request is checked (same origin, JSON, size) before anyone is asked who they are
+      expect(code.indexOf("readJsonBody("), file).toBeGreaterThan(-1);
+      expect(code.indexOf("readJsonBody("), file).toBeLessThan(code.indexOf("requireOwner("));
+      expect(code, file).toMatch(/\bhandle\(/);
+    }
   });
 
   it("are not let through by a name that only looks like an open one", () => {

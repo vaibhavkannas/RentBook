@@ -27,6 +27,12 @@ export function newTenantToastText(portion: string, tenant: string, amount: numb
 
 export const SETTINGS_SAVED_TOAST = "Settings saved";
 
+/** After a portion was added, switched off or on, and after the order of the portions was saved (Portion settings). */
+export const portionAddedToastText = (name: string) => `${name} added`;
+export const portionSwitchedOffToastText = (name: string) => `${name} switched off`;
+export const portionSwitchedOnToastText = (name: string) => `${name} switched on`;
+export const ORDER_SAVED_TOAST = "Order saved";
+
 /**
  * After Prepare my Sheet: the tabs it made and the tabs that were there but empty that it filled in, as the owner names
  * them, or that nothing needed doing.

@@ -29,6 +29,10 @@ describe("fieldFromServer", () => {
     ["portions.0.name", { field: "name", row: 0 }],
     ["portions.3.cycleLength", { field: "cycle", row: 3 }],
     ["portions.12.hikePercent", { field: "hike", row: 12 }],
+    // the Add a portion sheet's request names its fields on their own, not in a list
+    ["name", { field: "name", row: null }],
+    ["cycleLength", { field: "cycle", row: null }],
+    ["hikePercent", { field: "hike", row: null }],
     ["moveOut", { field: "moveOut", row: null }],
     ["refund", { field: "refund", row: null }],
     ["deductions", { field: "deductions", row: null }],
@@ -154,6 +158,33 @@ describe("serverProblem: what the server said", () => {
 
   it("does not take an inherited name for a field", () => {
     expect(serverProblem({ code: "validation", message: "Words.", details: { field: "constructor" } }, known)).toEqual(plainProblem("Words."));
+  });
+});
+
+describe("serverProblem for the Add a portion sheet", () => {
+  const known = ["name", "cycle", "hike"];
+
+  it("goes beside the name, the cycle or the hike the answer names", () => {
+    expect(serverProblem({ code: "validation", message: "Portion name must be 1 to 60 characters.", details: { field: "name" } }, known)).toEqual({
+      message: "Portion name must be 1 to 60 characters.",
+      field: "name",
+      row: null,
+    });
+    expect(serverProblem({ code: "validation", message: "x", details: { field: "cycleLength" } }, known).field).toBe("cycle");
+    expect(serverProblem({ code: "validation", message: "x", details: { field: "hikePercent" } }, known).field).toBe("hike");
+  });
+
+  it("goes in the sheet's own box when the refusal names no field (no room, a Sheet someone changed)", () => {
+    expect(serverProblem({ code: "validation", message: "There is no room to the right of your Schedule." }, known)).toEqual(
+      plainProblem("There is no room to the right of your Schedule."),
+    );
+    expect(serverProblem({ code: "conflict", message: "Someone changed the Settings tab a moment ago." }, known)).toEqual(
+      plainProblem("Someone changed the Settings tab a moment ago."),
+    );
+  });
+
+  it("leaves a name in a form that has no such field in that form's own box", () => {
+    expect(serverProblem({ code: "validation", message: "Words.", details: { field: "name" } }, ["amount", "date"])).toEqual(plainProblem("Words."));
   });
 });
 

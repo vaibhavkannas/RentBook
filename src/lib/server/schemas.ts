@@ -89,6 +89,34 @@ export const settingsBody = z.object({
     .max(20),
 });
 
+/** A portion's name, as the settings take it: the text typed, trimmed, 1 to 60 characters. */
+const portionName = safeText(MAX_NAME_LENGTH, { label: "Portion name", required: true });
+
+/**
+ * A new portion: its name, its cycle length (null for a count that never resets) and its hike. The service checks the range
+ * of the cycle and the hike and names the field in its refusal; the id and the columns are the service's to choose.
+ */
+export const addPortionBody = z.object({
+  name: portionName,
+  cycleLength: z.number().nullable(),
+  hikePercent: z.number(),
+});
+
+/** Switch a portion off or on. Today is the server's to say, so the request does not carry it. */
+export const portionActiveBody = z.object({
+  id: z.string().min(1).max(20),
+  active: z.boolean(),
+});
+
+/** The portions in the order wanted: every portion once. The service checks that they are exactly the portions there are. */
+export const portionOrderBody = z.object({
+  ids: z
+    .array(z.string().min(1).max(20))
+    .min(1)
+    .max(20)
+    .refine((ids) => new Set(ids).size === ids.length, { message: "Each portion can be in the order only once." }),
+});
+
 /**
  * Create (no `id`) or update (`id` plus the `expectedUpdatedAt` the person saw). An empty `expectedUpdatedAt` is valid:
  * a hand-typed row can have none.

@@ -15,6 +15,9 @@ const markWritten = vi.hoisted(() => vi.fn(async () => undefined));
 const saveTenancy = vi.hoisted(() => vi.fn());
 const moveOutTenancy = vi.hoisted(() => vi.fn());
 const moveOutWithoutDetails = vi.hoisted(() => vi.fn());
+const addPortion = vi.hoisted(() => vi.fn());
+const setPortionActive = vi.hoisted(() => vi.fn());
+const reorderPortions = vi.hoisted(() => vi.fn());
 const prepareSheet = vi.hoisted(() => vi.fn<(...args: unknown[]) => Promise<{ created: string[]; filled: string[] }>>(async () => ({ created: ["Tenants"], filled: [] })));
 
 vi.mock("@/auth", () => ({ auth }));
@@ -30,6 +33,7 @@ vi.mock("@/lib/sheets/service", async (importOriginal) => ({
   retryLogRow,
 }));
 vi.mock("@/lib/sheets/prepare", () => ({ prepareSheet }));
+vi.mock("@/lib/sheets/portion-service", () => ({ addPortion, setPortionActive, reorderPortions }));
 vi.mock("@/lib/sheets/tenancy-service", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/sheets/tenancy-service")>()),
   saveTenancy,
@@ -45,8 +49,12 @@ import { POST as postPayment } from "@/app/api/payments/route";
 import { POST as postUndo } from "@/app/api/payments/undo/route";
 import { POST as postMoveOut } from "@/app/api/tenancies/move-out/route";
 import { POST as postTenancy } from "@/app/api/tenancies/route";
+import { POST as postPortion } from "@/app/api/portions/route";
+import { PUT as putPortionActive } from "@/app/api/portions/active/route";
+import { PUT as putPortionOrder } from "@/app/api/portions/order/route";
 import { POST as postPrepare } from "@/app/api/setup/prepare/route";
 import { PUT as putSettings } from "@/app/api/settings/route";
+import { todayIso } from "@/lib/domain/year-month";
 
 const settingsRequest = () =>
   new Request("http://localhost/api/settings", {
@@ -81,6 +89,9 @@ beforeEach(() => {
   moveOutTenancy.mockReset();
   moveOutWithoutDetails.mockReset();
   prepareSheet.mockClear();
+  addPortion.mockReset();
+  setPortionActive.mockReset();
+  reorderPortions.mockReset();
 });
 afterEach(() => {
   for (const spy of Object.values(logs)) spy.mockRestore();
@@ -197,6 +208,233 @@ describe("POST /api/setup/prepare", () => {
       expect(res.status, JSON.stringify(body)).toBe(400);
     }
     expect(prepareSheet).not.toHaveBeenCalled();
+  });
+});
+
+// Adding, switching off and reordering portions: the owner's, and the same pipeline as every write.
+const portionJson = (url: string, body: unknown, method: string) =>
+  new Request(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+/** The three ways the owner-only portion routes refuse: no one signed in, an address not on the list (401), a member (403). */
+const refusesEveryoneButTheOwner = async (call: () => Promise<Response>) => {
+  for (const email of [null, "stranger@example.com"]) {
+    signedInAs(email);
+    expect((await call()).status).toBe(401);
+  }
+  signedInAs("member@example.com");
+  const res = await call();
+  expect(res.status).toBe(403);
+  expect((await res.json()).error.code).toBe("forbidden");
+  expect(markWritten).not.toHaveBeenCalled();
+};
+
+const ADDED = {
+  portion: { id: "p6", name: "Roof room", tenantHeader: "Tenant6", countHeader: "Count6", amountHeader: "Amount6", cycleLength: 11, hikePercent: 5 },
+  columns: [
+    { header: "Tenant6", letter: "R" },
+    { header: "Count6", letter: "S" },
+    { header: "Amount6", letter: "T" },
+  ],
+  totalNote: "Add column T to your Total formula.",
+};
+const PORTIONS_AFTER = [{ id: "p1", name: "Ground floor", tenantHeader: "Tenant", countHeader: "Count", amountHeader: "Amount", cycleLength: 11, hikePercent: 5 }];
+
+describe("POST /api/portions", () => {
+  const addRequest = (body: unknown = { name: "Roof room", cycleLength: 11, hikePercent: 5 }) =>
+    portionJson("http://localhost/api/portions", body, "POST");
+
+  it("rejects a visitor who is not signed in, an address that is not on the list, and a listed member, and does not touch the Sheet", async () => {
+    await refusesEveryoneButTheOwner(() => postPortion(addRequest()));
+    expect(addPortion).not.toHaveBeenCalled();
+  });
+
+  it("lets the owner add a portion, and answers with what the service answered", async () => {
+    signedInAs("Owner@Example.com");
+    addPortion.mockResolvedValueOnce(ADDED);
+    const res = await postPortion(addRequest({ name: "  Roof room  ", cycleLength: 11, hikePercent: 5 }));
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ ok: true, ...ADDED });
+    expect(addPortion).toHaveBeenCalledOnce();
+    expect(addPortion.mock.calls[0][1]).toEqual({ name: "Roof room", cycleLength: 11, hikePercent: 5 });
+  });
+
+  it("passes a count that never resets on as a null cycle length", async () => {
+    signedInAs("owner@example.com");
+    addPortion.mockResolvedValueOnce(ADDED);
+    await postPortion(addRequest({ name: "Roof room", cycleLength: null, hikePercent: 0 }));
+    expect(addPortion.mock.calls[0][1]).toEqual({ name: "Roof room", cycleLength: null, hikePercent: 0 });
+  });
+
+  it("marks the write time after a success, so the owner's next page is read fresh, and not when the owner is refused", async () => {
+    signedInAs("member@example.com");
+    await postPortion(addRequest());
+    expect(markWritten).not.toHaveBeenCalled();
+    signedInAs("owner@example.com");
+    addPortion.mockResolvedValueOnce(ADDED);
+    await postPortion(addRequest());
+    expect(markWritten.mock.calls).toEqual([["owner@example.com"]]);
+  });
+
+  it("marks the write time after a conflict, as every write does, and says what the Sheet said", async () => {
+    signedInAs("owner@example.com");
+    addPortion.mockRejectedValueOnce(conflict("Someone changed the Settings tab a moment ago."));
+    const res = await postPortion(addRequest());
+    expect(res.status).toBe(409);
+    expect((await res.json()).error.message).toBe("Someone changed the Settings tab a moment ago.");
+    expect(markWritten).toHaveBeenCalledOnce();
+  });
+
+  it("does not mark the write time when the service refuses the request, and passes on the field it names", async () => {
+    signedInAs("owner@example.com");
+    addPortion.mockRejectedValueOnce(validation("Payments per cycle must be a whole number from 1 to 120.", "cycleLength"));
+    const res = await postPortion(addRequest());
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toMatchObject({ code: "validation", details: { field: "cycleLength" } });
+    expect(markWritten).not.toHaveBeenCalled();
+  });
+
+  it("answers a bad body with 400, in plain words, naming the field, and never reaches the Sheet", async () => {
+    signedInAs("owner@example.com");
+    const cases: [unknown, string, string][] = [
+      [{ name: " ", cycleLength: 11, hikePercent: 5 }, "name", "Portion name must be 1 to 60 characters."],
+      [{ name: "x".repeat(61), cycleLength: 11, hikePercent: 5 }, "name", "Portion name must be 1 to 60 characters."],
+      [{ name: "Roof room", cycleLength: "11", hikePercent: 5 }, "cycleLength", "The payments per cycle field isn't valid."],
+      [{ name: "Roof room", cycleLength: 11, hikePercent: "5" }, "hikePercent", "The hike field isn't valid."],
+      [{ name: "Roof room", cycleLength: 11 }, "hikePercent", "The hike field isn't valid."],
+    ];
+    for (const [body, field, message] of cases) {
+      const res = await postPortion(addRequest(body));
+      expect(res.status, JSON.stringify(body)).toBe(400);
+      expect((await res.json()).error, JSON.stringify(body)).toMatchObject({ code: "validation", message, details: { field } });
+    }
+    for (const body of [null, [], "x", 5]) expect((await postPortion(addRequest(body))).status, JSON.stringify(body)).toBe(400);
+    expect(addPortion).not.toHaveBeenCalled();
+    expect(markWritten).not.toHaveBeenCalled();
+  });
+});
+
+describe("PUT /api/portions/active", () => {
+  const activeRequest = (body: unknown = { id: "p2", active: false }) =>
+    portionJson("http://localhost/api/portions/active", body, "PUT");
+
+  it("rejects a visitor who is not signed in, an address that is not on the list, and a listed member, and does not touch the Sheet", async () => {
+    await refusesEveryoneButTheOwner(() => putPortionActive(activeRequest()));
+    expect(setPortionActive).not.toHaveBeenCalled();
+  });
+
+  it("lets the owner switch a portion off, and answers with the portions after it", async () => {
+    signedInAs("Owner@Example.com");
+    setPortionActive.mockResolvedValueOnce({ portions: PORTIONS_AFTER });
+    const res = await putPortionActive(activeRequest({ id: "p2", active: false }));
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ ok: true, portions: PORTIONS_AFTER });
+    expect(setPortionActive).toHaveBeenCalledOnce();
+    expect(setPortionActive.mock.calls[0][1]).toMatchObject({ id: "p2", active: false });
+  });
+
+  it("switches a portion on", async () => {
+    signedInAs("owner@example.com");
+    setPortionActive.mockResolvedValueOnce({ portions: PORTIONS_AFTER });
+    await putPortionActive(activeRequest({ id: "p2", active: true }));
+    expect(setPortionActive.mock.calls[0][1]).toMatchObject({ id: "p2", active: true });
+  });
+
+  it("gives the service today in the app's time zone, never a day the request names", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      // 20:00 UTC on 31 October is already 1 November in India.
+      vi.setSystemTime(new Date("2026-10-31T20:00:00Z"));
+      signedInAs("owner@example.com");
+      setPortionActive.mockResolvedValueOnce({ portions: PORTIONS_AFTER });
+      await putPortionActive(activeRequest({ id: "p2", active: false, today: "2000-01-01" }));
+      expect(setPortionActive.mock.calls[0][1]).toEqual({ id: "p2", active: false, today: "2026-11-01" });
+      expect(todayIso(new Date())).toBe("2026-11-01");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("marks the write time after a success, and after a conflict, and not after a refusal", async () => {
+    signedInAs("owner@example.com");
+    setPortionActive.mockResolvedValueOnce({ portions: PORTIONS_AFTER });
+    await putPortionActive(activeRequest());
+    expect(markWritten.mock.calls).toEqual([["owner@example.com"]]);
+
+    markWritten.mockClear();
+    setPortionActive.mockRejectedValueOnce(conflict("Ground floor still has a tenant (Asha). Record the move-out on the tenant page first."));
+    const conflicted = await putPortionActive(activeRequest());
+    expect(conflicted.status).toBe(409);
+    expect((await conflicted.json()).error.message).toBe("Ground floor still has a tenant (Asha). Record the move-out on the tenant page first.");
+    expect(markWritten).toHaveBeenCalledOnce();
+
+    markWritten.mockClear();
+    setPortionActive.mockRejectedValueOnce(validation("Keep at least one portion switched on."));
+    const refused = await putPortionActive(activeRequest());
+    expect(refused.status).toBe(400);
+    expect(markWritten).not.toHaveBeenCalled();
+  });
+
+  it("answers a bad body with 400 naming the field, and never reaches the Sheet", async () => {
+    signedInAs("owner@example.com");
+    const cases: [unknown, string][] = [
+      [{ active: false }, "id"],
+      [{ id: "", active: false }, "id"],
+      [{ id: "x".repeat(21), active: false }, "id"],
+    ];
+    for (const [body] of cases) expect((await putPortionActive(activeRequest(body))).status, JSON.stringify(body)).toBe(400);
+    const res = await putPortionActive(activeRequest({ id: "p2", active: "no" }));
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toMatchObject({ code: "validation", details: { field: "active" } });
+    for (const body of [null, [], "x"]) expect((await putPortionActive(activeRequest(body))).status).toBe(400);
+    expect(setPortionActive).not.toHaveBeenCalled();
+    expect(markWritten).not.toHaveBeenCalled();
+  });
+});
+
+describe("PUT /api/portions/order", () => {
+  const orderRequest = (body: unknown = { ids: ["p2", "p1"] }) => portionJson("http://localhost/api/portions/order", body, "PUT");
+
+  it("rejects a visitor who is not signed in, an address that is not on the list, and a listed member, and does not touch the Sheet", async () => {
+    await refusesEveryoneButTheOwner(() => putPortionOrder(orderRequest()));
+    expect(reorderPortions).not.toHaveBeenCalled();
+  });
+
+  it("lets the owner put the portions in a new order, and answers with the portions after it", async () => {
+    signedInAs("Owner@Example.com");
+    reorderPortions.mockResolvedValueOnce({ portions: PORTIONS_AFTER });
+    const res = await putPortionOrder(orderRequest({ ids: ["p2", "p1", "p3"] }));
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ ok: true, portions: PORTIONS_AFTER });
+    expect(reorderPortions).toHaveBeenCalledOnce();
+    expect(reorderPortions.mock.calls[0][1]).toEqual({ ids: ["p2", "p1", "p3"] });
+  });
+
+  it("marks the write time after a success, and after a conflict, and not after a refusal", async () => {
+    signedInAs("owner@example.com");
+    reorderPortions.mockResolvedValueOnce({ portions: PORTIONS_AFTER });
+    await putPortionOrder(orderRequest());
+    expect(markWritten.mock.calls).toEqual([["owner@example.com"]]);
+
+    markWritten.mockClear();
+    reorderPortions.mockRejectedValueOnce(conflict("Someone changed the Settings tab a moment ago."));
+    expect((await putPortionOrder(orderRequest())).status).toBe(409);
+    expect(markWritten).toHaveBeenCalledOnce();
+
+    markWritten.mockClear();
+    reorderPortions.mockRejectedValueOnce(validation("That is not every portion."));
+    expect((await putPortionOrder(orderRequest())).status).toBe(400);
+    expect(markWritten).not.toHaveBeenCalled();
+  });
+
+  it("answers a bad body with 400, in plain words, and never reaches the Sheet", async () => {
+    signedInAs("owner@example.com");
+    const twice = await putPortionOrder(orderRequest({ ids: ["p1", "p2", "p1"] }));
+    expect(twice.status).toBe(400);
+    expect((await twice.json()).error).toMatchObject({ code: "validation", message: "Each portion can be in the order only once.", details: { field: "ids" } });
+    for (const body of [{ ids: [] }, { ids: "p1" }, { ids: [""] }, { ids: ["x".repeat(21)] }, {}, null, []]) {
+      expect((await putPortionOrder(orderRequest(body))).status, JSON.stringify(body)).toBe(400);
+    }
+    expect(reorderPortions).not.toHaveBeenCalled();
+    expect(markWritten).not.toHaveBeenCalled();
   });
 });
 
@@ -1116,8 +1354,23 @@ describe("request integrity on every route", () => {
     ["POST /api/tenancies/move-out", postMoveOut, "POST", "http://localhost/api/tenancies/move-out"],
     ["PUT /api/settings", putSettings, "PUT", "http://localhost/api/settings"],
     ["POST /api/setup/prepare", postPrepare, "POST", "http://localhost/api/setup/prepare"],
+    ["POST /api/portions", postPortion, "POST", "http://localhost/api/portions"],
+    ["PUT /api/portions/active", putPortionActive, "PUT", "http://localhost/api/portions/active"],
+    ["PUT /api/portions/order", putPortionOrder, "PUT", "http://localhost/api/portions/order"],
   ];
-  const SERVICES = [saveSettings, logPayment, undoPayment, retryLogRow, saveTenancy, moveOutTenancy, moveOutWithoutDetails, prepareSheet];
+  const SERVICES = [
+    saveSettings,
+    logPayment,
+    undoPayment,
+    retryLogRow,
+    saveTenancy,
+    moveOutTenancy,
+    moveOutWithoutDetails,
+    prepareSheet,
+    addPortion,
+    setPortionActive,
+    reorderPortions,
+  ];
 
   const make = (method: string, url: string, headers: Record<string, string>, body: string) =>
     new Request(url, { method, headers, body });

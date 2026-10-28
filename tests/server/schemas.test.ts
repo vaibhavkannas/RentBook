@@ -1,6 +1,15 @@
 import { describe, expect, it } from "vitest";
 import type { ZodType } from "zod";
-import { moveOutBody, paymentBody, prepareBody, settingsBody, tenancyBody } from "@/lib/server/schemas";
+import {
+  addPortionBody,
+  moveOutBody,
+  paymentBody,
+  portionActiveBody,
+  portionOrderBody,
+  prepareBody,
+  settingsBody,
+  tenancyBody,
+} from "@/lib/server/schemas";
 
 /** The first problem a schema finds with `value`, as "path: message", or null when it is fine. */
 function problem(schema: ZodType, value: unknown): string | null {
@@ -293,5 +302,88 @@ describe("prepareBody", () => {
     for (const body of [null, [], "x", 5, { extra: 1 }, { created: ["Tenants"] }]) {
       expect(problem(prepareBody, body), JSON.stringify(body)).not.toBeNull();
     }
+  });
+});
+
+describe("addPortionBody", () => {
+  const add = { name: "Roof room", cycleLength: 11, hikePercent: 5 };
+
+  it("takes a name, a cycle length (or null for a count that never resets) and a hike", () => {
+    expect(problem(addPortionBody, add)).toBeNull();
+    expect(problem(addPortionBody, { ...add, cycleLength: null })).toBeNull();
+    expect(addPortionBody.parse({ ...add, hikePercent: 7.5 }).hikePercent).toBe(7.5);
+  });
+
+  it("trims the name and takes 1 to 60 characters with no control characters, in the words of the settings", () => {
+    expect(addPortionBody.parse({ ...add, name: "  Roof room " }).name).toBe("Roof room");
+    expect(problem(addPortionBody, { ...add, name: "x".repeat(60) })).toBeNull();
+    expect(problem(addPortionBody, { ...add, name: "" })).toBe("name: Portion name must be 1 to 60 characters.");
+    expect(problem(addPortionBody, { ...add, name: "   " })).toBe("name: Portion name must be 1 to 60 characters.");
+    expect(problem(addPortionBody, { ...add, name: "x".repeat(61) })).toBe("name: Portion name must be 1 to 60 characters.");
+    expect(problem(addPortionBody, { ...add, name: "Roof\nroom" })).toBe(
+      "name: Portion name cannot have line breaks or other control characters.",
+    );
+  });
+
+  it("needs all three, and a number where a number belongs (the service checks the range)", () => {
+    expect(problem(addPortionBody, { name: "Roof room", hikePercent: 5 })).toMatch(/^cycleLength: /);
+    expect(problem(addPortionBody, { name: "Roof room", cycleLength: 11 })).toMatch(/^hikePercent: /);
+    expect(problem(addPortionBody, { cycleLength: 11, hikePercent: 5 })).toMatch(/^name: /);
+    expect(problem(addPortionBody, { ...add, cycleLength: "11" })).toMatch(/^cycleLength: /);
+    expect(problem(addPortionBody, { ...add, hikePercent: "5" })).toMatch(/^hikePercent: /);
+    expect(problem(addPortionBody, null)).not.toBeNull();
+    expect(problem(addPortionBody, [])).not.toBeNull();
+  });
+
+  it("does not pass on a field it does not know (an id is the service's to choose)", () => {
+    expect(addPortionBody.parse({ ...add, id: "p9", portions: [] })).toEqual(add);
+  });
+});
+
+describe("portionActiveBody", () => {
+  it("takes the id of a portion and whether it is on", () => {
+    expect(problem(portionActiveBody, { id: "p2", active: false })).toBeNull();
+    expect(problem(portionActiveBody, { id: "p2", active: true })).toBeNull();
+    expect(problem(portionActiveBody, { id: "x".repeat(20), active: true })).toBeNull();
+  });
+
+  it("refuses an id that is empty or over 20 characters, and an on/off that is not true or false", () => {
+    expect(problem(portionActiveBody, { id: "", active: true })).toMatch(/^id: /);
+    expect(problem(portionActiveBody, { id: "x".repeat(21), active: true })).toMatch(/^id: /);
+    expect(problem(portionActiveBody, { active: true })).toMatch(/^id: /);
+    expect(problem(portionActiveBody, { id: "p2" })).toMatch(/^active: /);
+    for (const active of ["no", "false", 0, 1, null]) {
+      expect(problem(portionActiveBody, { id: "p2", active }), String(active)).toMatch(/^active: /);
+    }
+    expect(problem(portionActiveBody, null)).not.toBeNull();
+  });
+
+  it("does not pass on a date: today is the server's", () => {
+    expect(portionActiveBody.parse({ id: "p2", active: false, today: "2000-01-01" })).toEqual({ id: "p2", active: false });
+  });
+});
+
+describe("portionOrderBody", () => {
+  it("takes the ids of the portions in the order wanted, from 1 to 20 of them", () => {
+    expect(portionOrderBody.parse({ ids: ["p2", "p1"] })).toEqual({ ids: ["p2", "p1"] });
+    expect(problem(portionOrderBody, { ids: ["p1"] })).toBeNull();
+    const twenty = Array.from({ length: 20 }, (_, i) => `p${i + 1}`);
+    expect(problem(portionOrderBody, { ids: twenty })).toBeNull();
+    expect(problem(portionOrderBody, { ids: ["x".repeat(20)] })).toBeNull();
+  });
+
+  it("refuses no ids, more than 20, an id that is empty or over 20 characters, and something that is not a list", () => {
+    expect(problem(portionOrderBody, { ids: [] })).toMatch(/^ids: /);
+    expect(problem(portionOrderBody, { ids: Array.from({ length: 21 }, (_, i) => `p${i + 1}`) })).toMatch(/^ids: /);
+    expect(problem(portionOrderBody, { ids: [""] })).toMatch(/^ids\.0: /);
+    expect(problem(portionOrderBody, { ids: ["p1", "x".repeat(21)] })).toMatch(/^ids\.1: /);
+    expect(problem(portionOrderBody, { ids: "p1" })).toMatch(/^ids: /);
+    expect(problem(portionOrderBody, { ids: [1, 2] })).toMatch(/^ids\.0: /);
+    expect(problem(portionOrderBody, {})).toMatch(/^ids: /);
+    expect(problem(portionOrderBody, null)).not.toBeNull();
+  });
+
+  it("refuses the same id twice, in plain words", () => {
+    expect(problem(portionOrderBody, { ids: ["p1", "p2", "p1"] })).toBe("ids: Each portion can be in the order only once.");
   });
 });

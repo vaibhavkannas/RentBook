@@ -9,7 +9,11 @@ import {
   logUnsavedToastText,
   moveOutToastText,
   newTenantToastText,
+  ORDER_SAVED_TOAST,
   paymentToasts,
+  portionAddedToastText,
+  portionSwitchedOffToastText,
+  portionSwitchedOnToastText,
   paymentToastText,
   prepareToastText,
   replaceToastText,
@@ -49,6 +53,18 @@ describe("the toast after adding a new tenant", () => {
 describe("the toast after an undo", () => {
   it("keeps the wording the undo sheet has always used", () => {
     expect(undoToastText("Ground floor")).toBe("Ground floor: payment undone");
+  });
+});
+
+describe("the toast after adding, switching off, switching on and reordering portions", () => {
+  it("names the portion, then says what happened", () => {
+    expect(portionAddedToastText("Roof room")).toBe("Roof room added");
+    expect(portionSwitchedOffToastText("Roof room")).toBe("Roof room switched off");
+    expect(portionSwitchedOnToastText("Roof room")).toBe("Roof room switched on");
+  });
+
+  it("says the order was saved", () => {
+    expect(ORDER_SAVED_TOAST).toBe("Order saved");
   });
 });
 
