@@ -71,6 +71,11 @@ export type AddPlan = {
   settingsRow: number;
   scheduleWrites: CellWrite[];
   settingsWrites: CellWrite[];
+  /**
+   * True when the portion asked for is already there (an earlier add landed and its answer was lost): the plan describes that portion
+   * and writes nothing. `id`, `headers`, `columns` and `settingsRow` are its own.
+   */
+  alreadyAdded?: boolean;
 };
 
 /** Strictly empty: a cell of spaces holds something, and no plan writes over it. */
@@ -178,7 +183,9 @@ function placeHeaders(input: PlanInput, header: { index: number; cells: unknown[
   const namesFor = (n: number, gap = space): [string, string, string] => [`Tenant${gap}${n}`, `Count${gap}${n}`, `Amount${gap}${n}`];
   const headerKeys = cells.map(headerKey);
   const used = settingsKeys(input.settings);
-  const text = (cell: unknown) => String(cell ?? "").trim();
+  // The names must be exact: a header with a space after it is found by the app's looser rule, but what is read back is compared as
+  // written, so such a header is not taken (and its number is taken, so the new portion gets the next one).
+  const text = (cell: unknown) => String(cell ?? "");
 
   const pattern = new RegExp(`^Tenant${space}(\\d+)$`);
   const numbers = [...new Set(cells.flatMap((cell) => {
@@ -231,6 +238,38 @@ function freeSettingsRow(input: PlanInput, rows: PortionRow[]): number {
 }
 
 /**
+ * The plan for a request whose portion is already there, or null when it is not clearly that. It is the same request again after an
+ * add that landed and whose answer was lost: the portion has the same name and numbers, is the last one in Settings, its three
+ * headers are in the Schedule's header row, and nothing is under them yet. Then the owner is told it is added, as it is. Anything
+ * else (another cycle or hike, entries, another place in the list) is a portion that is somebody's, and the name is taken.
+ */
+function alreadyAdded(input: PlanInput, rows: PortionRow[], twin: PortionRow, request: NewPortion): AddPlan | null {
+  const { portion } = twin;
+  if (twin !== rows[rows.length - 1]) return null;
+  if (portion.cycleLength !== request.cycleLength || portion.hikePercent !== request.hikePercent) return null;
+  const header = headerRowOf(input.schedule);
+  const names: [string, string, string] = [portion.tenantHeader, portion.countHeader, portion.amountHeader];
+  const found = names.map((name) => findHeader(header.cells, name));
+  const columns = found.map((match) => ("index" in match ? match.index : -1));
+  if (columns.some((col) => col === -1)) return null;
+  for (let row = header.index + 1; row < input.schedule.length; row++) {
+    if (columns.some((col) => !isEmpty(input.schedule[row]?.[col]))) return null;
+  }
+  return {
+    id: portion.id,
+    headers: names,
+    columns: columns as [number, number, number],
+    adopted: true,
+    minColumns: Math.max(...columns) + 1,
+    headerRow: header.index + 1,
+    settingsRow: twin.sheetRow,
+    scheduleWrites: [],
+    settingsWrites: [],
+    alreadyAdded: true,
+  };
+}
+
+/**
  * The cells to write to add a portion: its three headers in the Schedule's header row (none when they are already there) and its
  * row in the Settings tab. Nothing in the Sheet is overwritten: the header cells are right of everything, or are the owner's own
  * headers over empty columns, and the Settings row is one whose cells A to Z were all empty.
@@ -241,6 +280,8 @@ export function planAddPortion(input: PlanInput, request: NewPortion): AddPlan {
   if (rows.length >= MAX_PORTIONS) throw validation(`You can have at most ${MAX_PORTIONS} portions.`);
   const twin = rows.find((row) => headerKey(row.portion.name) === headerKey(name));
   if (twin !== undefined) {
+    const there = alreadyAdded(input, rows, twin, { name, cycleLength, hikePercent });
+    if (there !== null) return there;
     throw validation(`There is already a portion called "${twin.portion.name}". Choose a different name.`, "name");
   }
 
@@ -348,7 +389,9 @@ export function planReorder(input: PlanInput, ids: readonly string[]): CellWrite
     throw conflict(`Your portions changed since this page loaded. ${RELOAD_HINT}`);
   }
   const width = hasActiveColumn(input.settings) ? ACTIVE_COLUMN + 1 : ACTIVE_COLUMN;
+  const last = colLetter(width - 1);
   const cellsOf = (sheetRow: number) => Array.from({ length: width }, (_, col) => input.settings[sheetRow - 1]?.[col]);
+  const valuesOf = (sheetRow: number) => cellsOf(sheetRow).map((cell) => cell ?? "");
   // The rows whose portion changes: each gives its cells to another of them and takes another's, so each is looked at once.
   const moved = rows.flatMap(({ sheetRow }, slot) =>
     ids[slot] === current[slot] ? [] : [{ sheetRow, from: rows.find((row) => row.portion.id === ids[slot])!.sheetRow }],
@@ -360,10 +403,30 @@ export function planReorder(input: PlanInput, ids: readonly string[]): CellWrite
       );
     }
   }
+  if (moved.length === 0) return [];
+
+  // When the moved rows are a block of portion rows (no note and no blank row among them), the block is written as ONE range, the
+  // rows that stay in it rewritten with the cells just read. A request applied in part could otherwise leave two rows with one id,
+  // which stops every page; one range is applied whole or not at all. A row that stays in the block and holds a formula is not
+  // rewritten (a formula would become a value), so then each moved row has its own range.
+  const first = Math.min(...moved.map((row) => row.sheetRow));
+  const lastRow = Math.max(...moved.map((row) => row.sheetRow));
+  const block = rows.filter((row) => row.sheetRow >= first && row.sheetRow <= lastRow);
+  const stay = block.filter((row) => !moved.some((m) => m.sheetRow === row.sheetRow));
+  if (block.length === lastRow - first + 1 && !stay.some((row) => cellsOf(row.sheetRow).some(isFormula))) {
+    const source = (sheetRow: number) => moved.find((m) => m.sheetRow === sheetRow)?.from ?? sheetRow;
+    return [
+      {
+        tab: SETTINGS_TAB,
+        a1: `A${first}:${last}${lastRow}`,
+        values: block.map((row) => valuesOf(source(row.sheetRow))),
+      },
+    ];
+  }
   return moved.map(({ sheetRow, from }) => ({
     tab: SETTINGS_TAB,
-    a1: `A${sheetRow}:${colLetter(width - 1)}${sheetRow}`,
-    values: [cellsOf(from).map((cell) => cell ?? "")],
+    a1: `A${sheetRow}:${last}${sheetRow}`,
+    values: [valuesOf(from)],
   }));
 }
 

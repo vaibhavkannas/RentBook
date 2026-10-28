@@ -378,6 +378,64 @@ describe("addPortion: someone else, and Google, between the steps", () => {
   });
 });
 
+describe("addPortion: an answer that was lost, hand-typed headers, and a Tenants tab that cannot be read", () => {
+  it("answers the same request again with the portion that is there, writing nothing, and says the same about the total", async () => {
+    const { fake, ctx } = await ready();
+    const first = await addPortion(ctx, NEW);
+    fake.calls.length = 0;
+    fake.requests.length = 0;
+    const again = await addPortion(ctx, NEW);
+    expect(again).toEqual(first);
+    expect(fake.requests).toEqual([]);
+    expect(fake.calls).toEqual(["getManyValues", "getManyValues"]);
+    expect(fake.tabs.get(SETTINGS_TAB)).toHaveLength(7);
+  });
+
+  it("converges too when the answer was lost after the Settings row was written but before it was read back", async () => {
+    const { fake, ctx } = await ready();
+    const read = vi.spyOn(fake, "getManyValues");
+    // the read back of the Settings row is the 4th read of the first add: the snapshot, the plan, the headers, then the row
+    read.mockImplementation(async function (...args) {
+      if (read.mock.calls.length === 4) throw new Error("Google went away");
+      return FakeGateway.prototype.getManyValues.apply(fake, args);
+    });
+    await expect(addPortion(ctx, NEW)).rejects.toThrow("Google went away");
+    read.mockRestore();
+    const again = await addPortion(ctx, NEW);
+    expect(again.portion).toMatchObject({ id: "p6", name: "Back room" });
+    expect(fake.tabs.get(SETTINGS_TAB)).toHaveLength(7);
+    expect(fake.tabs.get("Schedule")![2]).toHaveLength(20);
+  });
+
+  it("does not adopt hand-typed headers that are not exactly the names, so the read back of what it wrote always agrees", async () => {
+    const schedule = baseSchedule();
+    (schedule[2] as string[])[17] = "Tenant6 ";
+    (schedule[2] as string[])[18] = "Count6";
+    (schedule[2] as string[])[19] = "Amount6";
+    const { fake, ctx } = await ready({ schedule });
+    const result = await addPortion(ctx, NEW);
+    expect(result.columns).toEqual([
+      { header: "Tenant7", letter: "U" },
+      { header: "Count7", letter: "V" },
+      { header: "Amount7", letter: "W" },
+    ]);
+    expect(fake.tabs.get("Schedule")![2][17]).toBe("Tenant6 ");
+    expect((await getMonthView(ctx, OCT)).cards).toHaveLength(6);
+  });
+
+  it("refuses while the Tenants tab cannot be read, because a new id is checked against it, and writes nothing", async () => {
+    const { fake, ctx } = await ready();
+    fake.tabs.get(TENANTS_TAB)![0][4] = "Moved in";
+    const before = snapshotOf(fake);
+    const error = await failure(addPortion(ctx, NEW));
+    expect(error.code).toBe("sheet-structure");
+    expect(error.message).toContain('"Move-in date"');
+    expect(error.message).toContain("A new portion's id is checked against");
+    expect(wrote(fake)).toEqual([]);
+    expect(snapshotOf(fake)).toEqual(before);
+  });
+});
+
 describe("addPortion: two at once", () => {
   it("gives two adds that start 1 ms apart different ids, columns and rows, and both are there afterwards", async () => {
     const { fake, ctx } = await ready();
@@ -395,10 +453,20 @@ describe("addPortion: two at once", () => {
     expect(view.cards.map((card) => card.name).slice(5)).toEqual(["Room A", "Room B"]);
   });
 
-  it("refuses the second when both ask for the same name", async () => {
+  it("gives the second of two identical requests the portion the first made, and adds nothing", async () => {
     const { fake, ctx } = await ready();
     fake.delayMs = 1;
-    const results = await Promise.allSettled([addPortion(ctx, NEW), addPortion(ctx, { ...NEW, name: "back ROOM" })]);
+    const [first, second] = await Promise.all([addPortion(ctx, NEW), addPortion(ctx, { ...NEW, name: "back ROOM" })]);
+    expect(second.portion).toEqual(first.portion);
+    expect(second.columns).toEqual(first.columns);
+    expect(fake.tabs.get(SETTINGS_TAB)).toHaveLength(7);
+    expect(fake.tabs.get("Schedule")![2]).toHaveLength(20);
+  });
+
+  it("refuses the second when the two ask for the same name with other numbers", async () => {
+    const { fake, ctx } = await ready();
+    fake.delayMs = 1;
+    const results = await Promise.allSettled([addPortion(ctx, NEW), addPortion(ctx, { ...NEW, hikePercent: 9 })]);
     expect(results.map((result) => result.status)).toEqual(["fulfilled", "rejected"]);
     expect(((results[1] as PromiseRejectedResult).reason as AppError).message).toBe('There is already a portion called "Back room". Choose a different name.');
     expect(fake.tabs.get(SETTINGS_TAB)).toHaveLength(7);
@@ -816,6 +884,21 @@ describe("reorderPortions", () => {
     expect(changedCells(reference, fake, SETTINGS_TAB).every((address) => /^[A-G][23]$/.test(address))).toBe(true);
     expect(fake.tabs.get(SETTINGS_TAB)![1][7]).toBe("a note of the owner's");
     expect((await getSettings(ctx)).map((p) => p.id)).toEqual(["p2", "p1", "p3", "p4", "p5"]);
+  });
+
+  it("sends the new order as one request with one range when the moved rows are a block, so a request applied in part cannot leave two rows with one id", async () => {
+    const { fake, ctx } = await ready();
+    await reorderPortions(ctx, { ids: ["p3", "p2", "p1", "p4", "p5"] });
+    expect(fake.requests.map((request) => request.map((write) => write.a1))).toEqual([["A2:G4"]]);
+    expect((await getSettings(ctx)).map((p) => p.id)).toEqual(["p3", "p2", "p1", "p4", "p5"]);
+  });
+
+  it("keeps one range per row when a note sits among the moved rows", async () => {
+    const settings = ownerSettings();
+    settings.splice(3, 0, ["a note between p2 and p3"]);
+    const { fake, ctx } = await ready({ settings });
+    await reorderPortions(ctx, { ids: ["p3", "p2", "p1", "p4", "p5"] });
+    expect(fake.requests.map((request) => request.map((write) => write.a1))).toEqual([["A2:G2", "A5:G5"]]);
   });
 
   it("writes and reads back nothing for an order that has not changed", async () => {

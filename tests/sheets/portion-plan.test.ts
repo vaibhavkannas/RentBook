@@ -490,11 +490,85 @@ describe("planAddPortion: columns the owner has already added by hand", () => {
     expect(planAddPortion(await inputFor(world(settingsGrid(), twice)), NEW).adopted).toBe(false);
   });
 
+  it("does not use headers with a space at the end: they are not the exact names, and would not read back as written", async () => {
+    for (const triple of [["Tenant6 ", "Count6", "Amount6"], ["Tenant6", " Count6", "Amount6"], ["Tenant6", "Count6", "Amount6\u00a0"]]) {
+      const schedule = withCells(triple.map((text, i) => [3, 17 + i, text] as [number, number, unknown]));
+      const plan = planAddPortion(await inputFor(world(settingsGrid(), schedule)), NEW);
+      expect(plan.adopted).toBe(false);
+      expect(plan.headers).toEqual(["Tenant7", "Count7", "Amount7"]);
+      expect(plan.columns).toEqual([20, 21, 22]);
+    }
+  });
+
   it("does not use a triple whose number is below 2", async () => {
     const plan = planAddPortion(await inputFor(world(settingsGrid(), handAdded(17, 1))), NEW);
     expect(plan.adopted).toBe(false);
     expect(plan.headers).toEqual(["Tenant6", "Count6", "Amount6"]);
     expect(plan.columns).toEqual([20, 21, 22]);
+  });
+});
+
+describe("planAddPortion: an add that already happened (an answer that was lost)", () => {
+  /** The Sheet after an add of NEW that landed completely: its headers and its Settings row. */
+  async function added() {
+    const fake = world();
+    const plan = planAddPortion(await inputFor(fake), NEW);
+    await fake.updateValues([...plan.scheduleWrites, ...plan.settingsWrites]);
+    return { fake, plan };
+  }
+
+  it("is a success that writes nothing, for the same request again: the portion that is there, with its columns", async () => {
+    const { fake, plan } = await added();
+    const again = planAddPortion(await inputFor(fake), NEW);
+    expect(again).toMatchObject({
+      alreadyAdded: true,
+      id: "p6",
+      headers: plan.headers,
+      columns: plan.columns,
+      adopted: true,
+      settingsRow: 7,
+      headerRow: 3,
+      scheduleWrites: [],
+      settingsWrites: [],
+    });
+  });
+
+  it("takes the name in other capitals and spaces as the same, and trims it", async () => {
+    const { fake } = await added();
+    expect(planAddPortion(await inputFor(fake), { ...NEW, name: "  BACK  room " }).alreadyAdded).toBe(true);
+  });
+
+  it("is not that when the request differs in its cycle or its hike: the name is taken", async () => {
+    const { fake } = await added();
+    for (const request of [{ ...NEW, cycleLength: 6 }, { ...NEW, cycleLength: null }, { ...NEW, hikePercent: 10 }]) {
+      const error = await refusal(async () => planAddPortion(await inputFor(fake), request));
+      expect(error.message).toBe('There is already a portion called "Back room". Choose a different name.');
+    }
+  });
+
+  it("is not that when the portion has entries in the Schedule: it is somebody's portion, not the one just written", async () => {
+    const { fake } = await added();
+    fake.tabs.get("Schedule")![4][17] = "Hari"; // R5
+    const error = await refusal(async () => planAddPortion(await inputFor(fake), NEW));
+    expect(error.details).toEqual({ field: "name" });
+  });
+
+  it("is not that when the portion is not the last one", async () => {
+    const { fake } = await added();
+    const second = planAddPortion(await inputFor(fake), { ...NEW, name: "Shop" });
+    await fake.updateValues([...second.scheduleWrites, ...second.settingsWrites]);
+    expect((await refusal(async () => planAddPortion(await inputFor(fake), NEW))).details).toEqual({ field: "name" });
+  });
+
+  it("is not that when the portion's headers are not in the Schedule", async () => {
+    const { fake } = await added();
+    fake.tabs.get("Schedule")![2].length = 17; // the three headers are gone
+    expect((await refusal(async () => planAddPortion(await inputFor(fake), NEW))).details).toEqual({ field: "name" });
+  });
+
+  it("is not that for a portion of the owner's own with the same name, which the Schedule has entries for", async () => {
+    const error = await refusal(async () => planAddPortion(await inputFor(world()), { ...NEW, name: "First floor, single bedroom" }));
+    expect(error.details).toEqual({ field: "name" });
   });
 });
 
@@ -732,11 +806,17 @@ describe("planReorder", () => {
     return { fake, writes, after: await applied(fake, writes) };
   }
 
-  it("swaps two portions' rows: each of the two rows gets the other's cells, A to H when the tab has an Active column", async () => {
+  it("swaps two portions' rows in ONE range: each row gets the other's cells, A to H when the tab has an Active column", async () => {
     const { writes } = await reordered(["p2", "p1", "p3", "p4", "p5"], settingsGridWithActive({ p2: "No" }));
     expect(writes).toEqual([
-      { tab: SETTINGS_TAB, a1: "A2:H2", values: [["p2", "First floor, double bedroom", "Tenant2", "Count2", "Amount2", 11, 5, "No"]] },
-      { tab: SETTINGS_TAB, a1: "A3:H3", values: [["p1", "First floor, single bedroom", "Tenant", "Count", "Amount", 11, 5, ""]] },
+      {
+        tab: SETTINGS_TAB,
+        a1: "A2:H3",
+        values: [
+          ["p2", "First floor, double bedroom", "Tenant2", "Count2", "Amount2", 11, 5, "No"],
+          ["p1", "First floor, single bedroom", "Tenant", "Count", "Amount", 11, 5, ""],
+        ],
+      },
     ]);
   });
 
@@ -745,9 +825,70 @@ describe("planReorder", () => {
     expect(writes).toEqual([]);
   });
 
-  it("writes only the rows that change", async () => {
+  it("writes only the block of rows that change", async () => {
     const { writes } = await reordered(["p1", "p2", "p4", "p3", "p5"], settingsGridWithActive());
-    expect(writes.map((write) => write.a1)).toEqual(["A4:H4", "A5:H5"]);
+    expect(writes.map((write) => write.a1)).toEqual(["A4:H5"]);
+  });
+
+  describe("one range when the moved rows are a block of portion rows", () => {
+    it("rewrites a row that stays inside the block with its own cells, so that a request applied in part cannot leave two rows with one id", async () => {
+      // p1 and p3 swap and p2 stays between them
+      const { fake, writes, after } = await reordered(["p3", "p2", "p1", "p4", "p5"], settingsGridWithActive({ p2: "No" }));
+      expect(writes).toHaveLength(1);
+      expect(writes[0].a1).toBe("A2:H4");
+      expect(writes[0].values).toEqual([
+        ["p3", "Second floor, single bedroom", "Tenant3", "Count3", "Amount3", 11, 5, ""],
+        ["p2", "First floor, double bedroom", "Tenant2", "Count2", "Amount2", 11, 5, "No"],
+        ["p1", "First floor, single bedroom", "Tenant", "Count", "Amount", 11, 5, ""],
+      ]);
+      expect(changedCells(fake, after, SETTINGS_TAB)).toEqual(["A2", "B2", "C2", "D2", "E2", "A4", "B4", "C4", "D4", "E4"]);
+      expectOnlyPlanned(fake, after, writes);
+    });
+
+    it("is one request for every order of a Settings tab with nothing but portion rows", async () => {
+      for (const order of [["p5", "p4", "p3", "p2", "p1"], ["p2", "p3", "p4", "p5", "p1"], ["p1", "p3", "p2", "p4", "p5"], ["p1", "p2", "p3", "p5", "p4"]]) {
+        const { writes } = await reordered(order, settingsGridWithActive());
+        expect(writes).toHaveLength(1);
+      }
+    });
+
+    it("keeps one range per row when a note sits inside the block", async () => {
+      const settings = settingsGridWithActive();
+      settings.splice(3, 0, ["a note between p2 and p3"]);
+      const { writes } = await reordered(["p3", "p2", "p1", "p4", "p5"], settings);
+      expect(writes.map((write) => write.a1)).toEqual(["A2:H2", "A5:H5"]);
+    });
+
+    it("keeps one range per row when a blank row sits inside the block", async () => {
+      const settings = settingsGridWithActive();
+      settings.splice(3, 0, []);
+      const { writes } = await reordered(["p3", "p2", "p1", "p4", "p5"], settings);
+      expect(writes.map((write) => write.a1)).toEqual(["A2:H2", "A5:H5"]);
+    });
+
+    it("keeps one range per row, and does not refuse, when the row that stays inside the block has a formula (it is not rewritten)", async () => {
+      const settings = settingsGridWithActive();
+      settings[2][6] = "=G2"; // p2's hike: p2 stays, p1 and p3 swap around it
+      const { fake, writes, after } = await reordered(["p3", "p2", "p1", "p4", "p5"], settings);
+      expect(writes.map((write) => write.a1)).toEqual(["A2:H2", "A4:H4"]);
+      expect(after.tabs.get(SETTINGS_TAB)![2][6]).toBe("=G2");
+      expectOnlyPlanned(fake, after, writes);
+    });
+
+    it("still refuses a formula in a row that moves", async () => {
+      const settings = settingsGridWithActive();
+      settings[1][6] = "=G3"; // p1's hike
+      const error = await refusal(async () => planReorder(await inputFor(world(settings)), ["p3", "p2", "p1", "p4", "p5"]));
+      expect(error.message).toContain("Settings row 2 has a formula");
+    });
+
+    it("keeps the owner's column H where it is when the block is written without it (no Active column)", async () => {
+      const owners = settingsGrid();
+      owners[2][7] = "kept with the row";
+      const { writes, after } = await reordered(["p3", "p2", "p1", "p4", "p5"], owners);
+      expect(writes.map((write) => write.a1)).toEqual(["A2:G4"]);
+      expect(after.tabs.get(SETTINGS_TAB)![2][7]).toBe("kept with the row");
+    });
   });
 
   it("moves the last portion to the front: every row changes, and the app reads the new order with each portion's own settings", async () => {
@@ -755,7 +896,8 @@ describe("planReorder", () => {
     settings[2][5] = ""; // p2 never resets
     settings[4][6] = 7.5; // p4's hike
     const { fake, writes, after } = await reordered(["p5", "p1", "p2", "p3", "p4"], settings);
-    expect(writes).toHaveLength(5);
+    expect(writes).toHaveLength(1);
+    expect(writes[0].values).toHaveLength(5);
     expectOnlyPlanned(fake, after, writes);
     const portions = await readSettings(after);
     expect(portions.map((p) => p.id)).toEqual(["p5", "p1", "p2", "p3", "p4"]);
@@ -789,7 +931,7 @@ describe("planReorder", () => {
     const owners = settingsGrid();
     owners[1][7] = "kept with the row"; // H2 holds a note of the owner's, under a blank H1
     const without = await reordered(["p2", "p1", "p3", "p4", "p5"], owners);
-    expect(without.writes.map((write) => write.a1)).toEqual(["A2:G2", "A3:G3"]);
+    expect(without.writes.map((write) => write.a1)).toEqual(["A2:G3"]);
     expect(without.after.tabs.get(SETTINGS_TAB)![1][7]).toBe("kept with the row");
   });
 
@@ -807,8 +949,10 @@ describe("planReorder", () => {
     const settings = settingsGridWithActive({ p2: false, p1: true });
     settings[2][5] = undefined;
     const { writes, after } = await reordered(["p2", "p1", "p3", "p4", "p5"], settings);
-    expect(writes[0].values).toEqual([["p2", "First floor, double bedroom", "Tenant2", "Count2", "Amount2", "", 5, false]]);
-    expect(writes[1].values).toEqual([["p1", "First floor, single bedroom", "Tenant", "Count", "Amount", 11, 5, true]]);
+    expect(writes[0].values).toEqual([
+      ["p2", "First floor, double bedroom", "Tenant2", "Count2", "Amount2", "", 5, false],
+      ["p1", "First floor, single bedroom", "Tenant", "Count", "Amount", 11, 5, true],
+    ]);
     expect(after.tabs.get(SETTINGS_TAB)![1][7]).toBe(false);
   });
 
@@ -850,14 +994,14 @@ describe("planReorder", () => {
     settings[4][6] = "=G2"; // p4 does not move
     settings[1][8] = "=1+1"; // column I of p1's row: not one of the moved cells
     const { writes } = await reordered(["p2", "p1", "p3", "p4", "p5"], settings);
-    expect(writes).toHaveLength(2);
+    expect(writes).toHaveLength(1);
   });
 
   it("does not mind a formula under the table", async () => {
     const settings = settingsGridWithActive();
     settings[8] = ["=SUM(F2:F6)"];
     const { writes } = await reordered(["p2", "p1", "p3", "p4", "p5"], settings);
-    expect(writes).toHaveLength(2);
+    expect(writes).toHaveLength(1);
   });
 
   it("does not change what it is given", async () => {

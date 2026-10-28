@@ -136,6 +136,10 @@ export async function addPortion(ctx: SheetsContext, input: NewPortion): Promise
   const request = checkNewPortion(input);
   return changeSheet(ctx, async () => {
     const { snapshot, plan: planned } = await readForPlan(ctx);
+    // A new id is checked against the Tenants tab (a portion removed by hand leaves its tenants there), so it must be readable.
+    if (snapshot.tenantsProblem !== undefined) {
+      throw sheetStructure(`${snapshot.tenantsProblem} A new portion's id is checked against the tenants there, so a portion cannot be added until it is fixed.${SET_UP_HINT}`);
+    }
     const plan = planAddPortion(planned, request);
     const headerCells: CellWrite = {
       tab: ctx.scheduleTab,
@@ -143,6 +147,14 @@ export async function addPortion(ctx: SheetsContext, input: NewPortion): Promise
       values: [plan.headers],
     };
 
+    // The same request again, after an add that landed and whose answer was lost: the portion is there, and nothing is written.
+    if (plan.alreadyAdded) {
+      return {
+        portion: snapshot.portions.find((candidate) => candidate.id === plan.id)!,
+        columns: plan.headers.map((header, at) => ({ header, letter: colLetter(plan.columns[at]) })),
+        totalNote: planTotalNote(planned.schedule, snapshot.layout, ctx.totalHeader, plan, request.name),
+      };
+    }
     if (!plan.adopted) {
       await ctx.gateway.ensureColumnCount(ctx.scheduleTab, plan.minColumns);
       const there = await ctx.gateway.getValues(ctx.scheduleTab, headerCells.a1, "FORMULA");
