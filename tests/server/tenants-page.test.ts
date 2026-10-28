@@ -115,14 +115,33 @@ describe("the tenant details page for a portion that is switched off", () => {
     expect(html).toContain("Past tenants");
   });
 
-  it("works for a portion with no current tenancy, a past tenant and Add details", async () => {
+  it("shows a past tenant and the Move out record for a portion with no current tenancy, and no form that adds details", async () => {
     mocks.getPortionTenants.mockResolvedValue(
       data({ portion: { ...PORTION, inactive: true }, current: null, past: [tenancy({ moveOut: "2026-09-30" })] }),
     );
     const html = await render();
     expect(html).toContain(OFF_NOTICE);
-    expect(html).toContain("Add details");
     expect(html).toContain("Asha");
+    expect(html).toContain("Switch the portion on in Portion settings to add details.");
+    expect(html).not.toContain("Add details");
+    const found = await tree();
+    expect(found.some((element) => element.type === TenancyForm)).toBe(false);
+  });
+
+  it("still shows the form that adds details for a portion that is on", async () => {
+    mocks.getPortionTenants.mockResolvedValue(data({ current: null }));
+    const html = await render();
+    expect(html).toContain("Add details");
+    expect(html).not.toContain("Switch the portion on");
+  });
+
+  it("tells the owner of a vacant switched-off portion to switch it on before adding the next tenant", async () => {
+    mocks.getPortionTenants.mockResolvedValue(
+      data({ portion: { ...PORTION, inactive: true }, current: null, vacantSince: "2026-09-30", past: [tenancy({ moveOut: "2026-09-30" })] }),
+    );
+    const html = await render();
+    expect(html).toContain("Switch the portion on in Portion settings, then add the next tenant with New tenant on the month screen.");
+    expect(html).not.toContain("Add the next tenant with New tenant");
   });
 
   it("says nothing about it for a portion that is on", async () => {

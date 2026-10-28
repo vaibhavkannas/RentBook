@@ -3,7 +3,7 @@ import { AppError } from "@/lib/errors";
 import type { CellWrite } from "@/lib/sheets/gateway";
 import type { NewPortion } from "@/lib/sheets/portion-plan";
 import { addPortion, reorderPortions, setPortionActive } from "@/lib/sheets/portion-service";
-import { getMonthView, getSettings, loadSnapshot, logPayment, withSnapshotCache, type SheetsContext } from "@/lib/sheets/service";
+import { getMonthView, getSettings, loadSnapshot, logPayment, saveSettings, withSnapshotCache, type SheetsContext } from "@/lib/sheets/service";
 import { SETTINGS_TAB } from "@/lib/sheets/settings-store";
 import { appendTenancy, TENANTS_TAB } from "@/lib/sheets/tenants-store";
 import { moveOutWithoutDetails } from "@/lib/sheets/tenancy-service";
@@ -892,5 +892,55 @@ describe("the write lock, and the owner's current behaviour", () => {
     expect(fake.tabs.get(SETTINGS_TAB)![0]).toHaveLength(7);
     await reorderPortions(ctx, { ids: ["p6", "p1", "p2", "p3", "p4", "p5"] });
     expect(fake.tabs.get(SETTINGS_TAB)![0]).toHaveLength(7);
+  });
+});
+
+describe("saving the settings of a portion beside a reorder", () => {
+  const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+  const ORDER = ["p3", "p1", "p2", "p4", "p5"];
+
+  /** Whatever the interleaving, each id ends with its own row: p1 renamed with its new cycle and hike, the others untouched, in the new order. */
+  async function expectConsistent(fake: FakeGateway, ctx: SheetsContext) {
+    const portions = await getSettings(ctx);
+    expect(portions.map((p) => p.id)).toEqual(ORDER);
+    expect(portions.map((p) => [p.id, p.name, p.cycleLength, p.hikePercent])).toEqual([
+      ["p3", "Second floor, single bedroom", 11, 5],
+      ["p1", "Renamed", 12, 6],
+      ["p2", "First floor, double bedroom", 11, 5],
+      ["p4", "Second floor, double bedroom", 11, 5],
+      ["p5", "Third floor, hall and kitchen", 11, 5],
+    ]);
+    expect(fake.tabs.get(SETTINGS_TAB)!.slice(1, 6).map((row) => row[2])).toEqual(["Tenant3", "Tenant", "Tenant2", "Tenant4", "Tenant5"]);
+  }
+
+  it.each([0, 1, 2, 3, 4, 5, 6, 8, 10, 12])("keeps every id with its own row when the save starts %i ms after the reorder", async (offset) => {
+    const { fake, ctx } = await ready();
+    fake.delayMs = 1;
+    const reorder = reorderPortions(ctx, { ids: ORDER });
+    await sleep(offset);
+    const save = saveSettings(ctx, [{ id: "p1", name: "Renamed", cycleLength: 12, hikePercent: 6 }]);
+    await Promise.all([reorder, save]);
+    fake.delayMs = 0;
+    await expectConsistent(fake, ctx);
+  });
+
+  it.each([0, 1, 2, 3, 4, 5, 6, 8, 10, 12])("and when the reorder starts %i ms after the save", async (offset) => {
+    const { fake, ctx } = await ready();
+    fake.delayMs = 1;
+    const save = saveSettings(ctx, [{ id: "p1", name: "Renamed", cycleLength: 12, hikePercent: 6 }]);
+    await sleep(offset);
+    const reorder = reorderPortions(ctx, { ids: ORDER });
+    await Promise.all([reorder, save]);
+    fake.delayMs = 0;
+    await expectConsistent(fake, ctx);
+  });
+
+  it("runs after the write ahead of it, and throws the caches away when it fails too", async () => {
+    const { fake, ctx } = await ready({ cached: true });
+    await getSettings(ctx);
+    await expect(saveSettings(ctx, [{ id: "p9", name: "Nobody", cycleLength: 11, hikePercent: 5 }])).rejects.toBeInstanceOf(AppError);
+    fake.calls.length = 0;
+    await getSettings(ctx);
+    expect(fake.calls.length).toBeGreaterThan(0);
   });
 });

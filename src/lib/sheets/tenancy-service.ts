@@ -146,6 +146,11 @@ async function createTenancy(
   const snapshot = await loadSnapshot(ctx);
   requireUsableTenants(snapshot);
   const portion = requirePortion(snapshot, input.portionId);
+  // Details open a tenancy, and a switched-off portion is left out of the month screen and of New tenant: a tenancy opened on it
+  // would be on a portion nobody is looking at. Switching it on first keeps the tenant, the card and the rent together.
+  if (portion.inactive) {
+    throw validation(`${portion.name} is switched off in Portion settings. Switch the portion on first.`);
+  }
 
   // The person saw one tenant's name; the Schedule must still name that tenant.
   const scheduleTenant = scheduleTenantOf(snapshot, input.portionId);

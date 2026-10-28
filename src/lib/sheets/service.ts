@@ -143,17 +143,24 @@ export async function getSettings(
   return ctx.settingsCache ? ctx.settingsCache.get(options.minFetchedAt) : loadSettings(ctx);
 }
 
+/**
+ * Saves the name, cycle length and hike of portions. It writes by the Settings row each portion sits on, which it reads inside
+ * this call, so it takes its turn in the write lock: a reorder (or an add) moves rows, and a save that read the rows before it and
+ * wrote after it would put a name and a hike on the wrong portion.
+ */
 export async function saveSettings(
   ctx: SheetsContext,
   updates: SettingsUpdate[],
 ): Promise<PortionConfig[]> {
-  try {
-    await ensureTabs(ctx.gateway, ctx.scheduleTab);
-    await updateSettings(ctx.gateway, updates);
-    return await readSettings(ctx.gateway);
-  } finally {
-    invalidateCaches(ctx);
-  }
+  return withWriteLock(async () => {
+    try {
+      await ensureTabs(ctx.gateway, ctx.scheduleTab);
+      await updateSettings(ctx.gateway, updates);
+      return await readSettings(ctx.gateway);
+    } finally {
+      invalidateCaches(ctx);
+    }
+  });
 }
 
 /** The sheet row for `month`. If a month appears twice, the lower row on the sheet wins. */

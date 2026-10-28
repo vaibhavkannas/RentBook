@@ -213,6 +213,15 @@ describe("vacantSinceNote", () => {
     expect(vacantSinceNote("2026-12-20", TODAY)).toBe("Moves out on 20 Dec 2026.");
     expect(vacantSinceNote("2026-10-18", TODAY)).toBe("Moves out on 18 Oct 2026.");
   });
+
+  it("tells the owner to switch a portion that is off back on first, because New tenant leaves a switched-off portion out", () => {
+    expect(vacantSinceNote("2026-09-30", TODAY, true)).toBe(
+      "Vacant since 30 Sep 2026. Switch the portion on in Portion settings, then add the next tenant with New tenant on the month screen.",
+    );
+    // a move-out still to come says the same as for a portion that is on
+    expect(vacantSinceNote("2026-12-20", TODAY, true)).toBe("Moves out on 20 Dec 2026.");
+    expect(vacantSinceNote("2026-09-30", TODAY, false)).toBe(vacantSinceNote("2026-09-30", TODAY));
+  });
 });
 
 describe("noCurrentTenancyNote when the portion is vacant", () => {

@@ -3,7 +3,7 @@ import type { PortionCard } from "@/lib/domain/types";
 import { AppError } from "@/lib/errors";
 import { getMonthView, loadSnapshot, logPayment, undoPayment, type SheetsContext } from "@/lib/sheets/service";
 import { ensureTabs, readSettings, SETTINGS_HEADERS, SETTINGS_RANGE, SETTINGS_TAB } from "@/lib/sheets/settings-store";
-import { getPortionTenants, moveOutWithoutDetails } from "@/lib/sheets/tenancy-service";
+import { getPortionTenants, moveOutWithoutDetails, saveTenancy } from "@/lib/sheets/tenancy-service";
 import { cell, FakeGateway } from "../support/fake-gateway";
 import {
   baseSchedule,
@@ -349,5 +349,42 @@ describe("the tenant page's data for a portion that is switched off", () => {
     expect(deletedData.past).toEqual([]);
     // the portions that are on are unchanged
     expect((await getPortionTenants(deleted.ctx, "p1")).scheduleTenant).toBe("Asha");
+  });
+});
+
+describe("tenant details for a portion that is switched off", () => {
+  const FIELDS = { phone: "98765 43210", moveIn: "2026-01-15", agreementEnd: "", advance: null, advanceDate: "", notes: "" };
+  const history = () => {
+    const schedule = baseSchedule();
+    schedule[4] = scheduleRow(monthCell("text", 2026, 9), [["Asha", 3, 5450], ["Bala", 11, 12700], ["Chitra", 5, 9000], ["Dev", 2, 7000], ["Esha", 1, 5100]], 5);
+    return schedule;
+  };
+
+  async function warm(settings: unknown[][]) {
+    const made = sheet(settings, history());
+    await loadSnapshot(made.ctx);
+    made.fake.calls.length = 0;
+    return made;
+  }
+
+  it("refuses Add details for the Schedule's last tenant: it would open a tenancy on a portion that is hidden, and writes nothing", async () => {
+    const { ctx, fake } = await warm(settingsGridWithActive({ p4: "No" }));
+    const error = await saveTenancy(ctx, { portionId: "p4", tenant: "Dev", fields: FIELDS }, STAMP).then(() => null, (e: unknown) => e);
+    expect(error).toBeInstanceOf(AppError);
+    expect((error as AppError).code).toBe("validation");
+    expect((error as AppError).message).toBe("Second floor, double bedroom is switched off in Portion settings. Switch the portion on first.");
+    expect(fake.calls).not.toContain("appendRow");
+    expect(fake.calls).not.toContain("updateValues");
+  });
+
+  it("takes them once the portion is switched on", async () => {
+    const { ctx } = await warm(settingsGridWithActive());
+    expect((await saveTenancy(ctx, { portionId: "p4", tenant: "Dev", fields: FIELDS }, STAMP)).tenancy.tenant).toBe("Dev");
+  });
+
+  it("still records that the tenant moved out", async () => {
+    const { ctx } = await warm(settingsGridWithActive({ p4: "No" }));
+    await moveOutWithoutDetails(ctx, { portionId: "p4", tenant: "Dev", moveOut: "2026-09-30" }, STAMP);
+    expect((await getPortionTenants(ctx, "p4")).vacantSince).toBe("2026-09-30");
   });
 });

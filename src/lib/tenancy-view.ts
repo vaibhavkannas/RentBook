@@ -108,8 +108,12 @@ export function recordMoveOutHint(tenant: string): string {
 /**
  * Above "Current tenancy" when the portion's last tenant has moved out: since when, and where the next tenant is added. A
  * move-out dated after `today` has not happened yet: it says when the tenant moves out, and does not invite adding the next one.
+ * New tenant leaves a switched-off portion out, so for one (`inactive`) the note says to switch it on first.
  */
-export function vacantSinceNote(since: string, today: string): string {
+export function vacantSinceNote(since: string, today: string, inactive = false): string {
   if (since > today) return `Moves out on ${formatDay(since)}.`;
-  return `Vacant since ${formatDay(since)}. Add the next tenant with New tenant on the month screen.`;
+  const next = inactive
+    ? "Switch the portion on in Portion settings, then add the next tenant with New tenant on the month screen."
+    : "Add the next tenant with New tenant on the month screen.";
+  return `Vacant since ${formatDay(since)}. ${next}`;
 }

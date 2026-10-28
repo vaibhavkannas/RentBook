@@ -166,7 +166,7 @@ export default async function TenantsPage({
         </Notice>
       )}
 
-      {vacantSince && <p className="mt-2 text-sm font-medium">{vacantSinceNote(vacantSince, today)}</p>}
+      {vacantSince && <p className="mt-2 text-sm font-medium">{vacantSinceNote(vacantSince, today, portion.inactive)}</p>}
 
       <Card as="section" aria-labelledby="current-heading" className="mt-4">
         <h2 id="current-heading" className="font-medium">
@@ -210,6 +210,9 @@ export default async function TenantsPage({
           <p className="mt-2 text-sm text-muted">
             Add a tenant from the month screen first. Then you can add their details here.
           </p>
+        ) : portion.inactive ? (
+          // Details open a tenancy, which a switched-off portion does not take: the service refuses it, so the form is not offered.
+          <p className="mt-2 text-sm text-muted">Switch the portion on in Portion settings to add details.</p>
         ) : (
           <>
             <h3 className="mt-2 text-sm font-medium">Add details</h3>
