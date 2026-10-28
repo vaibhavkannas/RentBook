@@ -1,5 +1,7 @@
-import type { PortionConfig } from "@/lib/domain/types";
+import type { Tenancy } from "@/lib/domain/tenancy";
+import type { PortionConfig, ScheduleRow } from "@/lib/domain/types";
 import { serialFromYm } from "@/lib/domain/year-month";
+import { parseSchedule } from "@/lib/sheets/schedule";
 import { SETTINGS_HEADERS } from "@/lib/sheets/settings-store";
 
 export const TOTAL_HEADER = "Total Rent";
@@ -52,7 +54,7 @@ export const SCHEDULE_HEADERS = [
   TOTAL_HEADER,
 ];
 
-type Entry = [tenant: string, count: number, amount: number] | null;
+export type Entry = [tenant: string, count: number, amount: number] | null;
 
 /**
  * One data row. `entries` has one item per portion. The total column holds a
@@ -136,4 +138,47 @@ export function scheduleWithoutPortion(schedule: unknown[][], id: string): unkno
       typeof cell === "string" && cell.startsWith("=") ? `=${amountCols.map((col) => `${letters(col)}${index + 1}`).join("+")}` : cell,
     );
   });
+}
+
+type MonthSpec = [year: number, month: number, entries?: Entry[]];
+
+const monthRow = ([year, month, entries = []]: MonthSpec, rowNumber: number) =>
+  scheduleRow(monthCell("text", year, month), PORTIONS.map((_, at) => entries[at] ?? null), rowNumber);
+
+/**
+ * Schedule rows as the app reads them, in the order given: each item is a month and the entries for p1 to p5 (a missing one is
+ * blank). It uses the headers and the five portions above, with the "Month" text style ("Oct-26").
+ */
+export function parsedRows(...months: MonthSpec[]): ScheduleRow[] {
+  const values = [["Rent Receipts Schedule"], [], [...SCHEDULE_HEADERS], ...months.map((spec, index) => monthRow(spec, index + 4))];
+  return parseSchedule(values, PORTIONS, TOTAL_HEADER).rows;
+}
+
+/** The base Schedule (August and September 2026) read as rows, then the given months after it (see `parsedRows`). */
+export function baseRows(...later: MonthSpec[]): ScheduleRow[] {
+  const values = [...baseSchedule(), ...later.map((spec, index) => monthRow(spec, index + 6))];
+  return parseSchedule(values, PORTIONS, TOTAL_HEADER).rows;
+}
+
+/** One Tenants row, current (no move-out) for Asha on p1 unless the overrides say otherwise. */
+export function tenancyRow(overrides: Partial<Tenancy> = {}): Tenancy {
+  return {
+    rowNumber: 2,
+    id: "t-1",
+    portionId: "p1",
+    tenant: "Asha",
+    phone: "",
+    moveIn: "2026-01-15",
+    agreementEnd: "",
+    advance: null,
+    advanceDate: "",
+    advanceStatus: null,
+    refund: null,
+    deductions: null,
+    notes: "",
+    moveOut: "",
+    updatedBy: "owner@example.com",
+    updatedAt: "2026-01-15T05:00:00.000Z",
+    ...overrides,
+  };
 }

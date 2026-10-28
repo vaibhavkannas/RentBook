@@ -1,8 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
+  addDays,
   addMonths,
   compareYm,
   currentYm,
+  daysBetween,
+  firstDayOf,
   isoDayFromSerial,
   isValidIsoDay,
   monthIndexFromName,
@@ -109,5 +112,101 @@ describe("month names", () => {
     expect(monthIndexFromName("Ju")).toBeNull();
     expect(monthIndexFromName("Septembers")).toBeNull();
     expect(monthIndexFromName("Sepx")).toBeNull();
+  });
+});
+
+describe("daysBetween", () => {
+  it("counts whole days from the first day to the second", () => {
+    expect(daysBetween("2026-10-01", "2026-10-01")).toBe(0);
+    expect(daysBetween("2026-10-01", "2026-10-02")).toBe(1);
+    expect(daysBetween("2026-10-01", "2026-10-17")).toBe(16);
+    expect(daysBetween("2026-10-17", "2026-12-16")).toBe(60);
+  });
+
+  it("is negative when the second day is earlier", () => {
+    expect(daysBetween("2026-10-17", "2026-10-05")).toBe(-12);
+    expect(daysBetween("2027-01-01", "2026-12-31")).toBe(-1);
+  });
+
+  it("counts the leap day of 2028 and not one in 2026 or 2100", () => {
+    expect(daysBetween("2028-02-28", "2028-03-01")).toBe(2);
+    expect(daysBetween("2028-02-29", "2028-03-01")).toBe(1);
+    expect(daysBetween("2026-02-28", "2026-03-01")).toBe(1);
+    expect(daysBetween("2100-02-28", "2100-03-01")).toBe(1);
+    expect(daysBetween("2028-01-01", "2029-01-01")).toBe(366);
+    expect(daysBetween("2026-01-01", "2027-01-01")).toBe(365);
+  });
+
+  it("crosses month and year ends", () => {
+    expect(daysBetween("2026-01-31", "2026-02-01")).toBe(1);
+    expect(daysBetween("2026-12-31", "2027-01-01")).toBe(1);
+    expect(daysBetween("2026-11-30", "2026-12-01")).toBe(1);
+    expect(daysBetween("2026-04-30", "2026-05-31")).toBe(31);
+  });
+
+  it("is not moved by the time zone or by daylight saving of the machine it runs on", () => {
+    // Whole days through UTC, so a 23- or 25-hour day somewhere is still one day.
+    expect(daysBetween("2026-03-28", "2026-03-30")).toBe(2);
+    expect(daysBetween("2026-10-24", "2026-10-26")).toBe(2);
+    expect(daysBetween("2026-11-01", "2026-11-03")).toBe(2);
+  });
+
+  it("agrees with addDays", () => {
+    for (const [from, n] of [["2026-10-17", 60], ["2028-02-29", 366], ["2026-01-31", -31], ["2026-12-31", 1]] as const) {
+      expect(daysBetween(from, addDays(from, n))).toBe(n);
+    }
+  });
+
+  it("throws on a value that is not a real day, in either place, without quoting it", () => {
+    for (const bad of ["2026-02-30", "2026-13-01", "2026-00-10", "26-10-17", "2026-10-1", "", " 2026-10-17", "2026-10-17T00:00:00Z", "soon", "0050-01-01"]) {
+      expect(() => daysBetween(bad, "2026-10-17")).toThrow(RangeError);
+      expect(() => daysBetween("2026-10-17", bad)).toThrow(RangeError);
+    }
+    expect(() => daysBetween("2027-02-30", "2026-10-17")).toThrow(/real day/);
+    expect(() => daysBetween("2027-02-30", "2026-10-17")).not.toThrow(/2027/);
+  });
+});
+
+describe("addDays", () => {
+  it("moves a day forward and back, over month, year and leap-day ends", () => {
+    expect(addDays("2026-10-17", 0)).toBe("2026-10-17");
+    expect(addDays("2026-10-01", 5)).toBe("2026-10-06");
+    expect(addDays("2026-10-30", 2)).toBe("2026-11-01");
+    expect(addDays("2026-12-31", 1)).toBe("2027-01-01");
+    expect(addDays("2027-01-01", -1)).toBe("2026-12-31");
+    expect(addDays("2028-02-28", 1)).toBe("2028-02-29");
+    expect(addDays("2028-02-29", 1)).toBe("2028-03-01");
+    expect(addDays("2026-02-28", 1)).toBe("2026-03-01");
+    expect(addDays("2026-10-17", 60)).toBe("2026-12-16");
+    expect(addDays("2026-10-17", -365)).toBe("2025-10-17");
+  });
+
+  it("throws on a day that is not real, a step that is not a whole number, and a result that is not a four-digit year", () => {
+    expect(() => addDays("2026-02-30", 1)).toThrow(RangeError);
+    expect(() => addDays("", 1)).toThrow(RangeError);
+    expect(() => addDays("2026-10-17", 1.5)).toThrow(RangeError);
+    expect(() => addDays("2026-10-17", Number.NaN)).toThrow(RangeError);
+    expect(() => addDays("9999-12-31", 1)).toThrow(RangeError);
+    expect(() => addDays("0100-01-01", -1)).toThrow(RangeError);
+  });
+
+  it("gives a day isValidIsoDay accepts", () => {
+    for (const n of [-800, -31, -1, 0, 1, 28, 59, 400]) {
+      expect(isValidIsoDay(addDays("2026-10-17", n))).toBe(true);
+    }
+  });
+});
+
+describe("firstDayOf", () => {
+  it("is the 1st of the month, zero padded", () => {
+    expect(firstDayOf({ year: 2026, month: 3 })).toBe("2026-03-01");
+    expect(firstDayOf({ year: 2026, month: 12 })).toBe("2026-12-01");
+    expect(firstDayOf({ year: 2028, month: 2 })).toBe("2028-02-01");
+  });
+
+  it("is a real day, and the day before it is the last of the month before", () => {
+    expect(isValidIsoDay(firstDayOf({ year: 2026, month: 10 }))).toBe(true);
+    expect(addDays(firstDayOf({ year: 2028, month: 3 }), -1)).toBe("2028-02-29");
+    expect(addDays(firstDayOf({ year: 2027, month: 1 }), -1)).toBe("2026-12-31");
   });
 });

@@ -82,6 +82,37 @@ export function isValidIsoDay(value: string): boolean {
   );
 }
 
+/** Milliseconds at UTC midnight of a real day. Throws when the text is not a real YYYY-MM-DD day (it is never quoted: it may be typed by hand). */
+function utcMidnight(iso: string): number {
+  if (!isValidIsoDay(iso)) throw new RangeError("Expected a real day written YYYY-MM-DD.");
+  const [year, month, day] = iso.split("-").map(Number);
+  return Date.UTC(year, month - 1, day);
+}
+
+/**
+ * Whole days from one calendar day (YYYY-MM-DD) to another: negative when `toIso` is earlier. Counted through UTC midnights,
+ * so the machine's time zone and daylight saving cannot move it. Throws a RangeError for a value that is not a real day:
+ * check text typed by hand with `isValidIsoDay` first.
+ */
+export function daysBetween(fromIso: string, toIso: string): number {
+  return (utcMidnight(toIso) - utcMidnight(fromIso)) / MS_PER_DAY;
+}
+
+/** The calendar day `n` whole days after `iso` (before it when `n` is negative). Throws a RangeError when `iso` is not a real day, `n` is not a whole number, or the answer's year is not four digits. */
+export function addDays(iso: string, n: number): string {
+  if (!Number.isInteger(n)) throw new RangeError("Expected a whole number of days.");
+  const date = new Date(utcMidnight(iso) + n * MS_PER_DAY);
+  const pad = (value: number, width: number) => String(value).padStart(width, "0");
+  const result = `${pad(date.getUTCFullYear(), 4)}-${pad(date.getUTCMonth() + 1, 2)}-${pad(date.getUTCDate(), 2)}`;
+  if (!isValidIsoDay(result)) throw new RangeError("The day is out of range.");
+  return result;
+}
+
+/** The first day of the month, YYYY-MM-01. */
+export function firstDayOf(ym: YearMonth): string {
+  return `${ymKey(ym)}-01`;
+}
+
 const LONG_NAMES = [
   "January", "February", "March", "April", "May", "June",
   "July", "August", "September", "October", "November", "December",

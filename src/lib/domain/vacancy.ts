@@ -38,7 +38,7 @@ export function latestEntryRow(
 }
 
 /** The month a YYYY-MM-DD day is in. */
-const monthOfDay = (day: string): YearMonth => {
+export const monthOfDay = (day: string): YearMonth => {
   const [year, month] = day.split("-").map(Number);
   return { year, month };
 };
