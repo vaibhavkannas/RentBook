@@ -77,13 +77,19 @@ export function noCurrentTenancyNote(input: {
   lastPast: Pick<Tenancy, "tenant" | "moveOut"> | undefined;
   /** The portion shows as Vacant: saving details for the tenant who left then ends the vacancy, and the note says so. */
   vacant?: boolean;
+  /** Today (YYYY-MM-DD). A move-out dated after it has not happened: the note says the tenant will move out, and claims no vacancy. */
+  today?: string;
 }): string | null {
   if (input.mismatched) {
     return `Earlier details for ${input.mismatched.tenant} will be marked as moved out when you save.`;
   }
   const { scheduleTenant, lastPast } = input;
   if (scheduleTenant !== null && lastPast && sameTenantName(lastPast.tenant, scheduleTenant)) {
-    const note = `${scheduleTenant} moved out on ${formatDay(lastPast.moveOut)}. Saving details here starts a new tenancy for ${scheduleTenant}.`;
+    const start = `Saving details here starts a new tenancy for ${scheduleTenant}.`;
+    if (input.today !== undefined && lastPast.moveOut > input.today) {
+      return `${scheduleTenant} will move out on ${formatDay(lastPast.moveOut)}. ${start}`;
+    }
+    const note = `${scheduleTenant} moved out on ${formatDay(lastPast.moveOut)}. ${start}`;
     return input.vacant ? `${note} The portion then stops showing as Vacant.` : note;
   }
   return null;

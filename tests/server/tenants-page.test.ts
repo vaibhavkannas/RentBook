@@ -421,6 +421,20 @@ describe("the tenant details page: moving out and vacancy", () => {
         expect(html).not.toContain("Add the next tenant");
       });
 
+      it("says the tenant will move out in the note under the Add details form, and does not claim a vacancy", async () => {
+        mocks.getPortionTenants.mockResolvedValue(data({ current: null, past: [{ ...LEFT, moveOut: "2026-12-20" }], vacantSince: "2026-12-20" }));
+        const html = await render();
+        expect(html).toContain("Asha will move out on 20 Dec 2026. Saving details here starts a new tenancy for Asha.");
+        expect(html).not.toContain("Asha moved out on 20 Dec 2026");
+        expect(html).not.toContain("stops showing as Vacant");
+      });
+
+      it("keeps the past tense and the vacancy sentence in the note from the day itself", async () => {
+        mocks.getPortionTenants.mockResolvedValue(data({ current: null, past: [{ ...LEFT, moveOut: "2026-10-17" }], vacantSince: "2026-10-17" }));
+        const html = await render();
+        expect(html).toContain("Asha moved out on 17 Oct 2026. Saving details here starts a new tenancy for Asha. The portion then stops showing as Vacant.");
+      });
+
       it("says vacant since on the day itself, and the day after says when the tenant moves out", async () => {
         mocks.getPortionTenants.mockResolvedValue(data({ current: null, past: [LEFT], vacantSince: "2026-10-17" }));
         expect(await render()).toContain("Vacant since 17 Oct 2026. Add the next tenant with New tenant on the month screen.");

@@ -211,16 +211,149 @@ describe("a New tenant that is undone", () => {
   });
 });
 
+describe("a New tenant made with Replace, or edited since, that is undone", () => {
+  /** Asha has details and October paid; the owner enters New tenant "Hari" for October and confirms Replace. */
+  async function replacedByHari() {
+    const { fake, ctx } = await ready();
+    await saveAsha(ctx);
+    await pay(ctx, { month: OCT }); // Asha, payment 4
+    await pay(ctx, {
+      month: OCT,
+      newTenantName: "Hari",
+      amount: 6000,
+      overwrite: true,
+      expected: { tenant: "Asha", count: 4, amount: 5450 },
+    });
+    return { fake, ctx };
+  }
+  const undoHari = (ctx: SheetsContext, by?: string) =>
+    undoPayment(ctx, { month: OCT, portionId: "p1", expected: { tenant: "Hari", count: 1, amount: 6000 } }, payOptions(by));
+
+  it("opens the tenancy it closed again (the Payments Log calls such an entry Edited), so no month is vacant", async () => {
+    const { fake, ctx } = await replacedByHari();
+    const log = fake.tabs.get(LOG_TAB)!;
+    expect(log[log.length - 1][8]).toBe("Edited");
+    expect((await asha(ctx))[0].moveOut).toBe("2026-10-05");
+
+    await undoHari(ctx);
+
+    expect((await asha(ctx))[0]).toMatchObject({ tenant: "Asha", moveOut: "" });
+    expect(await months(ctx)).toEqual(ALL_DUE);
+  });
+
+  it("opens it again when the entry was edited after the New tenant: the row that closed it is an older one", async () => {
+    const { ctx } = await ready();
+    await saveAsha(ctx);
+    await pay(ctx, { month: OCT, newTenantName: "Hari", amount: 6000 });
+    await pay(ctx, { month: OCT, amount: 6100, overwrite: true, expected: { tenant: "Hari", count: 1, amount: 6000 } });
+    await undoPayment(ctx, { month: OCT, portionId: "p1", expected: { tenant: "Hari", count: 1, amount: 6100 } }, payOptions());
+    expect((await asha(ctx))[0].moveOut).toBe("");
+    expect(await months(ctx)).toEqual(ALL_DUE);
+  });
+
+  it("does not open anything the entries it looks through did not close", async () => {
+    const { ctx } = await ready();
+    await saveAsha(ctx);
+    const [open] = await asha(ctx);
+    await pay(ctx, { month: OCT });
+    await moveOutTenancy(ctx, { id: open.id, expectedUpdatedAt: open.updatedAt, moveOut: "2026-10-05" }, stamp());
+    await pay(ctx, { month: NOV, newTenantName: "Hari", amount: 6000, dateReceived: "2026-11-05" });
+    await pay(ctx, { month: NOV, amount: 6100, overwrite: true, expected: { tenant: "Hari", count: 1, amount: 6000 }, dateReceived: "2026-11-06" });
+    await undoPayment(ctx, { month: NOV, portionId: "p1", expected: { tenant: "Hari", count: 1, amount: 6100 } }, payOptions());
+    expect((await asha(ctx))[0].moveOut).toBe("2026-10-05");
+  });
+});
+
+describe("the closing's date has to be the date the undone entry was received", () => {
+  it("never opens a Move out recorded in the same moment, by the same person, as a later New tenant", async () => {
+    const { ctx } = await ready();
+    await saveAsha(ctx);
+    const [open] = await asha(ctx);
+    await pay(ctx, { month: OCT }); // October paid by Asha
+    // One tick for both: the Move out of 5 October and the New tenant of 5 November carry the very same stamp.
+    const sameTick = new Date("2026-11-05T04:30:00.000Z");
+    await moveOutTenancy(ctx, { id: open.id, expectedUpdatedAt: open.updatedAt, moveOut: "2026-10-05" }, { now: sameTick, updatedBy: "owner@example.com" });
+    await logPayment(
+      ctx,
+      { month: NOV, portionId: "p1", amount: 6000, dateReceived: "2026-11-05", newTenantName: "Hari" },
+      { now: sameTick, retryDelayMs: 0, loggedBy: "owner@example.com" },
+    );
+    await undoPayment(ctx, { month: NOV, portionId: "p1", expected: { tenant: "Hari", count: 1, amount: 6000 } }, payOptions());
+    // still the owner's own move-out: November is vacant, as before the New tenant
+    expect((await asha(ctx))[0]).toMatchObject({ moveOut: "2026-10-05", updatedAt: sameTick.toISOString() });
+    expect((await getMonthView(ctx, NOV)).cards[0].status).toBe("vacant");
+  });
+
+  it("opens a tenancy closed on the day received, and one closed on its own later move-in day", async () => {
+    // closingDay: a tenancy that moved in after the day the rent was received is closed on its move-in day
+    const { fake, ctx } = await ready();
+    await appendTenancy(fake, {
+      id: "t-late", portionId: "p1", tenant: "Asha", phone: "", moveIn: "2026-10-20", agreementEnd: "", advance: null, advanceDate: "",
+      advanceStatus: null, refund: null, deductions: null, notes: "", moveOut: "", updatedBy: "owner@example.com", updatedAt: "2026-10-01T05:00:00.000Z",
+    });
+    await pay(ctx, { month: OCT, newTenantName: "Hari", amount: 6000, dateReceived: "2026-10-05" });
+    expect((await asha(ctx))[0].moveOut).toBe("2026-10-20");
+    await undoPayment(ctx, { month: OCT, portionId: "p1", expected: { tenant: "Hari", count: 1, amount: 6000 } }, payOptions());
+    expect((await asha(ctx))[0].moveOut).toBe("");
+  });
+});
+
+describe("opening a closed tenancy comes after the Undone row of the Payments Log", () => {
+  it("adds the Undone row first, and only then writes to the Tenants tab", async () => {
+    const { fake, ctx } = await ready();
+    await saveAsha(ctx);
+    await pay(ctx, { month: OCT, newTenantName: "Hari", amount: 6000 });
+    const events: string[] = [];
+    const append = fake.appendRow.bind(fake);
+    fake.appendRow = async (tab, values) => {
+      events.push(`append ${tab}`);
+      return append(tab, values);
+    };
+    const update = fake.updateValues.bind(fake);
+    fake.updateValues = async (writes) => {
+      events.push(`update ${[...new Set(writes.map((write) => write.tab))].join(" and ")}`);
+      return update(writes);
+    };
+    await undoPayment(ctx, { month: OCT, portionId: "p1", expected: { tenant: "Hari", count: 1, amount: 6000 } }, payOptions());
+    expect(events).toEqual(["update Schedule", `append ${LOG_TAB}`, `update ${TENANTS_TAB}`]);
+  });
+
+  it("keeps the Undone row and its answer when the Payments Log cannot be read for the entry's request", async () => {
+    const { fake, ctx } = await ready();
+    await saveAsha(ctx);
+    await pay(ctx, { month: OCT, newTenantName: "Hari", amount: 6000 });
+    const read = fake.getValues.bind(fake);
+    fake.getValues = async (tab, a1, render) => {
+      if (tab === LOG_TAB) throw new Error("getValues failed on the Payments Log");
+      return read(tab, a1, render);
+    };
+    const result = await undoPayment(ctx, { month: OCT, portionId: "p1", expected: { tenant: "Hari", count: 1, amount: 6000 } }, payOptions());
+    expect(result).toMatchObject({ removed: { tenant: "Hari" }, logWritten: true });
+    const log = fake.tabs.get(LOG_TAB)!;
+    expect(log[log.length - 1][8]).toBe("Undone");
+  });
+});
+
 describe("closedByRequest", () => {
   const row = (overrides: Partial<Tenancy>): Tenancy => ({
     rowNumber: 2, id: "t-1", portionId: "p1", tenant: "Asha", phone: "", moveIn: "2026-01-15", agreementEnd: "", advance: null,
     advanceDate: "", advanceStatus: null, refund: null, deductions: null, notes: "", moveOut: "2026-10-05",
     updatedBy: "owner@example.com", updatedAt: "2026-10-05T04:30:01.000Z", ...overrides,
   });
-  const request = { savedAt: "2026-10-05T04:30:01.000Z", loggedBy: "owner@example.com" };
+  const request = { savedAt: "2026-10-05T04:30:01.000Z", loggedBy: "owner@example.com", dateReceived: "2026-10-05" };
 
-  it("takes the closed rows of the portion that carry the request's moment and person", () => {
+  it("takes the closed rows of the portion that carry the request's moment and person, closed on its date received", () => {
     expect(closedByRequest([row({})], "p1", request)).toHaveLength(1);
+  });
+
+  it("takes a row closed on its own move-in day when that was later than the date received (as closingDay writes it)", () => {
+    expect(closedByRequest([row({ moveIn: "2026-10-20", moveOut: "2026-10-20" })], "p1", request)).toHaveLength(1);
+  });
+
+  it("leaves out a row closed on any other day, though the moment and the person match", () => {
+    expect(closedByRequest([row({ moveOut: "2026-10-04" })], "p1", request)).toEqual([]);
+    expect(closedByRequest([row({ moveOut: "2026-10-06" })], "p1", request)).toEqual([]);
+    expect(closedByRequest([row({ moveIn: "2026-10-03", moveOut: "2026-10-03" })], "p1", request)).toEqual([]);
   });
 
   it("leaves out an open row, another portion's, another moment, another person, and a request with no moment", () => {
@@ -228,7 +361,7 @@ describe("closedByRequest", () => {
     expect(closedByRequest([row({ portionId: "p2" })], "p1", request)).toEqual([]);
     expect(closedByRequest([row({ updatedAt: "2026-10-05T04:30:02.000Z" })], "p1", request)).toEqual([]);
     expect(closedByRequest([row({ updatedBy: "member@example.com" })], "p1", request)).toEqual([]);
-    expect(closedByRequest([row({ updatedAt: "" })], "p1", { savedAt: "", loggedBy: "owner@example.com" })).toEqual([]);
+    expect(closedByRequest([row({ updatedAt: "" })], "p1", { savedAt: "", loggedBy: "owner@example.com", dateReceived: "2026-10-05" })).toEqual([]);
   });
 });
 

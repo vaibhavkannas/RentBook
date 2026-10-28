@@ -234,6 +234,36 @@ describe("noCurrentTenancyNote when the portion is vacant", () => {
   });
 });
 
+describe("noCurrentTenancyNote for a move-out dated after today", () => {
+  const lastPast = { tenant: "Asha", moveOut: "2026-12-20" };
+  const input = { scheduleTenant: "Asha", mismatched: null, lastPast, today: "2026-10-17" };
+
+  it("says the tenant will move out, and does not say the portion is vacant or that details end a vacancy", () => {
+    expect(noCurrentTenancyNote({ ...input, vacant: false })).toBe(
+      "Asha will move out on 20 Dec 2026. Saving details here starts a new tenancy for Asha.",
+    );
+    // even when the caller says vacant: a vacancy that has not begun is not claimed
+    expect(noCurrentTenancyNote({ ...input, vacant: true })).toBe(
+      "Asha will move out on 20 Dec 2026. Saving details here starts a new tenancy for Asha.",
+    );
+  });
+
+  it("is in the past tense from the day itself", () => {
+    expect(noCurrentTenancyNote({ ...input, lastPast: { tenant: "Asha", moveOut: "2026-10-17" }, vacant: true })).toBe(
+      "Asha moved out on 17 Oct 2026. Saving details here starts a new tenancy for Asha. The portion then stops showing as Vacant.",
+    );
+    expect(noCurrentTenancyNote({ ...input, lastPast: { tenant: "Asha", moveOut: "2026-10-16" } })).toBe(
+      "Asha moved out on 16 Oct 2026. Saving details here starts a new tenancy for Asha.",
+    );
+  });
+
+  it("is as it was when it is not given today", () => {
+    expect(noCurrentTenancyNote({ scheduleTenant: "Asha", mismatched: null, lastPast })).toBe(
+      "Asha moved out on 20 Dec 2026. Saving details here starts a new tenancy for Asha.",
+    );
+  });
+});
+
 describe("tenancyPeriod for a move-out recorded without details", () => {
   it("shows a dash for the move-in day it does not have", () => {
     expect(tenancyPeriod("", "2026-10-20")).toBe("— to 20 Oct 2026");

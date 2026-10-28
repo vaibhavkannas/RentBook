@@ -37,7 +37,7 @@ import {
   type SettingsUpdate,
 } from "./settings-store";
 import { createSnapshotCache, type SnapshotCache } from "./snapshot-cache";
-import { checkNewTenancy, recordNewTenant, reopenClosedByRequest } from "./tenancy-writes";
+import { checkNewTenancy, recordNewTenant, reopenClosedByRequest, type ClosingRequest } from "./tenancy-writes";
 import { parseTenancies, readTenancies, TENANTS_RANGE, TENANTS_TAB } from "./tenants-store";
 import { withWriteLock } from "./write-lock";
 
@@ -595,7 +595,6 @@ async function undoPaymentUnchecked(
     cells.map(({ col, value }) => ({ tab: ctx.scheduleTab, a1: at(col), values: [[value]] })),
   );
   await confirmWritten(ctx, monthRow.rowNumber, cells);
-  await reopenAfterUndo(ctx, loaded, portion, input.month, existing, options);
 
   const logRow: LogRow = [
     options.now.toISOString(),
@@ -609,43 +608,49 @@ async function undoPaymentUnchecked(
     "Undone",
   ];
   const logWritten = await appendLogRow(ctx.gateway, logRow, options.retryDelayMs ?? 400);
+  // After the Undone row, like the tenancy work of a payment: a slow Google cannot cost the row and its retry token.
+  await reopenAfterUndo(ctx, loaded, portion, input.month, existing, options);
   return { removed: existing, logWritten, logRow };
 }
 
 /**
- * The Payments Log row that logged this entry as a first payment (a "Logged" row for the month, portion, tenant and payment
- * 1, the newest if there are several): the moment and person of the request that made the entry. Null when the log has none
- * (the row never saved, or the portion was renamed since).
+ * The Payments Log rows that may have made this entry as a first payment: a "Logged" or an "Edited" row (a New tenant
+ * confirmed with Replace is logged as Edited, and so is an edit of the amount) for the month, portion, tenant and payment 1,
+ * newest first. Each gives the moment and person of the request, and the date received. Empty when the log has none (the
+ * rows never saved, or the portion was renamed since).
  */
-async function loggedRequestOf(
+async function loggedRequestsOf(
   ctx: SheetsContext,
   portion: PortionConfig,
   month: YearMonth,
   entry: PortionEntry,
-): Promise<{ savedAt: string; loggedBy: string } | null> {
+): Promise<ClosingRequest[]> {
   const rows = await ctx.gateway.getValues(LOG_TAB, "A1:I", "UNFORMATTED_VALUE");
+  const found: ClosingRequest[] = [];
   for (let index = rows.length - 1; index > 0; index--) {
     const row = rows[index];
+    const action = text(row[8]);
     if (
-      text(row[8]) === "Logged" &&
+      (action === "Logged" || action === "Edited") &&
       text(row[1]) === ymKey(month) &&
       text(row[2]) === portion.name &&
       text(row[3]) === entry.tenant &&
       row[5] === entry.count
     ) {
-      return { savedAt: text(row[0]), loggedBy: text(row[7]) };
+      found.push({ savedAt: text(row[0]), loggedBy: text(row[7]), dateReceived: text(row[6]) });
     }
   }
-  return null;
+  return found;
 }
 
 /**
  * A New tenant closes the portion's open tenancy on the day the rent was received. Undoing that first payment must take it
  * back, or the closed row would read as a move-out nobody recorded and the earlier tenant's rent would disappear from the
  * months after. Only a payment 1 can have been a New tenant, and only a portion with a closed tenancy can have had one
- * closed, so an ordinary undo reads and writes nothing more. The closed rows are found by the stamp of the request that made
- * this entry (see closedByRequest) and opened again. The Schedule is already undone, so a failure here is logged and the undo
- * still stands, as a failed tenancy write after a payment does.
+ * closed, so an ordinary undo reads and writes nothing more. The closed rows are found by the stamp and date of the requests
+ * that may have made this entry (see closedByRequest) and opened again. It runs after the Undone row of the Payments Log is
+ * added, and the Schedule is already undone, so a failure here is logged and the undo still stands, as a failed tenancy write
+ * after a payment does.
  */
 async function reopenAfterUndo(
   ctx: SheetsContext,
@@ -657,14 +662,14 @@ async function reopenAfterUndo(
 ): Promise<void> {
   if (removed.count !== 1 || !loaded.tenancies.some((t) => t.portionId === portion.id && t.moveOut !== "")) return;
   try {
-    const request = await loggedRequestOf(ctx, portion, month, removed);
-    if (request === null) return;
+    const requests = await loggedRequestsOf(ctx, portion, month, removed);
+    if (requests.length === 0) return;
     // Read the Tenants tab again right before writing to it: the rows to open are found where they are now.
     const tenancies = await readTenancies(ctx.gateway);
     const result = await reopenClosedByRequest(
       ctx.gateway,
       tenancies,
-      { portionId: portion.id, request },
+      { portionId: portion.id, requests },
       { now: options.now, updatedBy: options.loggedBy },
     );
     if (result.notConfirmed > 0) {

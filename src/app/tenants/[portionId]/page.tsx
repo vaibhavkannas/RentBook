@@ -136,7 +136,14 @@ export default async function TenantsPage({
   const advance = current ? advanceSummary(current) : null;
   const note = current
     ? null
-    : noCurrentTenancyNote({ scheduleTenant, mismatched, lastPast: past[0], vacant: Boolean(vacantSince) });
+    : noCurrentTenancyNote({
+        scheduleTenant,
+        mismatched,
+        lastPast: past[0],
+        // a move-out dated after today has not left the portion vacant yet
+        vacant: Boolean(vacantSince) && vacantSince! <= today,
+        today,
+      });
   // A tenant the Schedule names, with no open tenancy (so no details to move out) and no move-out yet, can still be recorded
   // as moved out: the details are not needed first.
   const canRecordMoveOut = !current && !mismatched && scheduleTenant !== null && !vacantSince;
