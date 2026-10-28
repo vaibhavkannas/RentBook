@@ -1,4 +1,4 @@
-import type { TenancySummary } from "./tenancy";
+import type { Tenancy, TenancySummary } from "./tenancy";
 
 export type YearMonth = { year: number; month: number };
 
@@ -96,4 +96,14 @@ export type MonthView = {
   /** Extra (positive) or short (negative) across the paid cards that have a reference rent. */
   difference: number;
   paidCount: number;
+};
+
+/**
+ * What the reports that look across months read (the overdue list, the year view, the alerts): the portions, the Schedule rows
+ * and the tenancies of ONE read of the Sheet. The sheets layer's `Snapshot` has all three.
+ */
+export type RentSnapshot = {
+  portions: PortionConfig[];
+  rows: ScheduleRow[];
+  tenancies: Tenancy[];
 };
