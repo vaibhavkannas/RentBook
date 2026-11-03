@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { OVERDUE_GRACE_DAYS, RENT_DUE_DAY } from "@/lib/domain/rent-due";
+import type { YearCell } from "@/lib/domain/year-view";
 import {
   MOVED_OUT_HINT,
   OVERDUE_RULES,
@@ -7,6 +8,8 @@ import {
   overdueAge,
   overdueMonthLine,
   overdueSummary,
+  YEAR_LEGEND,
+  yearCellLabel,
 } from "@/lib/report-copy";
 
 describe("ordinalDay", () => {
@@ -108,5 +111,68 @@ describe("OVERDUE_RULES", () => {
 describe("MOVED_OUT_HINT", () => {
   it("points at the tenant page", () => {
     expect(MOVED_OUT_HINT).toBe("Moved out? Record the move-out on the tenant page and the months after it stop counting.");
+  });
+});
+
+describe("yearCellLabel", () => {
+  const cell = (overrides: Partial<YearCell>): YearCell => ({
+    month: { year: 2026, month: 1 },
+    state: "paid",
+    received: 0,
+    due: 0,
+    shortBy: 0,
+    ...overrides,
+  });
+  const portion = "First floor, single bedroom";
+
+  it("says what a paid month received", () => {
+    expect(yearCellLabel(cell({ state: "paid", received: 5450, due: 5450 }), portion)).toBe(
+      "January 2026, First floor, single bedroom: paid ₹\u00a05,450",
+    );
+  });
+
+  it("says what a part-paid month received, of what was due", () => {
+    expect(
+      yearCellLabel(cell({ month: { year: 2026, month: 10 }, state: "partial", received: 5000, due: 5450, shortBy: 450 }), portion),
+    ).toBe("October 2026, First floor, single bedroom: part paid ₹\u00a05,000 of ₹\u00a05,450");
+  });
+
+  it("says what an unpaid month has due", () => {
+    expect(yearCellLabel(cell({ month: { year: 2026, month: 10 }, state: "unpaid", due: 13335 }), "Second floor")).toBe(
+      "October 2026, Second floor: unpaid, ₹\u00a013,335 due",
+    );
+  });
+
+  it("says vacant, not due yet and no record in words", () => {
+    expect(yearCellLabel(cell({ month: { year: 2026, month: 12 }, state: "vacant" }), portion)).toBe(
+      "December 2026, First floor, single bedroom: vacant",
+    );
+    expect(yearCellLabel(cell({ month: { year: 2026, month: 11 }, state: "upcoming" }), portion)).toBe(
+      "November 2026, First floor, single bedroom: not due yet",
+    );
+    expect(yearCellLabel(cell({ month: { year: 2025, month: 3 }, state: "none" }), portion)).toBe(
+      "March 2025, First floor, single bedroom: no record",
+    );
+  });
+
+  it("groups digits the Indian way", () => {
+    expect(yearCellLabel(cell({ state: "paid", received: 125000 }), "P")).toBe("January 2026, P: paid ₹\u00a01,25,000");
+  });
+});
+
+describe("YEAR_LEGEND", () => {
+  it("lists a glyph and a word for every state a cell can show but none", () => {
+    expect(YEAR_LEGEND.map((item) => `${item.glyph} ${item.label}`)).toEqual([
+      "✓ Paid",
+      "½ Part paid",
+      "! Unpaid",
+      "– Vacant",
+      "· Not due yet",
+    ]);
+    expect(YEAR_LEGEND.map((item) => item.state)).toEqual(["paid", "partial", "unpaid", "vacant", "upcoming"]);
+  });
+
+  it("gives each glyph once, so a state is never told apart by colour alone", () => {
+    expect(new Set(YEAR_LEGEND.map((item) => item.glyph)).size).toBe(YEAR_LEGEND.length);
   });
 });

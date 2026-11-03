@@ -1,6 +1,7 @@
 import type { OverdueItem, OverdueMonth } from "@/lib/domain/overdue";
 import { OVERDUE_GRACE_DAYS, RENT_DUE_DAY } from "@/lib/domain/rent-due";
-import { formatRupees } from "@/lib/format";
+import type { YearCell, YearCellState } from "@/lib/domain/year-view";
+import { formatMonthTitle, formatRupees } from "@/lib/format";
 
 /**
  * The words the overdue list, the year view and the alerts show, kept here so they can be tested. Every figure in them comes
@@ -57,3 +58,39 @@ export const OVERDUE_RULES: readonly string[] = [
 
 /** Under a portion that has been overdue for a long time: a tenant who has left is not asked for rent once the move-out is recorded. */
 export const MOVED_OUT_HINT = "Moved out? Record the move-out on the tenant page and the months after it stop counting.";
+
+// Year at a glance
+
+/**
+ * What a screen reader says for one cell of the year view: "January 2026, First floor: paid ₹ 5,450". A cell shows a glyph
+ * and a short month name, so this is its full name.
+ */
+export function yearCellLabel(cell: Pick<YearCell, "month" | "state" | "received" | "due">, portionName: string): string {
+  const where = `${formatMonthTitle(cell.month)}, ${portionName}`;
+  switch (cell.state) {
+    case "paid":
+      return `${where}: paid ${formatRupees(cell.received)}`;
+    case "partial":
+      return `${where}: part paid ${formatRupees(cell.received)} of ${formatRupees(cell.due)}`;
+    case "unpaid":
+      return `${where}: unpaid, ${formatRupees(cell.due)} due`;
+    case "vacant":
+      return `${where}: vacant`;
+    case "upcoming":
+      return `${where}: not due yet`;
+    case "none":
+      return `${where}: no record`;
+  }
+}
+
+/**
+ * The key to the year view: a glyph and a word for each state a cell can show, so a state is never told by colour alone. A
+ * month with no record (`none`) is a plain dash with no key.
+ */
+export const YEAR_LEGEND: ReadonlyArray<{ state: Exclude<YearCellState, "none">; glyph: string; label: string }> = [
+  { state: "paid", glyph: "✓", label: "Paid" },
+  { state: "partial", glyph: "½", label: "Part paid" },
+  { state: "unpaid", glyph: "!", label: "Unpaid" },
+  { state: "vacant", glyph: "–", label: "Vacant" },
+  { state: "upcoming", glyph: "·", label: "Not due yet" },
+];
