@@ -737,6 +737,53 @@ describe("setPortionActive: switching off", () => {
       await moveOutWithoutDetails(ctx, { portionId: "p3", tenant: "Chitra", moveOut: "2026-09-20" }, STAMP);
       expect((await setPortionActive(ctx, { id: "p3", active: false, today: TODAY })).portions.find((p) => p.id === "p3")?.inactive).toBe(true);
     });
+
+    it("allows a short-paid month: the card stays on the screen with what is still short", async () => {
+      const { ctx } = await ready();
+      await moveOutWithoutDetails(ctx, { portionId: "p3", tenant: "Chitra", moveOut: "2026-10-31" }, STAMP);
+      await logPayment(ctx, { month: OCT, portionId: "p3", amount: 5000, dateReceived: "2026-10-05" }, OPTIONS);
+      await setPortionActive(ctx, { id: "p3", active: false, today: TODAY });
+      const card = (await getMonthView(ctx, OCT)).cards.find((candidate) => candidate.portionId === "p3");
+      expect(card).toMatchObject({ status: "paid", inactive: true, rentDifference: -4000 });
+    });
+
+    describe("a month left blank before the tenant's last rent (a gap from before move-outs were tracked)", () => {
+      /** Chitra's rent is logged for July and September, and August was left blank: a let month with nothing logged, long past. */
+      const gapSchedule = () => [
+        ...baseSchedule().slice(0, 3),
+        scheduleRow(monthCell("text", 2026, 7), [["Asha", 1, 5450], ["Bala", 9, 12700], ["Chitra", 3, 9000], null, null], 4),
+        scheduleRow(monthCell("text", 2026, 8), [["Asha", 2, 5450], ["Bala", 10, 12700], null, null, null], 5),
+        scheduleRow(monthCell("text", 2026, 9), [["Asha", 3, 5450], ["Bala", 11, 12700], ["Chitra", 5, 9000], null, ["Esha", 1, 5100]], 6),
+      ];
+      const august = (view: Awaited<ReturnType<typeof getMonthView>>) => view.cards.find((card) => card.portionId === "p3");
+
+      it("does not refuse for it: only the months from the tenant's last rent on are looked at", async () => {
+        const { ctx } = await ready({ schedule: gapSchedule() });
+        // the gap is a pending card today, and is owed as far as the screen says
+        expect(august(await getMonthView(ctx, { year: 2026, month: 8 }))).toMatchObject({ status: "pending" });
+        await moveOutWithoutDetails(ctx, { portionId: "p3", tenant: "Chitra", moveOut: "2026-09-20" }, STAMP);
+        const result = await setPortionActive(ctx, { id: "p3", active: false, today: TODAY });
+        expect(result.portions.find((p) => p.id === "p3")?.inactive).toBe(true);
+        // nothing is hidden by it: the gap's card is still there, marked as switched off
+        expect(august(await getMonthView(ctx, { year: 2026, month: 8 }))).toMatchObject({ status: "pending", inactive: true });
+      });
+
+      it("does not refuse when the month of the last rent is today's month and is paid", async () => {
+        const { ctx } = await ready({ schedule: gapSchedule() });
+        await moveOutWithoutDetails(ctx, { portionId: "p3", tenant: "Chitra", moveOut: "2026-10-31" }, STAMP);
+        await rent(ctx, OCT, "2026-10-05");
+        expect((await setPortionActive(ctx, { id: "p3", active: false, today: TODAY })).portions.find((p) => p.id === "p3")?.inactive).toBe(true);
+      });
+
+      it("still refuses a month after the last rent, and names it rather than the gap", async () => {
+        const { fake, ctx } = await ready({ schedule: gapSchedule() });
+        await moveOutWithoutDetails(ctx, { portionId: "p3", tenant: "Chitra", moveOut: "2026-10-31" }, STAMP);
+        fake.calls.length = 0;
+        const error = await failure(setPortionActive(ctx, { id: "p3", active: false, today: TODAY }));
+        expect(error.message).toBe(UNPAID("October 2026"));
+        expect(wrote(fake)).toEqual([]);
+      });
+    });
   });
 
   it("keeps at least one portion on", async () => {
