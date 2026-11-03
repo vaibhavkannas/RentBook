@@ -1,7 +1,9 @@
-import type { OverdueItem, OverdueMonth } from "@/lib/domain/overdue";
+import { withMonth } from "@/lib/app-nav";
+import { AGREEMENT_NOTICE_DAYS, type AgreementAlert, type HikeAlert } from "@/lib/domain/alerts";
+import { overdueTotals, type OverdueItem, type OverdueMonth } from "@/lib/domain/overdue";
 import { OVERDUE_GRACE_DAYS, RENT_DUE_DAY } from "@/lib/domain/rent-due";
 import type { YearCell, YearCellState } from "@/lib/domain/year-view";
-import { formatMonthTitle, formatRupees } from "@/lib/format";
+import { formatDay, formatMonthTitle, formatRupees } from "@/lib/format";
 
 /**
  * The words the overdue list, the year view and the alerts show, kept here so they can be tested. Every figure in them comes
@@ -94,3 +96,79 @@ export const YEAR_LEGEND: ReadonlyArray<{ state: Exclude<YearCellState, "none">;
   { state: "vacant", glyph: "–", label: "Vacant" },
   { state: "upcoming", glyph: "·", label: "Not due yet" },
 ];
+
+// Agreements and hikes
+
+/** "Agreement ended 12 days ago, on 5 Oct 2026.", "Agreement ends today.", "Agreement ends in 45 days, on 1 Dec 2026." */
+export function agreementSentence(alert: Pick<AgreementAlert, "state" | "days" | "agreementEnd">): string {
+  switch (alert.state) {
+    case "ended":
+      return `Agreement ended ${plural(-alert.days, "day")} ago, on ${formatDay(alert.agreementEnd)}.`;
+    case "today":
+      return "Agreement ends today.";
+    case "soon":
+      return `Agreement ends in ${plural(alert.days, "day")}, on ${formatDay(alert.agreementEnd)}.`;
+  }
+}
+
+/** Under an ended agreement: what to do when the tenant stayed on. */
+export const AGREEMENT_HINT = "Renewed? Change the agreement end in Details.";
+
+/**
+ * What a rent hike is, and when: "Rent goes up 5% with the next payment (October 2026): ₹ 12,700 to ₹ 13,335." When payments
+ * come first it says after how many ("from the payment for December 2026, after 2 more payments"). It goes by the payments
+ * left, not by the alert's state, so a hike that is soon but for the very next payment (paid ahead) does not say "after 0".
+ */
+export function hikeSentence(
+  alert: Pick<HikeAlert, "hikePercent" | "hikeMonth" | "paymentsLeft" | "currentRent" | "newRent">,
+): string {
+  const rents = `${formatRupees(alert.currentRent)} to ${formatRupees(alert.newRent)}`;
+  const month = formatMonthTitle(alert.hikeMonth);
+  const when =
+    alert.paymentsLeft === 0
+      ? `with the next payment (${month})`
+      : `from the payment for ${month}, after ${plural(alert.paymentsLeft, "more payment")}`;
+  return `Rent goes up ${alert.hikePercent}% ${when}: ${rents}.`;
+}
+
+// The home screen's "Needs attention" card
+
+export type AttentionTone = "danger" | "warn" | "neutral";
+export type AttentionItem = { href: string; text: string; tone: AttentionTone };
+
+/**
+ * The rows of the home screen's "Needs attention" card, most pressing first, each with the screen it leads to (carrying the
+ * month on show, so the way back returns to it). Empty when nothing is due. An agreement that ends today is counted with the
+ * ones ending within the notice period.
+ */
+export function attentionItems(input: {
+  overdue: ReadonlyArray<Pick<OverdueItem, "owed">>;
+  agreements: ReadonlyArray<Pick<AgreementAlert, "state">>;
+  hikes: readonly unknown[];
+  monthKey: string | null;
+}): AttentionItem[] {
+  const items: AttentionItem[] = [];
+  const alertsHref = withMonth("/alerts", input.monthKey);
+
+  if (input.overdue.length > 0) {
+    const totals = overdueTotals(input.overdue);
+    items.push({
+      href: withMonth("/overdue", input.monthKey),
+      text: `Rent overdue: ${plural(totals.portions, "portion")}, ${formatRupees(totals.owed)}`,
+      tone: "danger",
+    });
+  }
+
+  const ended = input.agreements.filter((a) => a.state === "ended").length;
+  if (ended > 0) items.push({ href: alertsHref, text: `${plural(ended, "agreement")} ended`, tone: "danger" });
+  const ending = input.agreements.length - ended;
+  if (ending > 0) {
+    const verb = ending === 1 ? "ends" : "end";
+    items.push({ href: alertsHref, text: `${plural(ending, "agreement")} ${verb} within ${AGREEMENT_NOTICE_DAYS} days`, tone: "warn" });
+  }
+
+  if (input.hikes.length > 0) {
+    items.push({ href: `${alertsHref}#hikes`, text: `Rent goes up soon for ${plural(input.hikes.length, "portion")}`, tone: "neutral" });
+  }
+  return items;
+}

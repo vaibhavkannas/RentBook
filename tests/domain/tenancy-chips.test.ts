@@ -65,4 +65,37 @@ describe("tenancyChips", () => {
   it("ignores an agreement end of spaces", () => {
     expect(tenancyChips(summary({ agreementEnd: "   " }))).toEqual([]);
   });
+
+  describe("with today", () => {
+    it("says an agreement has ended when today is after the end", () => {
+      expect(tenancyChips(summary({ agreementEnd: "2027-03-15" }), "2027-03-16")).toEqual(["Agreement ended 15 Mar 2027"]);
+      expect(tenancyChips(summary({ agreementEnd: "2026-10-05" }), "2026-10-17")).toEqual(["Agreement ended 5 Oct 2026"]);
+      expect(tenancyChips(summary({ agreementEnd: "2026-12-31" }), "2027-01-01")).toEqual(["Agreement ended 31 Dec 2026"]);
+    });
+
+    it("says the agreement ends on its last day and before it", () => {
+      expect(tenancyChips(summary({ agreementEnd: "2027-03-15" }), "2027-03-15")).toEqual(["Agreement ends 15 Mar 2027"]);
+      expect(tenancyChips(summary({ agreementEnd: "2027-03-15" }), "2026-10-17")).toEqual(["Agreement ends 15 Mar 2027"]);
+    });
+
+    it("changes nothing without today, and nothing else with it", () => {
+      const past = summary({ advance: 20000, advanceStatus: "Held", agreementEnd: "2020-01-01" });
+      expect(tenancyChips(past)).toEqual(["Advance ₹\u00a020,000 held", "Agreement ends 1 Jan 2020"]);
+      expect(tenancyChips(past, undefined)).toEqual(tenancyChips(past));
+      expect(tenancyChips(past, "2026-10-17")).toEqual(["Advance ₹\u00a020,000 held", "Agreement ended 1 Jan 2020"]);
+      expect(tenancyChips(summary({ phone: "98765 43210" }), "2026-10-17")).toEqual([]);
+      expect(tenancyChips(summary({ agreementEnd: "   " }), "2026-10-17")).toEqual([]);
+    });
+
+    it("keeps saying 'ends' for an end that is not a real day, and for a today that is not one", () => {
+      expect(tenancyChips(summary({ agreementEnd: "March next year" }), "2026-10-17")).toEqual(["Agreement ends March next year"]);
+      expect(tenancyChips(summary({ agreementEnd: "2027-02-30" }), "2027-12-01")).toEqual(["Agreement ends 2027-02-30"]);
+      expect(tenancyChips(summary({ agreementEnd: "2020-01-01" }), "soon")).toEqual(["Agreement ends 1 Jan 2020"]);
+      expect(tenancyChips(summary({ agreementEnd: "2020-01-01" }), "")).toEqual(["Agreement ends 1 Jan 2020"]);
+    });
+
+    it("trims the agreement end", () => {
+      expect(tenancyChips(summary({ agreementEnd: " 2020-01-01 " }), "2026-10-17")).toEqual(["Agreement ended 1 Jan 2020"]);
+    });
+  });
 });

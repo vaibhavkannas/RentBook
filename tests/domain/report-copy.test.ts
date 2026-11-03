@@ -1,7 +1,13 @@
 import { describe, expect, it } from "vitest";
+import { agreementAlerts, hikeAlerts } from "@/lib/domain/alerts";
+import { overdueList } from "@/lib/domain/overdue";
 import { OVERDUE_GRACE_DAYS, RENT_DUE_DAY } from "@/lib/domain/rent-due";
 import type { YearCell } from "@/lib/domain/year-view";
 import {
+  AGREEMENT_HINT,
+  agreementSentence,
+  attentionItems,
+  hikeSentence,
   MOVED_OUT_HINT,
   OVERDUE_RULES,
   ordinalDay,
@@ -11,6 +17,7 @@ import {
   YEAR_LEGEND,
   yearCellLabel,
 } from "@/lib/report-copy";
+import { baseRows, PORTIONS, tenancyRow } from "../support/fixtures";
 
 describe("ordinalDay", () => {
   it("writes a day of the month with its ending", () => {
@@ -174,5 +181,147 @@ describe("YEAR_LEGEND", () => {
 
   it("gives each glyph once, so a state is never told apart by colour alone", () => {
     expect(new Set(YEAR_LEGEND.map((item) => item.glyph)).size).toBe(YEAR_LEGEND.length);
+  });
+});
+
+describe("agreementSentence", () => {
+  const sentence = (state: "ended" | "today" | "soon", days: number, agreementEnd = "2026-10-05") =>
+    agreementSentence({ state, days, agreementEnd });
+
+  it("says how long ago an agreement ended, and on what day", () => {
+    expect(sentence("ended", -12, "2026-10-05")).toBe("Agreement ended 12 days ago, on 5 Oct 2026.");
+    expect(sentence("ended", -1, "2026-10-16")).toBe("Agreement ended 1 day ago, on 16 Oct 2026.");
+    expect(sentence("ended", -990, "2024-01-31")).toBe("Agreement ended 990 days ago, on 31 Jan 2024.");
+  });
+
+  it("says an agreement ends today", () => {
+    expect(sentence("today", 0, "2026-10-17")).toBe("Agreement ends today.");
+  });
+
+  it("says in how many days an agreement ends, and on what day", () => {
+    expect(sentence("soon", 45, "2026-12-01")).toBe("Agreement ends in 45 days, on 1 Dec 2026.");
+    expect(sentence("soon", 1, "2026-10-18")).toBe("Agreement ends in 1 day, on 18 Oct 2026.");
+    expect(sentence("soon", 60, "2026-12-16")).toBe("Agreement ends in 60 days, on 16 Dec 2026.");
+  });
+
+  it("carries the hint for an ended agreement", () => {
+    expect(AGREEMENT_HINT).toBe("Renewed? Change the agreement end in Details.");
+  });
+});
+
+describe("hikeSentence", () => {
+  const hike = (overrides: Partial<Parameters<typeof hikeSentence>[0]> = {}) => ({
+    hikePercent: 5,
+    hikeMonth: { year: 2026, month: 10 },
+    paymentsLeft: 0,
+    currentRent: 12700,
+    newRent: 13335,
+    ...overrides,
+  });
+
+  it("says the rent goes up with the next payment, and from what to what", () => {
+    expect(hikeSentence(hike())).toBe("Rent goes up 5% with the next payment (October 2026): ₹\u00a012,700 to ₹\u00a013,335.");
+  });
+
+  it("says the rent goes up from a later payment, after how many more", () => {
+    expect(hikeSentence(hike({ hikeMonth: { year: 2026, month: 12 }, paymentsLeft: 2, currentRent: 5450, newRent: 5723 }))).toBe(
+      "Rent goes up 5% from the payment for December 2026, after 2 more payments: ₹\u00a05,450 to ₹\u00a05,723.",
+    );
+    expect(hikeSentence(hike({ hikeMonth: { year: 2026, month: 11 }, paymentsLeft: 1 }))).toBe(
+      "Rent goes up 5% from the payment for November 2026, after 1 more payment: ₹\u00a012,700 to ₹\u00a013,335.",
+    );
+  });
+
+  it("goes by the payments left, not the state: no 'after 0 more payments', and no 'next payment' for a later one", () => {
+    // paid ahead: the next payment carries the hike although it is for a month to come
+    expect(hikeSentence(hike({ hikeMonth: { year: 2026, month: 12 }, paymentsLeft: 0 }))).toBe(
+      "Rent goes up 5% with the next payment (December 2026): ₹\u00a012,700 to ₹\u00a013,335.",
+    );
+    // behind with the Schedule: the month of the hike has gone by but payments come first
+    expect(hikeSentence(hike({ hikeMonth: { year: 2026, month: 9 }, paymentsLeft: 2 }))).toBe(
+      "Rent goes up 5% from the payment for September 2026, after 2 more payments: ₹\u00a012,700 to ₹\u00a013,335.",
+    );
+  });
+
+  it("writes a percent with a fraction as it is", () => {
+    expect(hikeSentence(hike({ hikePercent: 2.5 }))).toContain("Rent goes up 2.5% with");
+    expect(hikeSentence(hike({ hikePercent: 0.1 }))).toContain("Rent goes up 0.1% with");
+  });
+});
+
+describe("attentionItems", () => {
+  const TODAY = "2026-10-17";
+  const none = { overdue: [], agreements: [], hikes: [], monthKey: "2026-10" };
+  const ended = { state: "ended" } as const;
+  const today = { state: "today" } as const;
+  const soon = { state: "soon" } as const;
+
+  it("is empty when nothing is due", () => {
+    expect(attentionItems(none)).toEqual([]);
+    expect(attentionItems({ ...none, monthKey: null })).toEqual([]);
+  });
+
+  it("lists, from real data, overdue rent, an ended agreement, one ending soon and a hike, in that order", () => {
+    const rows = baseRows();
+    const tenancies = [
+      tenancyRow({ id: "t-1", portionId: "p1", tenant: "Asha", agreementEnd: "2026-10-05" }),
+      tenancyRow({ id: "t-3", portionId: "p3", tenant: "Chitra", agreementEnd: "2026-12-01" }),
+    ];
+    const snapshot = { rows, portions: PORTIONS, tenancies };
+    const items = attentionItems({
+      overdue: overdueList(snapshot, TODAY),
+      agreements: agreementAlerts(snapshot, TODAY),
+      hikes: hikeAlerts(snapshot, TODAY),
+      monthKey: "2026-10",
+    });
+    expect(items).toEqual([
+      { href: "/overdue?month=2026-10", text: "Rent overdue: 4 portions, ₹\u00a032,885", tone: "danger" },
+      { href: "/alerts?month=2026-10", text: "1 agreement ended", tone: "danger" },
+      { href: "/alerts?month=2026-10", text: "1 agreement ends within 60 days", tone: "warn" },
+      { href: "/alerts?month=2026-10#hikes", text: "Rent goes up soon for 1 portion", tone: "neutral" },
+    ]);
+  });
+
+  it("says portion, agreement and portions, agreements in the singular and the plural", () => {
+    expect(attentionItems({ ...none, overdue: [{ owed: 5450 }] })).toEqual([
+      { href: "/overdue?month=2026-10", text: "Rent overdue: 1 portion, ₹\u00a05,450", tone: "danger" },
+    ]);
+    expect(attentionItems({ ...none, overdue: [{ owed: 105000 }, { owed: 450 }] })[0].text).toBe(
+      "Rent overdue: 2 portions, ₹\u00a01,05,450",
+    );
+    expect(attentionItems({ ...none, agreements: [ended, ended] }).map((item) => item.text)).toEqual(["2 agreements ended"]);
+    expect(attentionItems({ ...none, agreements: [soon, soon, soon] }).map((item) => item.text)).toEqual([
+      "3 agreements end within 60 days",
+    ]);
+    expect(attentionItems({ ...none, hikes: [{}, {}] }).map((item) => item.text)).toEqual(["Rent goes up soon for 2 portions"]);
+  });
+
+  it("counts an agreement that ends today with those ending within 60 days", () => {
+    expect(attentionItems({ ...none, agreements: [today] })).toEqual([
+      { href: "/alerts?month=2026-10", text: "1 agreement ends within 60 days", tone: "warn" },
+    ]);
+    expect(attentionItems({ ...none, agreements: [ended, today, soon] }).map((item) => item.text)).toEqual([
+      "1 agreement ended",
+      "2 agreements end within 60 days",
+    ]);
+  });
+
+  it("gives each row the tone of its kind", () => {
+    expect(attentionItems({ ...none, hikes: [{}] }).map((item) => item.tone)).toEqual(["neutral"]);
+    expect(attentionItems({ ...none, agreements: [soon] }).map((item) => item.tone)).toEqual(["warn"]);
+    expect(attentionItems({ ...none, agreements: [ended] }).map((item) => item.tone)).toEqual(["danger"]);
+  });
+
+  it("builds the links from the month key, and from none when there is no month", () => {
+    const all = { overdue: [{ owed: 1 }], agreements: [ended, soon], hikes: [{}] };
+    expect(attentionItems({ ...all, monthKey: "2027-01" }).map((item) => item.href)).toEqual([
+      "/overdue?month=2027-01",
+      "/alerts?month=2027-01",
+      "/alerts?month=2027-01",
+      "/alerts?month=2027-01#hikes",
+    ]);
+    for (const monthKey of [null, "", "2026-13", "October"]) {
+      expect(attentionItems({ ...all, monthKey }).map((item) => item.href)).toEqual(["/overdue", "/alerts", "/alerts", "/alerts#hikes"]);
+    }
   });
 });

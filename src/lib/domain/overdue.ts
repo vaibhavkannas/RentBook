@@ -109,6 +109,6 @@ export function overdueList(snapshot: RentSnapshot, today: string): OverdueItem[
 }
 
 /** How many portions owe, and how much between them. */
-export function overdueTotals(items: OverdueItem[]): { portions: number; owed: number } {
+export function overdueTotals(items: ReadonlyArray<Pick<OverdueItem, "owed">>): { portions: number; owed: number } {
   return { portions: items.length, owed: sumAmounts(items.map((item) => item.owed)) };
 }
