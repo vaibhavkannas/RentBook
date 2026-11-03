@@ -1,5 +1,7 @@
-import { TENANCY_LOG_ACTIONS, type TenancyLogAction } from "@/lib/domain/tenancy-log";
+import { TENANCY_LOG_ACTIONS, type TenancyLogAction, type TenancyLogRow } from "@/lib/domain/tenancy-log";
+import { errorLogFields, logEvent } from "@/lib/server/log";
 import { colLetter } from "./a1";
+import { appendWithRetry } from "./append-log";
 import { isBlankCell, text } from "./cells";
 import type { SheetsGateway } from "./gateway";
 import { headerKey } from "./headers";
@@ -116,4 +118,66 @@ export function parseTenancyLog(values: unknown[][]): { items: TenancyLogItem[];
     });
   });
   return { items };
+}
+
+/** At most this many tries to add the rows of one save: the write already holds the lock inside a 15 second request. */
+export const HISTORY_ATTEMPTS = 2;
+/** No new try starts when the tries so far, plus the wait before it, would pass this many milliseconds. */
+export const HISTORY_BUDGET_MS = 2_000;
+/** The longest wait between two tries. */
+const HISTORY_MAX_WAIT_MS = 1_000;
+
+/**
+ * Adds the rows of one save to the Tenancy Log, all in ONE append, so they go in together or not at all. True when there is
+ * nothing to add or the rows are in; false when they are not known to be there. It tries a second time only after Google
+ * refused for sending too many requests (see appendWithRetry), logs each failed try (`tenancy-log-append-failed`, how many rows,
+ * never the rows) and NEVER throws: the history is a convenience and must not fail or undo the change it describes.
+ */
+export async function appendTenancyHistory(
+  gateway: SheetsGateway,
+  rows: readonly TenancyLogRow[],
+  retryDelayMs = 400,
+): Promise<boolean> {
+  if (rows.length === 0) return true;
+  const count = `${rows.length} ${rows.length === 1 ? "row" : "rows"}`;
+  try {
+    return await appendWithRetry({
+      append: () => gateway.appendRows(TENANCY_LOG_TAB, rows.map((row) => [...row])),
+      attempts: HISTORY_ATTEMPTS,
+      retryDelayMs,
+      maxWaitMs: HISTORY_MAX_WAIT_MS,
+      budgetMs: HISTORY_BUDGET_MS,
+      event: "tenancy-log-append-failed",
+      what: (attempt) => `Tenancy Log: try ${attempt} of ${HISTORY_ATTEMPTS} did not add ${count}`,
+    });
+  } catch (error) {
+    logEvent("error", "tenancy-log-append-failed", errorLogFields(error, `Tenancy Log: the ${count} could not be added`));
+    return false;
+  }
+}
+
+/**
+ * What a tenancy write says about its history: whether the rows are in the Tenancy Log, and the rows themselves. The rows
+ * stay on the server: the route turns them into a signed retry token when they did not save (see retry-token.ts).
+ */
+export type HistoryOutcome = { historyWritten: boolean; historyRows: TenancyLogRow[] };
+
+/**
+ * Works out the rows of a save that has already been written (`build`) and adds them (see appendTenancyHistory). It never
+ * throws, whatever `build` or the append does: a tenancy change that is saved stays saved. A save that changed nothing has
+ * no rows, adds nothing and counts as written.
+ */
+export async function recordTenancyHistory(
+  gateway: SheetsGateway,
+  build: () => TenancyLogRow[],
+  retryDelayMs = 400,
+): Promise<HistoryOutcome> {
+  let rows: TenancyLogRow[];
+  try {
+    rows = build();
+  } catch (error) {
+    logEvent("error", "tenancy-log-rows-failed", errorLogFields(error, "Tenancy Log: the rows of a saved change could not be worked out"));
+    return { historyWritten: false, historyRows: [] };
+  }
+  return { historyWritten: await appendTenancyHistory(gateway, rows, retryDelayMs), historyRows: rows };
 }

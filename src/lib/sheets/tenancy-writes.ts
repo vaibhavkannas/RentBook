@@ -102,6 +102,9 @@ async function closeTenancy(
   });
 }
 
+/** A tenancy a new tenant ended: as it was before (open) and the day it was closed on. */
+export type ClosedTenancy = { tenancy: Tenancy; moveOut: string };
+
 /**
  * The tenancy work of a new tenant: add the new tenancy when details were given (new row first), then close the
  * portion's previous open tenancies on the new move-in date, or on the date received when no details were given.
@@ -114,15 +117,16 @@ async function closeTenancy(
  * closed: it is the same person starting a count again, not a tenant who left, and a closed row of that name would read as
  * a move-out that nobody recorded and make the portion vacant. Only a different name means the old tenant left.
  *
- * Returns the new tenancy as it is stored now, or null when no details were given. Closes nothing and refuses
- * with a conflict when the row that was just appended cannot be found again.
+ * Returns the new tenancy as it is stored now (`created`, null when no details were given) and each tenancy it closed
+ * with the day (`closed`, as it was before: the Tenancy Log records them). Closes nothing and refuses with a conflict when
+ * the row that was just appended cannot be found again.
  */
 export async function recordNewTenant(
   gateway: SheetsGateway,
   tenancies: Tenancy[],
   input: { portionId: string; tenant: string; newTenancy: NewTenancy | undefined; dateReceived: string },
   stamp: WriteStamp,
-): Promise<Tenancy | null> {
+): Promise<{ created: Tenancy | null; closed: ClosedTenancy[] }> {
   const previousIds = new Set(
     tenancies
       .filter((t) => t.portionId === input.portionId && t.moveOut === "" && !sameTenantName(t.tenant, input.tenant))
@@ -131,7 +135,7 @@ export async function recordNewTenant(
   const added = input.newTenancy
     ? await appendNewTenancy(gateway, tenancies, input.newTenancy, stamp)
     : undefined;
-  if (!added && previousIds.size === 0) return null;
+  if (!added && previousIds.size === 0) return { created: null, closed: [] };
 
   const fresh = await readTenancies(gateway);
   const created = added ? fresh.findLast((t) => t.id === added.id) : undefined;
@@ -140,12 +144,15 @@ export async function recordNewTenant(
   }
 
   const newMoveIn = input.newTenancy?.fields.moveIn ?? input.dateReceived;
+  const closed: ClosedTenancy[] = [];
   for (const open of fresh) {
     if (!previousIds.has(open.id) || open.portionId !== input.portionId || open.moveOut !== "") continue;
     if (open.id === added?.id) continue;
-    await closeTenancy(gateway, open, closingDay(open.moveIn, newMoveIn), stamp);
+    const moveOut = closingDay(open.moveIn, newMoveIn);
+    await closeTenancy(gateway, open, moveOut, stamp);
+    closed.push({ tenancy: open, moveOut });
   }
-  return created ?? null;
+  return { created: created ?? null, closed };
 }
 
 /**

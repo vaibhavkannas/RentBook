@@ -18,6 +18,7 @@ import {
   type MoveOutWithoutDetailsInput,
   type SaveTenancyInput,
 } from "@/lib/sheets/tenancy-service";
+import { TENANCY_LOG_TAB } from "@/lib/sheets/tenancy-log-store";
 import { appendTenancy, readTenancies, TENANTS_TAB } from "@/lib/sheets/tenants-store";
 import { cell, FakeGateway } from "../support/fake-gateway";
 import { baseSchedule, PORTIONS, TOTAL_HEADER } from "../support/fixtures";
@@ -469,7 +470,8 @@ describe("saveTenancy: update", () => {
       notes: "Raised advance",
     });
 
-    expect(fake.calls.filter((call) => call !== "getValues" && call !== "getManyValues")).toEqual(["updateValues"]);
+    // One write to the Tenants tab, then the history's own append to the Tenancy Log.
+    expect(fake.calls.filter((call) => call !== "getValues" && call !== "getManyValues")).toEqual(["updateValues", "appendRows"]);
     expect(await tenancies(ctx)).toEqual([
       {
         rowNumber: 2,
@@ -929,7 +931,8 @@ describe("moveOutTenancy", () => {
       deductions: 5000,
     });
 
-    expect(fake.calls.filter((call) => call !== "getValues" && call !== "getManyValues")).toEqual(["updateValues"]);
+    // One write to the Tenants tab, then the history's own append to the Tenancy Log.
+    expect(fake.calls.filter((call) => call !== "getValues" && call !== "getManyValues")).toEqual(["updateValues", "appendRows"]);
     expect(await tenancies(ctx)).toEqual([
       {
         rowNumber: 2,
@@ -1790,11 +1793,13 @@ describe("moveOutWithoutDetails", () => {
     expect(await tenancies(ctx)).toMatchObject([{ tenant: "Asha" }]);
   });
 
-  it("changes nothing else: not the Schedule, the Settings or the Payments Log", async () => {
+  it("changes nothing else: not the Schedule, the Settings or the Payments Log (only the Tenancy Log gains the move-out)", async () => {
     const { fake, ctx } = await ready();
-    const before = snapshotOf(fake).filter(([tab]) => tab !== TENANTS_TAB);
+    const others = ([tab]: [string, unknown]) => tab !== TENANTS_TAB && tab !== TENANCY_LOG_TAB;
+    const before = snapshotOf(fake).filter(others);
     await record(ctx);
-    expect(snapshotOf(fake).filter(([tab]) => tab !== TENANTS_TAB)).toEqual(before);
+    expect(snapshotOf(fake).filter(others)).toEqual(before);
+    expect(fake.tabs.get(TENANCY_LOG_TAB)).toHaveLength(2); // its header and the one row for the move-out
   });
 
   it("leaves the portion vacant from the first month on or after the move-out, and then refuses a plain log", async () => {

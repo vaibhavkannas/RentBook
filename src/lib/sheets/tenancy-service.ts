@@ -13,6 +13,7 @@ import {
   type Tenancy,
   type TenancyFields,
 } from "@/lib/domain/tenancy";
+import { tenancyLogRows } from "@/lib/domain/tenancy-log";
 import type { PortionConfig } from "@/lib/domain/types";
 import { lastRentMonth, vacancyOf } from "@/lib/domain/vacancy";
 import { isValidIsoDay, ymKey } from "@/lib/domain/year-month";
@@ -21,8 +22,18 @@ import { formatMonthTitle, wholeRupeesMessage } from "@/lib/format";
 import { RELOAD_HINT, reloadThen } from "@/lib/recovery-hint";
 import { getSnapshot, invalidateCaches, loadSnapshot, type SheetsContext, type Snapshot } from "./service";
 import { withWriteLock } from "./write-lock";
+import { recordTenancyHistory, type HistoryOutcome } from "./tenancy-log-store";
 import { checkNewTenancy, recordNewTenant, type WriteStamp } from "./tenancy-writes";
 import { appendTenancy, readTenancies, writeTenancyEdit, writeTenancyMoveOut } from "./tenants-store";
+
+/** Who changed the tenancy and when (see WriteStamp), and how long to wait between tries of the history (tests pass 0). */
+export type TenancyWriteOptions = WriteStamp & { retryDelayMs?: number };
+
+/**
+ * What a tenancy write answers: the tenancy as it is stored, and what became of its history (see HistoryOutcome). The history
+ * fields stay on the server: the routes drop `historyRows` and give the browser a signed retry token instead.
+ */
+export type TenancyWriteResult = { tenancy: Tenancy } & HistoryOutcome;
 
 export type SaveTenancyInput = {
   portionId: string;
@@ -119,13 +130,15 @@ function requireSeen(found: Tenancy, expectedUpdatedAt: string): void {
 
 /**
  * Creates a tenancy (no `id`) or updates one. Creating closes the portion's previous current tenancy
- * when its tenant name is different. Both read fresh data, never the cache, and clear the cache after.
+ * when its tenant name is different. Both read fresh data, never the cache, and clear the cache after. Once the change is saved
+ * its history is added to the Tenancy Log, still inside the write: a history that cannot be written never fails or undoes the
+ * change (see recordTenancyHistory).
  */
 export async function saveTenancy(
   ctx: SheetsContext,
   input: SaveTenancyInput,
-  options: WriteStamp,
-): Promise<{ tenancy: Tenancy }> {
+  options: TenancyWriteOptions,
+): Promise<TenancyWriteResult> {
   return withWriteLock(async () => {
     try {
       return input.id === undefined
@@ -140,8 +153,8 @@ export async function saveTenancy(
 async function createTenancy(
   ctx: SheetsContext,
   input: SaveTenancyInput,
-  stamp: WriteStamp,
-): Promise<{ tenancy: Tenancy }> {
+  stamp: TenancyWriteOptions,
+): Promise<TenancyWriteResult> {
   const checked = checkNewTenancy(input.portionId, input.tenant, input.fields);
   const snapshot = await loadSnapshot(ctx);
   requireUsableTenants(snapshot);
@@ -160,22 +173,32 @@ async function createTenancy(
   }
 
   // Add the new row first; only then close the ones it replaces, so a failed append closes nothing.
-  const tenancy = await recordNewTenant(
+  const { created, closed } = await recordNewTenant(
     ctx.gateway,
     snapshot.tenancies,
     { portionId: input.portionId, tenant: checked.tenant, newTenancy: checked, dateReceived: checked.fields.moveIn },
     stamp,
   );
   // A new tenancy was given, so recordNewTenant returns it as it is stored.
-  return { tenancy: tenancy! };
+  const tenancy = created!;
+  const changedBy = { now: stamp.now, changedBy: stamp.updatedBy };
+  const history = await recordTenancyHistory(
+    ctx.gateway,
+    () => [
+      ...tenancyLogRows({ kind: "added", after: tenancy }, changedBy),
+      ...closed.flatMap(({ tenancy: before, moveOut }) => tenancyLogRows({ kind: "closed", before, moveOut }, changedBy)),
+    ],
+    stamp.retryDelayMs,
+  );
+  return { tenancy, ...history };
 }
 
 async function updateTenancy(
   ctx: SheetsContext,
   input: SaveTenancyInput,
   id: string,
-  stamp: WriteStamp,
-): Promise<{ tenancy: Tenancy }> {
+  stamp: TenancyWriteOptions,
+): Promise<TenancyWriteResult> {
   const fields = validateTenancyFields(input.fields);
   // Only a missing value is refused: a hand-typed row can have an empty Updated at, which a screen sends as "".
   if (input.expectedUpdatedAt === undefined) {
@@ -221,7 +244,12 @@ async function updateTenancy(
     updatedAt: stamp.now.toISOString(),
   };
   await writeTenancyEdit(ctx.gateway, stored.rowNumber, updated, columns);
-  return { tenancy: updated };
+  const history = await recordTenancyHistory(
+    ctx.gateway,
+    () => tenancyLogRows({ kind: "edited", before: stored, after: updated }, { now: stamp.now, changedBy: stamp.updatedBy }),
+    stamp.retryDelayMs,
+  );
+  return { tenancy: updated, ...history };
 }
 
 /** Whole rupees from 0 to MAX_RUPEES, or null. `undefined` means "not given". */
@@ -256,8 +284,8 @@ function requireMoveOutAfterRent(snapshot: Snapshot, portionId: string, tenant: 
 export async function moveOutTenancy(
   ctx: SheetsContext,
   input: MoveOutInput,
-  options: WriteStamp,
-): Promise<{ tenancy: Tenancy }> {
+  options: TenancyWriteOptions,
+): Promise<TenancyWriteResult> {
   return withWriteLock(async () => {
     try {
       return await moveOutUnchecked(ctx, input, options);
@@ -270,8 +298,8 @@ export async function moveOutTenancy(
 async function moveOutUnchecked(
   ctx: SheetsContext,
   input: MoveOutInput,
-  stamp: WriteStamp,
-): Promise<{ tenancy: Tenancy }> {
+  stamp: TenancyWriteOptions,
+): Promise<TenancyWriteResult> {
   const moveOut = (input.moveOut ?? "").trim();
   requireDay(moveOut, "Move-out date");
   const refund = checkRupees(input.refund, "Refund");
@@ -319,7 +347,12 @@ async function moveOutUnchecked(
     updatedAt: stamp.now.toISOString(),
   };
   await writeTenancyMoveOut(ctx.gateway, stored.rowNumber, closed, columns);
-  return { tenancy: closed };
+  const history = await recordTenancyHistory(
+    ctx.gateway,
+    () => tenancyLogRows({ kind: "moved-out", before: stored, after: closed }, { now: stamp.now, changedBy: stamp.updatedBy }),
+    stamp.retryDelayMs,
+  );
+  return { tenancy: closed, ...history };
 }
 
 /**
@@ -332,8 +365,8 @@ async function moveOutUnchecked(
 export async function moveOutWithoutDetails(
   ctx: SheetsContext,
   input: MoveOutWithoutDetailsInput,
-  stamp: WriteStamp,
-): Promise<{ tenancy: Tenancy }> {
+  stamp: TenancyWriteOptions,
+): Promise<TenancyWriteResult> {
   return withWriteLock(async () => {
     try {
       return await moveOutWithoutDetailsUnchecked(ctx, input, stamp);
@@ -346,8 +379,8 @@ export async function moveOutWithoutDetails(
 async function moveOutWithoutDetailsUnchecked(
   ctx: SheetsContext,
   input: MoveOutWithoutDetailsInput,
-  stamp: WriteStamp,
-): Promise<{ tenancy: Tenancy }> {
+  stamp: TenancyWriteOptions,
+): Promise<TenancyWriteResult> {
   // The tenant is the Schedule's own name, sent back by the page and matched against the Schedule below: a name the Sheet
   // holds may be one a new tenant could not be given (typed by hand, long, with a line break), so it is not checked like one.
   const tenant = input.tenant.trim();
@@ -414,7 +447,13 @@ async function moveOutWithoutDetailsUnchecked(
       `The Tenants tab in your Sheet changed while the move-out was being saved. ${reloadThen("check the details")}`,
     );
   }
-  return { tenancy: written };
+  // `written` is the closed row as the Sheet holds it; it is compared with an empty tenancy, as the tenant had no details before.
+  const history = await recordTenancyHistory(
+    ctx.gateway,
+    () => tenancyLogRows({ kind: "moved-out", before: null, after: written }, { now: stamp.now, changedBy: stamp.updatedBy }),
+    stamp.retryDelayMs,
+  );
+  return { tenancy: written, ...history };
 }
 
 /**

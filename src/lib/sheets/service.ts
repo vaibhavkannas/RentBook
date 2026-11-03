@@ -10,6 +10,7 @@ import {
 import { nextCount, sumAmounts } from "@/lib/domain/rent-rules";
 import { occupancyFor } from "@/lib/domain/vacancy";
 import { MAX_RUPEES, type Tenancy, type TenancyFields } from "@/lib/domain/tenancy";
+import { tenancyLogRows, type TenancyLogRow } from "@/lib/domain/tenancy-log";
 import type {
   MonthView,
   PortionConfig,
@@ -23,6 +24,7 @@ import { formatDay, formatMonthTitle, formatRupees, wholeRupeesMessage } from "@
 import { RELOAD_HINT, RELOAD_STEP, reloadThen } from "@/lib/recovery-hint";
 import { errorLogFields, logEvent } from "@/lib/server/log";
 import { colLetter } from "./a1";
+import { appendWithRetry } from "./append-log";
 import { text } from "./cells";
 import type { SheetsGateway } from "./gateway";
 import { columnsOf, parseSchedule, type ScheduleLayout } from "./schedule";
@@ -37,6 +39,7 @@ import {
   type SettingsUpdate,
 } from "./settings-store";
 import { createSnapshotCache, type SnapshotCache } from "./snapshot-cache";
+import { recordTenancyHistory } from "./tenancy-log-store";
 import { checkNewTenancy, recordNewTenant, reopenClosedByRequest, type ClosingRequest } from "./tenancy-writes";
 import { parseTenancies, readTenancies, TENANTS_RANGE, TENANTS_TAB } from "./tenants-store";
 import { withWriteLock } from "./write-lock";
@@ -302,6 +305,13 @@ export type LogPaymentResult = {
    * rows could not be written; the details can be added from the tenant's page.
    */
   tenancyWritten?: boolean;
+  /**
+   * Only present when the tenancy rows were written: whether the Tenancy Log rows for them are in the Tenancy Log (true as well
+   * when there was nothing to add). False leaves the payment and the tenancy saved. Server-only, with `historyRows`: the routes
+   * turn them into a signed retry token (see withHistoryToken).
+   */
+  historyWritten?: boolean;
+  historyRows?: TenancyLogRow[];
 };
 
 export type LogPaymentOptions = {
@@ -523,11 +533,12 @@ async function logPaymentUnchecked(
 
   if (newTenant !== undefined) {
     // The payment is already saved, so a tenancy failure is reported but never undoes it.
+    let written: Awaited<ReturnType<typeof recordNewTenant>> | null = null;
     try {
       // Read the Tenants tab again right before writing to it. A wrong header (even one changed since this
       // payment began) is a sheet-structure error here, and then nothing is written to the tab.
       const tenancies = await readTenancies(ctx.gateway);
-      await recordNewTenant(
+      written = await recordNewTenant(
         ctx.gateway,
         tenancies,
         { portionId: portion.id, tenant: newTenant, newTenancy, dateReceived: input.dateReceived },
@@ -537,6 +548,22 @@ async function logPaymentUnchecked(
     } catch (error) {
       logEvent("error", "tenancy-write-failed", errorLogFields(error, "The payment was saved, but the tenancy details were not"));
       result.tenancyWritten = false;
+    }
+    if (written !== null) {
+      // The tenancy rows are saved. Their history is added after them, and it can only fail on its own (see recordTenancyHistory).
+      const { created, closed } = written;
+      const stamp = { now: options.now, changedBy: options.loggedBy };
+      Object.assign(
+        result,
+        await recordTenancyHistory(
+          ctx.gateway,
+          () => [
+            ...(created ? tenancyLogRows({ kind: "added", after: created }, stamp) : []),
+            ...closed.flatMap(({ tenancy, moveOut }) => tenancyLogRows({ kind: "closed", before: tenancy, moveOut }, stamp)),
+          ],
+          options.retryDelayMs ?? 400,
+        ),
+      );
     }
   }
   return result;
@@ -724,32 +751,22 @@ const LOG_BUDGET_MS = 4_000;
  *
  * It adds the row a second time ONLY after Google refused it for sending too many requests: that refusal
  * means nothing was done. A timeout, a 5xx, a lost connection or any other error can come back after the
- * row was already added, so trying again could put it in twice. Those stop at once.
+ * row was already added, so trying again could put it in twice. Those stop at once (see appendWithRetry).
  */
 async function appendLogRow(
   gateway: SheetsGateway,
   row: LogRow,
   retryDelayMs: number,
 ): Promise<boolean> {
-  const started = Date.now();
-  for (let attempt = 1; attempt <= LOG_ATTEMPTS; attempt++) {
-    try {
-      await gateway.appendRow(LOG_TAB, row);
-      return true;
-    } catch (error) {
-      logEvent(
-        "error",
-        "payments-log-append-failed",
-        errorLogFields(error, `Payments Log: try ${attempt} of ${LOG_ATTEMPTS} did not add the row`),
-      );
-      const cannotHaveLanded = error instanceof AppError && error.code === "rate-limited";
-      if (!cannotHaveLanded || attempt === LOG_ATTEMPTS) return false;
-      const wait = Math.min(retryDelayMs * attempt, LOG_MAX_WAIT_MS);
-      if (Date.now() - started + wait > LOG_BUDGET_MS) return false;
-      if (wait > 0) await new Promise((resolve) => setTimeout(resolve, wait));
-    }
-  }
-  return false;
+  return appendWithRetry({
+    append: () => gateway.appendRow(LOG_TAB, row),
+    attempts: LOG_ATTEMPTS,
+    retryDelayMs,
+    maxWaitMs: LOG_MAX_WAIT_MS,
+    budgetMs: LOG_BUDGET_MS,
+    event: "payments-log-append-failed",
+    what: (attempt) => `Payments Log: try ${attempt} of ${LOG_ATTEMPTS} did not add the row`,
+  });
 }
 
 export type ActivityItem = {
