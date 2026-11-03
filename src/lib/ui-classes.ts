@@ -63,7 +63,7 @@ const YEAR_CELL: Record<YearCellState, string> = {
   paid: "bg-success-bg text-success-ink",
   partial: "bg-warn-bg text-warn-ink",
   unpaid: "bg-danger-bg text-danger-ink",
-  vacant: "bg-line text-muted",
+  vacant: "bg-line text-foreground",
   upcoming: "border border-dashed border-line text-muted",
   none: "text-muted",
 };

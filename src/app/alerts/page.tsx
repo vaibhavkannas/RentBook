@@ -17,8 +17,9 @@ import {
   ALERTS_FOOTNOTE,
   ALERTS_TENANTS_PROBLEM_NOTICE,
   hikePill,
+  HIKE_MOVED_OUT_HINT,
   hikeSentence,
-  MOVED_OUT_HINT,
+  HIKES_TENANTS_PROBLEM_NOTICE,
   NO_AGREEMENTS_TEXT,
   NO_HIKES_TEXT,
   showMovedOutHint,
@@ -68,7 +69,7 @@ function Hike({ alert, thisMonth }: { alert: HikeAlert; thisMonth: YearMonth }) 
       <p className="mt-0.5 text-sm text-muted">{alert.tenant}</p>
       <p className="mt-1 text-sm">{hikeSentence(alert)}</p>
       {alert.state === "due" && showMovedOutHint(alert.hikeMonth, thisMonth) && (
-        <p className="mt-1 text-sm text-muted">{MOVED_OUT_HINT}</p>
+        <p className="mt-1 text-sm text-muted">{HIKE_MOVED_OUT_HINT}</p>
       )}
     </Card>
   );
@@ -132,6 +133,12 @@ export default async function AlertsPage({
             <h2 id="hikes-heading" className="font-medium">
               Rent hikes
             </h2>
+            {snapshot.tenantsProblem !== undefined && hikes.length > 0 && (
+              // Without the Tenants tab a hike for a tenant who left cannot be told apart from a real one.
+              <Notice tone="warn" className="mt-2">
+                {HIKES_TENANTS_PROBLEM_NOTICE(snapshot.tenantsProblem)}
+              </Notice>
+            )}
             {hikes.length === 0 ? (
               <p className="mt-2 text-sm text-muted">{NO_HIKES_TEXT}</p>
             ) : (

@@ -5,7 +5,7 @@ import type { Tenancy } from "@/lib/domain/tenancy";
 import type { ScheduleRow } from "@/lib/domain/types";
 import { AppError } from "@/lib/errors";
 import { formatRupees } from "@/lib/format";
-import { AGREEMENT_HINT, ALERTS_FOOTNOTE, MOVED_OUT_HINT, NO_AGREEMENTS_TEXT, NO_HIKES_TEXT } from "@/lib/report-copy";
+import { AGREEMENT_HINT, ALERTS_FOOTNOTE, HIKE_MOVED_OUT_HINT, NO_AGREEMENTS_TEXT, NO_HIKES_TEXT } from "@/lib/report-copy";
 import { CARD, noticeClasses, pillClasses } from "@/lib/ui-classes";
 import { baseRows, parsedRows, PORTIONS, tenancyRow } from "../support/fixtures";
 import { smallTargets, unpressedTargets } from "../support/tap-targets";
@@ -229,12 +229,12 @@ describe("the Rent hikes section: one due, one coming", () => {
   });
 
   it("asks whether the tenant moved out when a hike has been due for more than three months, and not for a recent one", async () => {
-    expect(visibleText(await hikes())).not.toContain(MOVED_OUT_HINT);
+    expect(visibleText(await hikes())).not.toContain(HIKE_MOVED_OUT_HINT);
     // Bala's last payment was April's 11th of 11: that hike has been due since June
     mocks.loadPageSnapshot.mockResolvedValue(snapshot({ rows: parsedRows([2026, 4, [null, ["Bala", 11, 12700]]]), tenancies: [] }));
     const stale = cards(await hikes());
     expect(stale).toHaveLength(1);
-    expect(visibleText(stale[0])).toContain(MOVED_OUT_HINT);
+    expect(visibleText(stale[0])).toContain(HIKE_MOVED_OUT_HINT);
   });
 });
 
@@ -263,14 +263,19 @@ describe("the Agreements and hikes page when the Tenants tab cannot be read", ()
     expect(cards(part)).toHaveLength(0);
   });
 
-  it("still lists the hikes, which come from the Schedule", async () => {
+  it("still lists the hikes, which come from the Schedule, under a warning that one may be for a tenant who left", async () => {
     const part = section(await render(), "hikes");
     expect(cards(part)).toHaveLength(2);
+    expect(part).toContain(`<p class="${noticeClasses("warn")} mt-2">`);
+    expect(visibleText(part)).toContain(
+      "The Tenants tab can't be read, so a hike below may be for a tenant who has moved out. The Tenants tab has no Phone header.",
+    );
   });
 
   it("shows no warning when the Tenants tab is fine", async () => {
     mocks.loadPageSnapshot.mockResolvedValue(snapshot({ rows: HIKES_ROWS(), tenancies: AGREEMENTS }));
     expect(visibleText(await render())).not.toContain("Tenants tab can't be read");
+    expect(section(await render(), "hikes")).not.toContain(noticeClasses("warn"));
   });
 });
 

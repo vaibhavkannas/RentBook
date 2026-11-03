@@ -209,6 +209,13 @@ export const ALERTS_FOOTNOTE =
 /** In place of the agreements when the Tenants tab cannot be read: without it no agreement is known, so none can be said to be far off. */
 export const ALERTS_TENANTS_PROBLEM_NOTICE = (problem: string) => `The Tenants tab can't be read, so agreements can't be checked. ${problem}`;
 
+/** Above the hikes when the Tenants tab cannot be read: a hike for a portion whose tenant has moved out cannot be left out. */
+export const HIKES_TENANTS_PROBLEM_NOTICE = (problem: string) =>
+  `The Tenants tab can't be read, so a hike below may be for a tenant who has moved out. ${problem}`;
+
+/** Under a hike that has been due for months: most likely the tenant left and the move-out was never recorded. */
+export const HIKE_MOVED_OUT_HINT = "Moved out? Record the move-out on the tenant page and this hike stops showing.";
+
 // The home screen's "Needs attention" card
 
 export type AttentionTone = "danger" | "warn" | "neutral";

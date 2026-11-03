@@ -9,6 +9,8 @@ import {
   agreementSentence,
   ALERTS_FOOTNOTE,
   ALERTS_TENANTS_PROBLEM_NOTICE,
+  HIKE_MOVED_OUT_HINT,
+  HIKES_TENANTS_PROBLEM_NOTICE,
   attentionItems,
   earlierMonthsText,
   hikePill,
@@ -393,6 +395,10 @@ describe("the Agreements and hikes screen's other words", () => {
     expect(ALERTS_TENANTS_PROBLEM_NOTICE("The Tenants tab has no Phone header.")).toBe(
       "The Tenants tab can't be read, so agreements can't be checked. The Tenants tab has no Phone header.",
     );
+    expect(HIKES_TENANTS_PROBLEM_NOTICE("The Tenants tab has no Phone header.")).toBe(
+      "The Tenants tab can't be read, so a hike below may be for a tenant who has moved out. The Tenants tab has no Phone header.",
+    );
+    expect(HIKE_MOVED_OUT_HINT).toBe("Moved out? Record the move-out on the tenant page and this hike stops showing.");
   });
 });
 
