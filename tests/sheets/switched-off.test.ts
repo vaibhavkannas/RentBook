@@ -216,6 +216,8 @@ describe("the month screen with a portion switched off", () => {
 
 describe("logging a payment for a portion that is switched off", () => {
   const REFUSAL = "Second floor, double bedroom is switched off in Portion settings. Switch it back on to log rent for it.";
+  const NEW_TENANT_REFUSAL = "Second floor, double bedroom is switched off in Portion settings. Switch the portion on first to start a new tenant.";
+  const NEW_TENANT_REFUSAL_LET = `${NEW_TENANT_REFUSAL} You can still log rent for it.`;
   const history = () => {
     const schedule = baseSchedule();
     schedule[3] = scheduleRow(monthCell("text", 2026, 8), [["Asha", 2, 5450], ["Bala", 10, 12700], ["Chitra", 4, 9000], ["Dev", 1, 7000], null], 4);
@@ -274,12 +276,43 @@ describe("logging a payment for a portion that is switched off", () => {
   });
 
   it("refuses a New tenant for it, whether the tenant is still there or not, and writes nothing", async () => {
+    // a month it is let in: plain rent is still taken there, and the message says so
     const { ctx, fake } = await warm(settingsGridWithActive({ p4: "No" }), history());
     const error = await refusal(logPayment(ctx, { ...PAY, newTenantName: "Hari" }, OPTIONS));
-    expect(error.message).toBe(REFUSAL);
+    expect(error.code).toBe("conflict");
+    expect(error.message).toBe(NEW_TENANT_REFUSAL_LET);
     expect(fake.calls).not.toContain("updateValues");
+    // a month it is vacant in: plain rent is refused too, so the message does not promise it
     const gone = await devLeft();
-    expect((await refusal(logPayment(gone.ctx, { ...PAY, newTenantName: "Hari" }, OPTIONS))).message).toBe(REFUSAL);
+    const goneError = await refusal(logPayment(gone.ctx, { ...PAY, newTenantName: "Hari" }, OPTIONS));
+    expect(goneError.message).toBe(NEW_TENANT_REFUSAL);
+    expect(gone.fake.calls).not.toContain("updateValues");
+    // and the same words for a portion that never had a tenant
+    const never = sheet(settingsGridWithActive({ p4: "No" }));
+    expect((await refusal(logPayment(never.ctx, { ...PAY, month: SEP, newTenantName: "Hari" }, OPTIONS))).message).toBe(NEW_TENANT_REFUSAL);
+  });
+
+  it("refuses a New tenant that replaces an entry it has, too (an API caller can ask), and changes nothing", async () => {
+    const { ctx, fake } = await warm(settingsGridWithActive({ p4: "No" }), history());
+    const before = structuredClone([...fake.tabs]);
+    const error = await refusal(
+      logPayment(
+        ctx,
+        { month: SEP, portionId: "p4", amount: 7100, dateReceived: "2026-09-06", newTenantName: "Hari", overwrite: true, expected: { tenant: "Dev", count: 2, amount: 7000 } },
+        OPTIONS,
+      ),
+    );
+    expect(error.code).toBe("conflict");
+    expect(error.message).toBe(NEW_TENANT_REFUSAL_LET);
+    for (const write of ["updateValues", "cloneRow", "appendRow"]) expect(fake.calls).not.toContain(write);
+    expect(structuredClone([...fake.tabs])).toEqual(before);
+    // the plain Edit of the same entry is still taken
+    const edited = await logPayment(
+      ctx,
+      { month: SEP, portionId: "p4", amount: 7100, dateReceived: "2026-09-06", overwrite: true, expected: { tenant: "Dev", count: 2, amount: 7000 } },
+      OPTIONS,
+    );
+    expect(edited.entry).toEqual({ tenant: "Dev", count: 2, amount: 7100 });
   });
 
   it("still edits an entry it has, and says so in the log", async () => {
