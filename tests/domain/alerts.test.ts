@@ -204,6 +204,14 @@ describe("hikeAlerts: when there is none", () => {
     expect(hikeAlerts(snapshot(rows, [tenancyRow({ moveOut: "2026-09-30" })]), TODAY)).toEqual([]);
   });
 
+  it("has none when the move-out is recorded for a later day and the hike month is already vacant", () => {
+    // a September count of 10 of 11: the hike is for November, and the tenant leaves on 31 October (let now, vacant in November)
+    const soon = p1Rows([2026, 9, 10]);
+    expect(hikeAlerts(snapshot(soon, [tenancyRow({ moveOut: "2026-10-31" })]), TODAY)).toEqual([]);
+    // leaving on 1 December keeps November let, so the alert stays
+    expect(hikeAlerts(snapshot(soon, [tenancyRow({ moveOut: "2026-12-01" })]), TODAY)).toHaveLength(1);
+  });
+
   it("has none for a portion that is switched off", () => {
     expect(hikeAlerts(snapshot(baseRows(), [], portionsWith({ p2: { inactive: true } })), TODAY)).toEqual([]);
   });

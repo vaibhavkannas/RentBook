@@ -51,7 +51,9 @@ export function daysOverdue(month: YearMonth, today: string): number {
  */
 export function cardShortfall(card: Pick<PortionCard, "status" | "rentDifference">): number {
   if (card.status !== "paid" || card.rentDifference === null) return 0;
-  return card.rentDifference < -SHORTFALL_TOLERANCE ? Math.round(-card.rentDifference) : 0;
+  if (!(card.rentDifference < -SHORTFALL_TOLERANCE)) return 0;
+  // The card rounds the signed difference, so an exact half-rupee goes toward zero here as it does there.
+  return Math.max(0, -Math.round(card.rentDifference));
 }
 
 /**

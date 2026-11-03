@@ -160,7 +160,7 @@ export function agreementSentence(alert: Pick<AgreementAlert, "state" | "days" |
 }
 
 /** Under an ended agreement: what to do when the tenant stayed on. */
-export const AGREEMENT_HINT = "Renewed? Change the agreement end in Details.";
+export const AGREEMENT_HINT = "Renewed? Change the agreement end in Details. Moved out? Record the move-out there.";
 
 /**
  * What a rent hike is, and when: "Rent goes up 5% with the next payment (October 2026): ₹ 12,700 to ₹ 13,335." When payments

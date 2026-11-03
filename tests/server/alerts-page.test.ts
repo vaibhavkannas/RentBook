@@ -5,7 +5,7 @@ import type { Tenancy } from "@/lib/domain/tenancy";
 import type { ScheduleRow } from "@/lib/domain/types";
 import { AppError } from "@/lib/errors";
 import { formatRupees } from "@/lib/format";
-import { AGREEMENT_HINT, ALERTS_FOOTNOTE, NO_AGREEMENTS_TEXT, NO_HIKES_TEXT } from "@/lib/report-copy";
+import { AGREEMENT_HINT, ALERTS_FOOTNOTE, MOVED_OUT_HINT, NO_AGREEMENTS_TEXT, NO_HIKES_TEXT } from "@/lib/report-copy";
 import { CARD, noticeClasses, pillClasses } from "@/lib/ui-classes";
 import { baseRows, parsedRows, PORTIONS, tenancyRow } from "../support/fixtures";
 import { smallTargets, unpressedTargets } from "../support/tap-targets";
@@ -226,6 +226,15 @@ describe("the Rent hikes section: one due, one coming", () => {
     expect(part).toContain(`<p class="mt-2 text-sm text-muted">${NO_HIKES_TEXT}</p>`);
     expect(cards(part)).toHaveLength(0);
     expect(NO_HIKES_TEXT).toBe("No rent hike in the next 2 months.");
+  });
+
+  it("asks whether the tenant moved out when a hike has been due for more than three months, and not for a recent one", async () => {
+    expect(visibleText(await hikes())).not.toContain(MOVED_OUT_HINT);
+    // Bala's last payment was April's 11th of 11: that hike has been due since June
+    mocks.loadPageSnapshot.mockResolvedValue(snapshot({ rows: parsedRows([2026, 4, [null, ["Bala", 11, 12700]]]), tenancies: [] }));
+    const stale = cards(await hikes());
+    expect(stale).toHaveLength(1);
+    expect(visibleText(stale[0])).toContain(MOVED_OUT_HINT);
   });
 });
 

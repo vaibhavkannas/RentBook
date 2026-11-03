@@ -303,7 +303,7 @@ describe("agreementSentence", () => {
   });
 
   it("carries the hint for an ended agreement", () => {
-    expect(AGREEMENT_HINT).toBe("Renewed? Change the agreement end in Details.");
+    expect(AGREEMENT_HINT).toBe("Renewed? Change the agreement end in Details. Moved out? Record the move-out there.");
   });
 });
 

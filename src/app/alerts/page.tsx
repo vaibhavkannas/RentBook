@@ -8,7 +8,8 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { Pill } from "@/components/ui/Pill";
 import { monthParam, withMonth } from "@/lib/app-nav";
 import { agreementAlerts, hikeAlerts, type AgreementAlert, type HikeAlert } from "@/lib/domain/alerts";
-import { todayIso } from "@/lib/domain/year-month";
+import type { YearMonth } from "@/lib/domain/types";
+import { currentYm, todayIso } from "@/lib/domain/year-month";
 import {
   AGREEMENT_HINT,
   agreementPill,
@@ -17,8 +18,10 @@ import {
   ALERTS_TENANTS_PROBLEM_NOTICE,
   hikePill,
   hikeSentence,
+  MOVED_OUT_HINT,
   NO_AGREEMENTS_TEXT,
   NO_HIKES_TEXT,
+  showMovedOutHint,
 } from "@/lib/report-copy";
 import { getViewer } from "@/lib/server/auth-guard";
 import { getSheetsContext } from "@/lib/server/context";
@@ -54,7 +57,7 @@ function Agreement({ alert, monthKey }: { alert: AgreementAlert; monthKey: strin
 }
 
 /** A rent hike that is due or coming: the portion and when, the tenant, and from what to what. */
-function Hike({ alert }: { alert: HikeAlert }) {
+function Hike({ alert, thisMonth }: { alert: HikeAlert; thisMonth: YearMonth }) {
   const pill = hikePill(alert);
   return (
     <Card as="li">
@@ -64,6 +67,9 @@ function Hike({ alert }: { alert: HikeAlert }) {
       </div>
       <p className="mt-0.5 text-sm text-muted">{alert.tenant}</p>
       <p className="mt-1 text-sm">{hikeSentence(alert)}</p>
+      {alert.state === "due" && showMovedOutHint(alert.hikeMonth, thisMonth) && (
+        <p className="mt-1 text-sm text-muted">{MOVED_OUT_HINT}</p>
+      )}
     </Card>
   );
 }
@@ -88,7 +94,9 @@ export default async function AlertsPage({
     setupHref = setupHrefFor(error, viewer, monthKey);
   }
 
-  const today = todayIso(new Date());
+  const now = new Date();
+  const today = todayIso(now);
+  const thisMonth = currentYm(now);
   const agreements = snapshot ? agreementAlerts(snapshot, today) : [];
   const hikes = snapshot ? hikeAlerts(snapshot, today) : [];
 
@@ -129,7 +137,7 @@ export default async function AlertsPage({
             ) : (
               <ul className="mt-2 space-y-3">
                 {hikes.map((alert) => (
-                  <Hike key={alert.portionId} alert={alert} />
+                  <Hike key={alert.portionId} alert={alert} thisMonth={thisMonth} />
                 ))}
               </ul>
             )}

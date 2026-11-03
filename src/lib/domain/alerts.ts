@@ -90,7 +90,7 @@ export type HikeAlert = {
  * Rent hikes that are due or within HIKE_NOTICE_MONTHS of `today` (YYYY-MM-DD, India time). The Sheet has no hike date: the
  * hike comes with the first payment of a new cycle, so it is worked out from the portion's latest entry (`hikeMonthFor`) and the
  * new rent is the one the card will suggest. No alert for a portion whose count never resets, whose hike changes nothing (0 %),
- * that is vacant this month, or that is switched off. Earliest hike first, then Settings order.
+ * that is vacant this month or in the hike month, or that is switched off. Earliest hike first, then Settings order.
  */
 export function hikeAlerts(snapshot: RentSnapshot, today: string): HikeAlert[] {
   const { rows, portions, tenancies } = snapshot;
@@ -104,6 +104,8 @@ export function hikeAlerts(snapshot: RentSnapshot, today: string): HikeAlert[] {
     const hike = hikeMonthFor(latest.month, latest.entry.count, portion.cycleLength);
     if (!hike || compareYm(hike.hikeMonth, horizon) > 0) continue;
     if (occupancyFor(rows, tenancies, portion.id, thisMonth).state === "vacant") continue;
+    // A move-out recorded for a later day can leave the hike month vacant while the portion is still let today.
+    if (compareYm(hike.hikeMonth, thisMonth) > 0 && occupancyFor(rows, tenancies, portion.id, hike.hikeMonth).state === "vacant") continue;
     const currentRent = latest.entry.amount;
     const newRent = suggestAmount(currentRent, portion.hikePercent, true);
     if (!(newRent > currentRent)) continue;

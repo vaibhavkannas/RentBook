@@ -155,6 +155,11 @@ describe("cardShortfall, on the cards the month screen shows", () => {
     expect(cardShortfall({ status: "paid", rentDifference: -450.6 })).toBe(451);
     expect(cardShortfall({ status: "paid", rentDifference: -0.4 })).toBe(0);
     expect(cardShortfall({ status: "paid", rentDifference: -1 })).toBe(1);
+    // the card rounds the signed difference, so an exact half goes toward zero there and here
+    expect(cardShortfall({ status: "paid", rentDifference: -0.5 })).toBe(0);
+    expect(cardShortfall({ status: "paid", rentDifference: -0.51 })).toBe(1);
+    expect(cardShortfall({ status: "paid", rentDifference: -450.5 })).toBe(450);
+    expect(cardShortfall({ status: "paid", rentDifference: -1.5 })).toBe(1);
     expect(cardShortfall({ status: "paid", rentDifference: 0 })).toBe(0);
     expect(cardShortfall({ status: "paid", rentDifference: 12 })).toBe(0);
     expect(cardShortfall({ status: "paid", rentDifference: null })).toBe(0);
