@@ -391,6 +391,20 @@ describe("addPortion: an answer that was lost, hand-typed headers, and a Tenants
     expect(fake.tabs.get(SETTINGS_TAB)).toHaveLength(7);
   });
 
+  it("does not answer 'added' for a portion that was switched off since: it refuses, naming the switch-off, and writes nothing", async () => {
+    const { fake, ctx } = await ready();
+    const first = await addPortion(ctx, NEW);
+    await setPortionActive(ctx, { id: first.portion.id, active: false, today: TODAY });
+    fake.calls.length = 0;
+    fake.requests.length = 0;
+    const before = snapshotOf(fake);
+    const error = await failure(addPortion(ctx, NEW));
+    expect(error.code).toBe("validation");
+    expect(error.message).toBe('There is already a portion called "Back room" (switched off). Switch it on, or choose a different name.');
+    expect(wrote(fake)).toEqual([]);
+    expect(snapshotOf(fake)).toEqual(before);
+  });
+
   it("converges too when the answer was lost after the Settings row was written but before it was read back", async () => {
     const { fake, ctx } = await ready();
     const read = vi.spyOn(fake, "getManyValues");

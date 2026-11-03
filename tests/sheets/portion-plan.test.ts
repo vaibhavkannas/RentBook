@@ -566,6 +566,28 @@ describe("planAddPortion: an add that already happened (an answer that was lost)
     expect((await refusal(async () => planAddPortion(await inputFor(fake), NEW))).details).toEqual({ field: "name" });
   });
 
+  it("is not that when the portion has been switched off since: it stays off, so it is not 'added', and the refusal says it is switched off", async () => {
+    const { fake } = await added();
+    const settings = fake.tabs.get(SETTINGS_TAB)!;
+    settings[0][7] = "Active";
+    settings[6][7] = "No";
+    const error = await refusal(async () => planAddPortion(await inputFor(fake), NEW));
+    expect(error.message).toBe('There is already a portion called "Back room" (switched off). Switch it on, or choose a different name.');
+    expect(error.details).toEqual({ field: "name" });
+    // a portion that is on, with the Active column there, is still the one just added
+    settings[6][7] = "Yes";
+    expect(planAddPortion(await inputFor(fake), NEW).alreadyAdded).toBe(true);
+    settings[6][7] = "";
+    expect(planAddPortion(await inputFor(fake), NEW).alreadyAdded).toBe(true);
+  });
+
+  it("says the same for a switched-off portion of the owner's own with the same name", async () => {
+    const error = await refusal(async () =>
+      planAddPortion(await inputFor(world(settingsGridWithActive({ p3: "No" }))), { ...NEW, name: "Second floor, single bedroom" }),
+    );
+    expect(error.message).toBe('There is already a portion called "Second floor, single bedroom" (switched off). Switch it on, or choose a different name.');
+  });
+
   it("is not that for a portion of the owner's own with the same name, which the Schedule has entries for", async () => {
     const error = await refusal(async () => planAddPortion(await inputFor(world()), { ...NEW, name: "First floor, single bedroom" }));
     expect(error.details).toEqual({ field: "name" });
