@@ -18,8 +18,8 @@ function googleError(status: number, message: string) {
   });
 }
 
-/** A Google client stand-in whose spreadsheet has the four app tabs, and whose calls can be made to fail. */
-function mockApi(tabs = ["Schedule", "Settings", "Payments Log", "Tenants"]) {
+/** A Google client stand-in whose spreadsheet has the Schedule and the four app tabs, and whose calls can be made to fail. */
+function mockApi(tabs = ["Schedule", "Settings", "Payments Log", "Tenants", "Tenancy Log"]) {
   const get = vi.fn(async () => ({
     data: {
       sheets: tabs.map((title, index) => ({

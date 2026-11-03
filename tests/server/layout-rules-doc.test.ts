@@ -70,14 +70,14 @@ describe("SETUP.md: the settings", () => {
     expect(setup).not.toMatch(/TOTAL_HEADER[^\n]*required/i);
   });
 
-  it("lists SETTINGS_TAB, LOG_TAB and TENANTS_TAB as optional, with the names the app uses when they are left out", () => {
+  it("lists SETTINGS_TAB, LOG_TAB, TENANTS_TAB and TENANCY_LOG_TAB as optional, with the names the app uses when they are left out", () => {
     for (const tab of APP_TABS) {
       const variable = TAB_VARIABLES[tab];
       const row = tableRow(variable);
       expect(row, variable).toMatch(/Optional/);
       expect(row, variable).toContain(`\`${DEFAULT_TAB_NAMES[tab]}\``);
     }
-    expect(Object.values(TAB_VARIABLES)).toEqual(["SETTINGS_TAB", "LOG_TAB", "TENANTS_TAB"]);
+    expect(Object.values(TAB_VARIABLES)).toEqual(["SETTINGS_TAB", "LOG_TAB", "TENANTS_TAB", "TENANCY_LOG_TAB"]);
   });
 
   it("says to rename your own tab in the Sheet first, then set the variable, and why: a name that is not there yet starts a new tab with default values", () => {
@@ -98,10 +98,10 @@ describe("SETUP.md: the settings", () => {
 
   it("tells Vercel users to add the optional names too, when they use them", () => {
     const deploy = section(setup, "7. Deploy to Vercel");
-    for (const name of ["TOTAL_HEADER", "SETTINGS_TAB", "LOG_TAB", "TENANTS_TAB"]) expect(deploy).toContain(name);
+    for (const name of ["TOTAL_HEADER", "SETTINGS_TAB", "LOG_TAB", "TENANTS_TAB", "TENANCY_LOG_TAB"]) expect(deploy).toContain(name);
   });
 
-  it("has .env.example name the three tab settings and show TOTAL_HEADER as optional", () => {
+  it("has .env.example name the four tab settings and show TOTAL_HEADER as optional", () => {
     for (const variable of Object.values(TAB_VARIABLES)) expect(envExample, variable).toMatch(new RegExp(`^# ${variable}=`, "m"));
     expect(envExample).toMatch(/^# TOTAL_HEADER=/m);
     expect(envExample).not.toMatch(/^TOTAL_HEADER=/m);

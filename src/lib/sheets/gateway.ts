@@ -26,6 +26,12 @@ export interface SheetsGateway {
   /** Appends one row after the last row of the tab's table. */
   appendRow(tab: string, row: unknown[]): Promise<void>;
   /**
+   * Appends every row after the last row of the tab's table with ONE request to Google, so the rows of one save go in
+   * together or not at all (see the Tenancy Log). Like `appendRow` it is never repeated by the gateway: a second try after a
+   * lost answer could add the rows twice. Nothing is sent for an empty list.
+   */
+  appendRows(tab: string, rows: unknown[][]): Promise<void>;
+  /**
    * Makes sure the tab's grid has at least `columns` columns (1-based count: 20 means column T is there), by adding empty columns at
    * its right end when it has fewer. It never removes a column and never touches a cell. Google refuses a write beyond the grid
    * ("exceeds grid limits"), so a caller that is about to write past the last column asks for the room first.

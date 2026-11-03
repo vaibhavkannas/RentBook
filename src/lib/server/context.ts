@@ -17,6 +17,7 @@ export function sheetsGatewayFor(env: AppEnv, sheetId: string = env.sheetId): Sh
     settings: env.settingsTab,
     log: env.logTab,
     tenants: env.tenantsTab,
+    "tenancy-log": env.tenancyLogTab,
   });
 }
 

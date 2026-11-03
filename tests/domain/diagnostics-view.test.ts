@@ -44,7 +44,7 @@ const input = (changes: Partial<DiagnosticsInput> = {}): DiagnosticsInput => ({
   checks: OK_CHECKS,
   facts: FACTS,
   problems: PROBLEMS,
-  appTabNames: { settings: "Settings", log: "Payments Log", tenants: "Tenants" },
+  appTabNames: { settings: "Settings", log: "Payments Log", tenants: "Tenants", "tenancy-log": "Tenancy Log" },
   realTitles: null,
   setupHref: "/setup",
   ...changes,
@@ -220,7 +220,7 @@ describe("the Tabs section", () => {
       'Tenants ("RentBook Tenants"): 9 rows, 4 current',
     ]);
     const checks = OK_CHECKS.map((entry) => (entry.id === "tenants" ? { ...entry, status: "todo" as const } : entry));
-    const tabs = section("tabs", { checks, appTabNames: { settings: "Settings", log: "Payments Log", tenants: "RentBook Tenants" } });
+    const tabs = section("tabs", { checks, appTabNames: { settings: "Settings", log: "Payments Log", tenants: "RentBook Tenants", "tenancy-log": "Tenancy Log" } });
     expect(tabs.rows[3].text).toBe("Tenants: Not created yet");
     expect(tabs.note).toBe(
       "TENANTS_TAB names a tab that is not in your Sheet yet. If you already have it under another name, rename it in your Sheet first (see Set up).",
@@ -229,7 +229,7 @@ describe("the Tabs section", () => {
 
   it("names every variable, in the plural, when several named tabs are missing", () => {
     const checks = OK_CHECKS.map((entry) => (["settings", "tenants"].includes(entry.id) ? { ...entry, status: "todo" as const } : entry));
-    const tabs = section("tabs", { checks, appTabNames: { settings: "My Settings", log: "Payments Log", tenants: "RentBook Tenants" } });
+    const tabs = section("tabs", { checks, appTabNames: { settings: "My Settings", log: "Payments Log", tenants: "RentBook Tenants", "tenancy-log": "Tenancy Log" } });
     expect(tabs.note).toBe(
       "SETTINGS_TAB and TENANTS_TAB name tabs that are not in your Sheet yet. If you already have them under other names, rename them in your Sheet first (see Set up).",
     );

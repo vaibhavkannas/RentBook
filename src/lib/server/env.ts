@@ -1,15 +1,16 @@
 import "server-only";
 import { configError } from "@/lib/errors";
-import { DEFAULT_TAB_NAMES, tabNamesProblem } from "@/lib/sheets/tab-names";
+import { DEFAULT_TAB_NAMES, TAB_VARIABLES, tabNamesProblem } from "@/lib/sheets/tab-names";
 
 export type AppEnv = {
   serviceAccountJson: string;
   sheetId: string;
   scheduleTab: string;
-  /** The names of the app's own tabs in the owner's Sheet (SETTINGS_TAB, LOG_TAB, TENANTS_TAB): "Settings", "Payments Log" and "Tenants" unless set. */
+  /** The names of the app's own tabs in the owner's Sheet (SETTINGS_TAB, LOG_TAB, TENANTS_TAB, TENANCY_LOG_TAB): "Settings", "Payments Log", "Tenants" and "Tenancy Log" unless set. */
   settingsTab: string;
   logTab: string;
   tenantsTab: string;
+  tenancyLogTab: string;
   /** The header of the Schedule's monthly total column, or null when TOTAL_HEADER is not set: then no total is written. */
   totalHeader: string | null;
   /** Lower-cased, without duplicates (Gmail dot and plus variants count as one). The first address is the owner. */
@@ -100,6 +101,7 @@ export function readEnv(env: Record<string, string | undefined>): AppEnv {
     settings: tabName(env, "SETTINGS_TAB", DEFAULT_TAB_NAMES.settings),
     log: tabName(env, "LOG_TAB", DEFAULT_TAB_NAMES.log),
     tenants: tabName(env, "TENANTS_TAB", DEFAULT_TAB_NAMES.tenants),
+    "tenancy-log": tabName(env, TAB_VARIABLES["tenancy-log"], DEFAULT_TAB_NAMES["tenancy-log"]),
   };
   const tabsProblem = tabNamesProblem(tabs);
   if (tabsProblem !== null) throw configError(tabsProblem);
@@ -110,6 +112,7 @@ export function readEnv(env: Record<string, string | undefined>): AppEnv {
     settingsTab: tabs.settings,
     logTab: tabs.log,
     tenantsTab: tabs.tenants,
+    tenancyLogTab: tabs["tenancy-log"],
     totalHeader: env.TOTAL_HEADER?.trim() || null,
     allowedEmails,
   };

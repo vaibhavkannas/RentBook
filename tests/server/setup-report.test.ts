@@ -58,12 +58,18 @@ describe("setupReport", () => {
   });
 
   it("gives the names the app's tabs have in the Sheet: the usual ones, or the owner's", async () => {
-    expect((await setupReport(ENV, () => ctxFor(healthy()))).appTabNames).toEqual({ settings: "Settings", log: "Payments Log", tenants: "Tenants" });
+    expect((await setupReport(ENV, () => ctxFor(healthy()))).appTabNames).toEqual({
+      settings: "Settings",
+      log: "Payments Log",
+      tenants: "Tenants",
+      "tenancy-log": "Tenancy Log",
+    });
     const named = { ...ENV, TENANTS_TAB: "RentBook Tenants" };
     expect((await setupReport(named, () => ctxFor(healthy()))).appTabNames).toEqual({
       settings: "Settings",
       log: "Payments Log",
       tenants: "RentBook Tenants",
+      "tenancy-log": "Tenancy Log",
     });
   });
 
@@ -84,7 +90,7 @@ describe("setupReport", () => {
       throw new Error("something unexpected CANARY");
     });
     expect(facts).toBeNull();
-    expect(appTabNames).toEqual({ settings: "Settings", log: "Payments Log", tenants: "Tenants" });
+    expect(appTabNames).toEqual({ settings: "Settings", log: "Payments Log", tenants: "Tenants", "tenancy-log": "Tenancy Log" });
     expect(JSON.stringify(checks)).not.toContain("CANARY");
     expect(loggedLines(logs.error)).toEqual([expect.objectContaining({ event: "setup-context-failed" })]);
   });
@@ -96,7 +102,7 @@ describe("setupReport", () => {
       "payments log": [[...LOG_HEADERS]],
       "RentBook Tenants": [[...TENANT_HEADERS]],
     });
-    const wrapper = new NamedTabsGateway(inner, { schedule: "Schedule", settings: SETTINGS_TAB, log: LOG_TAB, tenants: "RentBook Tenants" });
+    const wrapper = new NamedTabsGateway(inner, { schedule: "Schedule", settings: SETTINGS_TAB, log: LOG_TAB, tenants: "RentBook Tenants", "tenancy-log": "Tenancy Log" });
     const { checks } = await setupReport({ ...ENV, TENANTS_TAB: "RentBook Tenants" }, () => ctxFor(wrapper));
     expect(inner.calls).toEqual(["listTabs", "getManyValues", "getValues"]);
     expect(checks.find((check) => check.id === "schedule-tab")?.detail).toBe('Found the tab "schedule".');
@@ -110,12 +116,13 @@ describe("setupReport", () => {
       "payments log": [[...LOG_HEADERS]],
       "RentBook Tenants": [[...TENANT_HEADERS]],
     });
-    const wrapper = new NamedTabsGateway(inner, { schedule: "Schedule", settings: SETTINGS_TAB, log: LOG_TAB, tenants: "RentBook Tenants" });
+    const wrapper = new NamedTabsGateway(inner, { schedule: "Schedule", settings: SETTINGS_TAB, log: LOG_TAB, tenants: "RentBook Tenants", "tenancy-log": "Tenancy Log" });
     expect((await setupReport(ENV, () => ctxFor(wrapper))).realTitles).toEqual({
       schedule: "schedule",
       settings: "settings",
       log: "payments log",
       tenants: "RentBook Tenants",
+      "tenancy-log": null,
     });
     expect((await setupReport(ENV, () => ctxFor(healthy()))).realTitles).toBeNull();
     expect(

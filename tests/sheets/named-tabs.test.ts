@@ -6,11 +6,18 @@ import type { TabNames } from "@/lib/sheets/tab-names";
 import { getMonthView, logPayment, undoPayment, type SheetsContext } from "@/lib/sheets/service";
 import { ensureTabs, LOG_HEADERS, LOG_TAB, readSettings, SETTINGS_TAB } from "@/lib/sheets/settings-store";
 import { moveOutTenancy, saveTenancy } from "@/lib/sheets/tenancy-service";
+import { TENANCY_LOG_HEADERS, TENANCY_LOG_TAB } from "@/lib/sheets/tenancy-log-store";
 import { readTenancies, TENANT_HEADERS, TENANTS_TAB } from "@/lib/sheets/tenants-store";
 import { FakeGateway } from "../support/fake-gateway";
 import { baseSchedule, settingsGrid, TOTAL_HEADER } from "../support/fixtures";
 
-const DEFAULTS: TabNames = { schedule: "Schedule", settings: SETTINGS_TAB, log: LOG_TAB, tenants: TENANTS_TAB };
+const DEFAULTS: TabNames = {
+  schedule: "Schedule",
+  settings: SETTINGS_TAB,
+  log: LOG_TAB,
+  tenants: TENANTS_TAB,
+  "tenancy-log": TENANCY_LOG_TAB,
+};
 const NOW = new Date("2026-10-05T04:30:00Z");
 const OCT = { year: 2026, month: 10 };
 const PAY = { now: NOW, retryDelayMs: 0, loggedBy: "owner@example.com" };
@@ -39,6 +46,10 @@ class GoogleLikeFake extends FakeGateway {
     this.need(tab);
     return super.appendRow(tab, row);
   }
+  async appendRows(tab: string, rows: unknown[][]) {
+    this.need(tab);
+    return super.appendRows(tab, rows);
+  }
   async cloneRow(...args: Parameters<FakeGateway["cloneRow"]>) {
     this.need(args[0]);
     return super.cloneRow(...args);
@@ -54,6 +65,7 @@ const appTabs = (extra: Record<string, unknown[][]> = {}) => ({
   [SETTINGS_TAB]: settingsGrid(),
   [LOG_TAB]: [[...LOG_HEADERS]],
   [TENANTS_TAB]: [[...TENANT_HEADERS]],
+  [TENANCY_LOG_TAB]: [[...TENANCY_LOG_HEADERS]],
   ...extra,
 });
 
@@ -87,6 +99,10 @@ class RecordingGateway extends FakeGateway {
   async appendRow(...args: Parameters<FakeGateway["appendRow"]>) {
     this.note("appendRow", args);
     return super.appendRow(...args);
+  }
+  async appendRows(...args: Parameters<FakeGateway["appendRows"]>) {
+    this.note("appendRows", args);
+    return super.appendRows(...args);
   }
   async cloneRow(...args: Parameters<FakeGateway["cloneRow"]>) {
     this.note("cloneRow", args);
@@ -200,7 +216,7 @@ describe("with the default names the wrapper is invisible", () => {
     const bare = await session(false, { Schedule: baseSchedule() });
     vi.restoreAllMocks();
     const wrapped = await session(true, { Schedule: baseSchedule() });
-    expect(bare.tabNames).toEqual(["Schedule", SETTINGS_TAB, LOG_TAB, TENANTS_TAB]);
+    expect(bare.tabNames).toEqual(["Schedule", SETTINGS_TAB, LOG_TAB, TENANTS_TAB, TENANCY_LOG_TAB]);
     expect(wrapped.calls).toEqual(bare.calls);
     expect(wrapped.log).toEqual(bare.log);
     expect(wrapped.tabNames).toEqual(bare.tabNames);
@@ -254,7 +270,8 @@ describe("finding a real tab", () => {
     expect(await gateway.getValues("My notes", "A1", "UNFORMATTED_VALUE")).toEqual([["n"]]);
     await gateway.addTab("Scratch");
     await gateway.appendRow("Scratch", ["x"]);
-    expect(fake.tabs.get("Scratch")).toEqual([["x"]]);
+    await gateway.appendRows("Scratch", [["y"], ["z"]]);
+    expect(fake.tabs.get("Scratch")).toEqual([["x"], ["y"], ["z"]]);
   });
 });
 
@@ -282,6 +299,7 @@ describe("TENANTS_TAB points at another tab", () => {
     const gateway = new NamedTabsGateway(fake, NAMES);
     await gateway.listTabs();
     await gateway.appendRow("Tenants", ["t-1", "p1", "Asha"]);
+    await gateway.appendRows("Tenants", [["t-2", "p2", "Bala"]]);
     await gateway.updateValues([{ tab: "Tenants", a1: "D2", values: [["98765 43210"]] }]);
     expect(await gateway.getValues("Tenants", "A1:D2", "UNFORMATTED_VALUE")).toEqual([
       TENANT_HEADERS.slice(0, 4),
@@ -293,6 +311,7 @@ describe("TENANTS_TAB points at another tab", () => {
     ]);
     expect(fake.tabs.get("Tenants")).toEqual(THEIRS);
     expect(fake.tabs.get("RentBook Tenants")![1]).toEqual(["t-1", "p1", "Asha", "98765 43210"]);
+    expect(fake.tabs.get("RentBook Tenants")![2]).toEqual(["t-2", "p2", "Bala"]);
   });
 
   it("makes ensureTabs create 'RentBook Tenants' with the headers, and never touch 'Tenants'", async () => {
@@ -301,14 +320,15 @@ describe("TENANTS_TAB points at another tab", () => {
       [SETTINGS_TAB]: settingsGrid(),
       [LOG_TAB]: [[...LOG_HEADERS]],
       Tenants: structuredClone(THEIRS),
+      [TENANCY_LOG_TAB]: [[...TENANCY_LOG_HEADERS]],
     });
     const gateway = new NamedTabsGateway(fake, NAMES);
     await ensureTabs(gateway, "Schedule");
-    expect([...fake.tabs.keys()]).toEqual(["Schedule", SETTINGS_TAB, LOG_TAB, "Tenants", "RentBook Tenants"]);
+    expect([...fake.tabs.keys()]).toEqual(["Schedule", SETTINGS_TAB, LOG_TAB, "Tenants", TENANCY_LOG_TAB, "RentBook Tenants"]);
     expect(fake.tabs.get("RentBook Tenants")).toEqual([TENANT_HEADERS]);
     expect(fake.tabs.get("Tenants")).toEqual(THEIRS);
     // and the app finds the tab it made, under its own name
-    expect(await gateway.listTabs()).toEqual(["Schedule", SETTINGS_TAB, LOG_TAB, TENANTS_TAB]);
+    expect(await gateway.listTabs()).toEqual(["Schedule", SETTINGS_TAB, LOG_TAB, TENANCY_LOG_TAB, TENANTS_TAB]);
   });
 
   it("runs the whole app on a fake that has the owner's Tenants tab, leaving it exactly as it was", async () => {
@@ -337,6 +357,41 @@ describe("TENANTS_TAB points at another tab", () => {
     const gateway = new NamedTabsGateway(fake, NAMES);
     expect(await gateway.listTabs()).toEqual(["Schedule", "tenants", TENANTS_TAB]);
     expect(await gateway.getValues(TENANTS_TAB, "A1:B1", "UNFORMATTED_VALUE")).toEqual([TENANT_HEADERS.slice(0, 2)]);
+  });
+});
+
+describe("TENANCY_LOG_TAB points at another tab", () => {
+  const NAMES: TabNames = { ...DEFAULTS, "tenancy-log": "RentBook Tenancy Log" };
+  const THEIRS = [["When", "What"], ["Monday", "Paid"]];
+
+  it("lists 'RentBook Tenancy Log' as Tenancy Log, and leaves the owner's own Tenancy Log tab out of the list", async () => {
+    const fake = new FakeGateway({ Schedule: baseSchedule(), "Tenancy Log": THEIRS, "RentBook Tenancy Log": [[...TENANCY_LOG_HEADERS]], Notes: [] });
+    expect(await new NamedTabsGateway(fake, NAMES).listTabs()).toEqual(["Schedule", "Tenancy Log", "Notes"]);
+  });
+
+  it("finds a Tenancy Log tab written in another case, and makes appendRows land in it", async () => {
+    const fake = new FakeGateway({ Schedule: baseSchedule(), "tenancy  LOG": [[...TENANCY_LOG_HEADERS]] });
+    const gateway = new NamedTabsGateway(fake, DEFAULTS);
+    expect(await gateway.listTabs()).toEqual(["Schedule", "Tenancy Log"]);
+    await gateway.appendRows(TENANCY_LOG_TAB, [["a"], ["b"]]);
+    expect(fake.tabs.get("tenancy  LOG")).toEqual([TENANCY_LOG_HEADERS, ["a"], ["b"]]);
+  });
+
+  it("makes ensureTabs create 'RentBook Tenancy Log' with the headers, and never touch the owner's 'Tenancy Log'", async () => {
+    const fake = new FakeGateway({ ...appTabs(), "Tenancy Log": structuredClone(THEIRS) });
+    await ensureTabs(new NamedTabsGateway(fake, NAMES), "Schedule");
+    expect([...fake.tabs.keys()]).toEqual(["Schedule", SETTINGS_TAB, LOG_TAB, TENANTS_TAB, "Tenancy Log", "RentBook Tenancy Log"]);
+    expect(fake.tabs.get("RentBook Tenancy Log")).toEqual([TENANCY_LOG_HEADERS]);
+    expect(fake.tabs.get("Tenancy Log")).toEqual(THEIRS);
+  });
+
+  it("writes the history into 'RentBook Tenancy Log' and never into the owner's own tab", async () => {
+    const fake = new FakeGateway({ ...appTabs({ "RentBook Tenancy Log": [[...TENANCY_LOG_HEADERS]] }), "Tenancy Log": structuredClone(THEIRS) });
+    const gateway = new NamedTabsGateway(fake, NAMES);
+    await ensureTabs(gateway, "Schedule");
+    await gateway.appendRows(TENANCY_LOG_TAB, [["x"]]);
+    expect(fake.tabs.get("RentBook Tenancy Log")).toEqual([TENANCY_LOG_HEADERS, ["x"]]);
+    expect(fake.tabs.get("Tenancy Log")).toEqual(THEIRS);
   });
 });
 
@@ -369,6 +424,7 @@ describe("a tab that goes missing", () => {
 
   it.each([
     ["appendRow", (gateway: NamedTabsGateway) => gateway.appendRow(LOG_TAB, ["x"])],
+    ["appendRows", (gateway: NamedTabsGateway) => gateway.appendRows(LOG_TAB, [["x"], ["y"]])],
     ["updateValues", (gateway: NamedTabsGateway) => gateway.updateValues([{ tab: LOG_TAB, a1: "A1", values: [["x"]] }])],
     ["getManyValues", (gateway: NamedTabsGateway) => gateway.getManyValues([{ tab: LOG_TAB, a1: "A1" }], "UNFORMATTED_VALUE")],
     ["cloneRow", (gateway: NamedTabsGateway) => gateway.cloneRow(LOG_TAB, 1, 2, [], [{ col: 0, value: "x" }])],
@@ -415,6 +471,7 @@ describe("realTitles", () => {
       settings: "Settings",
       log: null,
       tenants: "RentBook Tenants",
+      "tenancy-log": null,
     });
   });
 
@@ -434,7 +491,13 @@ describe("knownTitles", () => {
     expect(gateway.knownTitles()).toBeNull();
     await gateway.listTabs();
     expect(fake.calls).toEqual(["listTabs"]);
-    expect(gateway.knownTitles()).toEqual({ schedule: "schedule", settings: "Settings", log: null, tenants: "RentBook Tenants" });
+    expect(gateway.knownTitles()).toEqual({
+      schedule: "schedule",
+      settings: "Settings",
+      log: null,
+      tenants: "RentBook Tenants",
+      "tenancy-log": null,
+    });
     expect(fake.calls).toEqual(["listTabs"]);
   });
 
@@ -504,7 +567,7 @@ describe("a Settings tab that is not there, under a name of the owner's own", ()
 describe("the constructor", () => {
   it("refuses names that cannot be told apart, rather than map two tabs to one", () => {
     expect(() => new NamedTabsGateway(new FakeGateway(), { ...DEFAULTS, tenants: "schedule" })).toThrow(
-      "SCHEDULE_TAB, SETTINGS_TAB, LOG_TAB and TENANTS_TAB must each name a different tab.",
+      "SCHEDULE_TAB, SETTINGS_TAB, LOG_TAB, TENANTS_TAB and TENANCY_LOG_TAB must each name a different tab.",
     );
   });
 });

@@ -234,6 +234,16 @@ export class GoogleSheetsGateway implements SheetsGateway {
   }
 
   async appendRow(tab: string, row: unknown[]) {
+    await this.appendValues(tab, [row]);
+  }
+
+  async appendRows(tab: string, rows: unknown[][]) {
+    if (rows.length === 0) return;
+    await this.appendValues(tab, rows);
+  }
+
+  /** One `values.append`, RAW, with every row in it. Never repeated (see `call`): an append that got through would be added twice. */
+  private async appendValues(tab: string, values: unknown[][]) {
     await this.call(
       () =>
         this.api.spreadsheets.values.append({
@@ -241,7 +251,7 @@ export class GoogleSheetsGateway implements SheetsGateway {
           range: `${quote(tab)}!A1`,
           valueInputOption: "RAW",
           insertDataOption: "INSERT_ROWS",
-          requestBody: { values: [row] },
+          requestBody: { values },
         }),
       [tab],
     );

@@ -132,6 +132,13 @@ export class FakeGateway implements SheetsGateway {
     this.grid(tab).push([...row]);
   }
 
+  /** One call, recorded as "appendRows" (so the counts of "appendRow" stay true): every row lands, or none. */
+  async appendRows(tab: string, rows: unknown[][]) {
+    await this.enter("appendRows");
+    const grid = this.grid(tab);
+    for (const row of rows) grid.push([...row]);
+  }
+
   async ensureColumnCount(tab: string, columns: number) {
     await this.enter("ensureColumnCount");
     this.grid(tab);

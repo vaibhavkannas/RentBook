@@ -8,6 +8,7 @@ import { prepareSheet } from "@/lib/sheets/prepare";
 import type { SheetsContext } from "@/lib/sheets/service";
 import { checkSheet } from "@/lib/sheets/sheet-checks";
 import { ensureTabs, LOG_HEADERS, LOG_TAB, readSettings, SETTINGS_HEADERS, SETTINGS_TAB } from "@/lib/sheets/settings-store";
+import { TENANCY_LOG_HEADERS, TENANCY_LOG_TAB } from "@/lib/sheets/tenancy-log-store";
 import { TENANT_HEADERS, TENANTS_TAB } from "@/lib/sheets/tenants-store";
 import { FakeGateway } from "../support/fake-gateway";
 import { captureLogs } from "../support/logs";
@@ -16,7 +17,13 @@ import { baseSchedule, settingsGrid, TOTAL_HEADER } from "../support/fixtures";
 // Prepare my Sheet: the one thing the Set up page can change. It creates the tabs the app needs and writes their headers
 // (and the first Settings rows), exactly as the app does on its first page view, and never touches what is there.
 
-const DEFAULT_NAMES: TabNames = { schedule: "Schedule", settings: SETTINGS_TAB, log: LOG_TAB, tenants: TENANTS_TAB };
+const DEFAULT_NAMES: TabNames = {
+  schedule: "Schedule",
+  settings: SETTINGS_TAB,
+  log: LOG_TAB,
+  tenants: TENANTS_TAB,
+  "tenancy-log": TENANCY_LOG_TAB,
+};
 
 const ctxFor = (gateway: FakeGateway | NamedTabsGateway, extra: Partial<SheetsContext> = {}): SheetsContext => ({
   gateway,
@@ -43,9 +50,11 @@ describe("prepareSheet", () => {
     const fake = fresh();
     const result = await prepareSheet(ctxFor(fake));
     expect(result).toEqual({ created: ["Settings", "Payments Log", "Tenants"], filled: [] });
-    expect([...fake.tabs.keys()]).toEqual(["Schedule", "Settings", "Payments Log", "Tenants"]);
+    // The Tenancy Log is added by the same check; Prepare's own words do not list it yet (the Set up task does).
+    expect([...fake.tabs.keys()]).toEqual(["Schedule", "Settings", "Payments Log", "Tenants", "Tenancy Log"]);
     expect(fake.tabs.get(LOG_TAB)).toEqual([LOG_HEADERS]);
     expect(fake.tabs.get(TENANTS_TAB)).toEqual([TENANT_HEADERS]);
+    expect(fake.tabs.get(TENANCY_LOG_TAB)).toEqual([TENANCY_LOG_HEADERS]);
     const settings = fake.tabs.get(SETTINGS_TAB)!;
     expect(settings[0]).toEqual(SETTINGS_HEADERS);
     expect(settings.slice(1).map((row) => row[0])).toEqual(["p1", "p2", "p3", "p4", "p5"]);
@@ -60,7 +69,8 @@ describe("prepareSheet", () => {
     expect(fake.tabs.get(SETTINGS_TAB)).toEqual(before.find(([name]) => name === SETTINGS_TAB)![1]);
     expect(fake.tabs.get(LOG_TAB)).toEqual(before.find(([name]) => name === LOG_TAB)![1]);
     expect(fake.tabs.get("Schedule")).toEqual(before.find(([name]) => name === "Schedule")![1]);
-    expect(fake.calls.filter((call) => call === "addTab")).toHaveLength(1);
+    // the Tenants tab, and the Tenancy Log beside it
+    expect(fake.calls.filter((call) => call === "addTab")).toHaveLength(2);
   });
 
   it("does nothing, and says nothing was created, when every tab is there", async () => {
@@ -109,7 +119,7 @@ describe("prepareSheet", () => {
     const wrapper = new NamedTabsGateway(inner, { ...DEFAULT_NAMES, settings: "My Settings", tenants: "RentBook Tenants" });
     const result = await prepareSheet(ctxFor(wrapper));
     expect(result).toEqual({ created: ["My Settings", "Payments Log", "RentBook Tenants"], filled: [] });
-    expect([...inner.tabs.keys()]).toEqual(["Schedule", "My Settings", "Payments Log", "RentBook Tenants"]);
+    expect([...inner.tabs.keys()]).toEqual(["Schedule", "My Settings", "Payments Log", "RentBook Tenants", "Tenancy Log"]);
   });
 
   describe("a tab that is there but empty", () => {
@@ -161,7 +171,7 @@ describe("prepareSheet", () => {
 
     it("is left exactly as it is when row 1 holds only spaces: nothing is written over it, and it is not called filled", async () => {
       const spaces = Array.from({ length: TENANT_HEADERS.length }, () => " ");
-      const fake = fresh({ [SETTINGS_TAB]: settings(), [LOG_TAB]: [[...LOG_HEADERS]], [TENANTS_TAB]: [spaces, tenant] });
+      const fake = fresh({ [SETTINGS_TAB]: settings(), [LOG_TAB]: [[...LOG_HEADERS]], [TENANTS_TAB]: [spaces, tenant], [TENANCY_LOG_TAB]: [[...TENANCY_LOG_HEADERS]] });
       const before = structuredClone(fake.tabs.get(TENANTS_TAB));
       expect(await prepareSheet(ctxFor(fake))).toEqual({ created: [], filled: [] });
       expect(fake.tabs.get(TENANTS_TAB)).toEqual(before);
@@ -183,7 +193,8 @@ describe("prepareSheet", () => {
     const [first, second] = await Promise.all([prepareSheet(ctx), prepareSheet(ctx)]);
     expect(first).toEqual({ created: ["Settings", "Payments Log", "Tenants"], filled: [] });
     expect(second).toEqual({ created: [], filled: [] });
-    expect(fake.calls.filter((call) => call === "addTab")).toHaveLength(3);
+    // Settings, Payments Log, Tenants and the Tenancy Log, once each
+    expect(fake.calls.filter((call) => call === "addTab")).toHaveLength(4);
   });
 
   it("never reads through the page caches, and throws all of them away, after a success and after a failure", async () => {

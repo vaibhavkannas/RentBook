@@ -356,7 +356,7 @@ describe("a Sheet that is not set up yet", () => {
 
   it("says to rename a tab first when the owner has named one that is not in the Sheet", async () => {
     setEnv({ ...ENV, SETTINGS_TAB: "My Settings" });
-    serveSheet(new NamedTabsGateway(fresh(), { schedule: "Schedule", settings: "My Settings", log: LOG_TAB, tenants: TENANTS_TAB }));
+    serveSheet(new NamedTabsGateway(fresh(), { schedule: "Schedule", settings: "My Settings", log: LOG_TAB, tenants: TENANTS_TAB, "tenancy-log": "Tenancy Log" }));
     const text = visibleText(await render());
     expect(text).toContain("Adds the missing tabs (My Settings, Payments Log and Tenants)");
     expect(text).toContain(
@@ -420,7 +420,7 @@ describe("the real titles of the tabs", () => {
       Tenants: [["somebody else's tab"]],
     });
     setEnv({ ...ENV, TENANTS_TAB: "RentBook Tenants" });
-    serveSheet(new NamedTabsGateway(inner, { schedule: "Schedule", settings: SETTINGS_TAB, log: LOG_TAB, tenants: "RentBook Tenants" }));
+    serveSheet(new NamedTabsGateway(inner, { schedule: "Schedule", settings: SETTINGS_TAB, log: LOG_TAB, tenants: "RentBook Tenants", "tenancy-log": "Tenancy Log" }));
     const text = visibleText(await render());
     expect(text).toContain('Found the tab "schedule".');
     expect(text).toContain('Found as "payments log". Headers are right. 0 entries.');

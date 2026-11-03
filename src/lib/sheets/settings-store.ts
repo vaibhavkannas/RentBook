@@ -2,7 +2,7 @@ import { getBrand } from "@/lib/brand";
 import { cleanText, MAX_NAME_LENGTH } from "@/lib/domain/input-rules";
 import type { PortionConfig } from "@/lib/domain/types";
 import { sheetStructure, tabMissing, unknownPortion, validation } from "@/lib/errors";
-import { logEvent } from "@/lib/server/log";
+import { errorLogFields, logEvent } from "@/lib/server/log";
 import { colLetter } from "./a1";
 import { isBlankCell } from "./cells";
 import { namesTabs, type CellWrite, type SheetsGateway } from "./gateway";
@@ -10,6 +10,7 @@ import { headerKey } from "./headers";
 import { findHeaderRowIndex, shorten } from "./schedule";
 import { addTabIfMissing } from "./tabs";
 import { DEFAULT_TAB_NAMES } from "./tab-names";
+import { ensureTenancyLogTab, TENANCY_LOG_TAB } from "./tenancy-log-store";
 import { ensureTenantsTab, TENANTS_TAB } from "./tenants-store";
 
 export const SETTINGS_TAB = DEFAULT_TAB_NAMES.settings;
@@ -285,11 +286,15 @@ function logHeaderWrites(fill: number[]): CellWrite[] {
 export type EnsureReport = { created: string[]; filled: string[] };
 
 /**
- * Creates the Settings, Payments Log and Tenants tabs when they are missing, once per gateway instance
+ * Creates the Settings, Payments Log, Tenants and Tenancy Log tabs when they are missing, once per gateway instance
  * (until resetBootstrap). Settings is seeded from the Schedule header row, and only on a Sheet that has none
- * of the three app tabs yet, or whose Settings tab holds no portions: a Settings tab that went missing while
+ * of the app tabs yet, or whose Settings tab holds no portions: a Settings tab that went missing while
  * the others are still there is refused, never recreated, because the defaults would silently replace the
  * owner's cycle lengths and hike percentages.
+ *
+ * The Tenancy Log is the one tab the app can do without: it holds only the history of changes. If it cannot be added or
+ * looked at, that is logged and every page and every write goes on; a write that finds it missing makes the gateway
+ * forget the check (see resetBootstrap), so the next request tries again.
  */
 export async function ensureTabs(gateway: SheetsGateway, scheduleTab: string): Promise<EnsureReport> {
   const report: EnsureReport = { created: [], filled: [] };
@@ -298,7 +303,7 @@ export async function ensureTabs(gateway: SheetsGateway, scheduleTab: string): P
   if (!tabs.includes(scheduleTab)) throw tabMissing(scheduleTab);
 
   const hasSettings = tabs.includes(SETTINGS_TAB);
-  if (!hasSettings && (tabs.includes(LOG_TAB) || tabs.includes(TENANTS_TAB))) {
+  if (!hasSettings && (tabs.includes(LOG_TAB) || tabs.includes(TENANTS_TAB) || tabs.includes(TENANCY_LOG_TAB))) {
     throw sheetStructure(settingsMissing(namesTabs(gateway) ? gateway.configuredTabName(SETTINGS_TAB) : SETTINGS_TAB));
   }
   if (hasSettings) {
@@ -339,6 +344,11 @@ export async function ensureTabs(gateway: SheetsGateway, scheduleTab: string): P
     }
   }
   note(report, TENANTS_TAB, await ensureTenantsTab(gateway, tabs));
+  try {
+    note(report, TENANCY_LOG_TAB, await ensureTenancyLogTab(gateway, tabs));
+  } catch (error) {
+    logEvent("warn", "tenancy-log-tab-failed", errorLogFields(error, "The Tenancy Log tab could not be added or checked, so the history of changes is not kept until it can be"));
+  }
   bootstrapped.add(gateway);
   return report;
 }

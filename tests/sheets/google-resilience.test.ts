@@ -170,6 +170,21 @@ describe("writes that cannot be repeated are never tried again", () => {
     }
   });
 
+  it("appendRows makes one request however Google fails, and adds the rows in that one request", async () => {
+    for (const failure of [
+      http(503),
+      http(429),
+      http(500),
+      googleError({ code: "ECONNRESET", message: "socket hang up" }),
+    ]) {
+      const { api, valuesAppend } = makeApi();
+      valuesAppend.mockRejectedValue(failure);
+      const error = await failureOf(quick(api).appendRows("Tenancy Log", [["x", 1], ["y", 2]]));
+      expect(valuesAppend).toHaveBeenCalledTimes(1);
+      expect(error).toBeInstanceOf(AppError);
+    }
+  });
+
   it("addTab and cloneRow send their structural batchUpdate once", async () => {
     const add = makeApi();
     add.batchUpdate.mockRejectedValue(http(503));

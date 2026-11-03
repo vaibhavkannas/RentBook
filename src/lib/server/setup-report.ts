@@ -2,7 +2,7 @@ import "server-only";
 import { AppError } from "@/lib/errors";
 import { waitingChecks, checkSheet, type SheetFacts } from "@/lib/sheets/sheet-checks";
 import { NamedTabsGateway } from "@/lib/sheets/named-tabs";
-import type { TabKey } from "@/lib/sheets/tab-names";
+import type { AppTab, TabKey } from "@/lib/sheets/tab-names";
 import type { SheetsContext } from "@/lib/sheets/service";
 import type { Check } from "@/lib/setup-checks";
 import { readEnv, type AppEnv } from "./env";
@@ -15,7 +15,7 @@ export type SetupReport = {
   /** Null when the Sheet could not be looked at (the settings are wrong). */
   facts: SheetFacts | null;
   /** The names the app's own tabs have in the Sheet (the usual ones where the owner gave none); null when the settings cannot be read. */
-  appTabNames: { settings: string; log: string; tenants: string } | null;
+  appTabNames: Record<AppTab, string> | null;
   /** The title each tab has in the Sheet, when the tabs were listed through the tab wrapper; null otherwise. */
   realTitles: Record<TabKey, string | null> | null;
 };
@@ -23,7 +23,12 @@ export type SetupReport = {
 /** What the Sheet's checks say when the settings are too wrong to open the Sheet at all. */
 export const FIX_SETTINGS_FIRST = "Fix the settings above first.";
 
-const tabNamesOf = (env: AppEnv) => ({ settings: env.settingsTab, log: env.logTab, tenants: env.tenantsTab });
+const tabNamesOf = (env: AppEnv): Record<AppTab, string> => ({
+  settings: env.settingsTab,
+  log: env.logTab,
+  tenants: env.tenantsTab,
+  "tenancy-log": env.tenancyLogTab,
+});
 
 /**
  * Runs every check: the environment first (nothing is read for it), then the Sheet (read only, see checkSheet). When the

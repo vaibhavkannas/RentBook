@@ -182,6 +182,7 @@ const TAB_SETTINGS: TabSetting[] = [
   { id: "settings-tab-name", step: 5, name: TAB_VARIABLES.settings, fallback: DEFAULT_TAB_NAMES.settings },
   { id: "log-tab-name", step: 5, name: TAB_VARIABLES.log, fallback: DEFAULT_TAB_NAMES.log },
   { id: "tenants-tab-name", step: 5, name: TAB_VARIABLES.tenants, fallback: DEFAULT_TAB_NAMES.tenants },
+  { id: "tenancy-log-tab-name", step: 5, name: TAB_VARIABLES["tenancy-log"], fallback: DEFAULT_TAB_NAMES["tenancy-log"] },
 ];
 
 /** The name a tab setting gives its tab: what is set (trimmed), or the default. */
@@ -235,7 +236,7 @@ function totalHeaderCheck(env: Env): Check {
  * address of the service account, which the owner has to share the Sheet with. Reads nothing but `env`.
  */
 export function envChecks(env: Env): Check[] {
-  const [schedule, settings, log, tenants] = tabChecks(env);
+  const [schedule, settings, log, tenants, tenancyLog] = tabChecks(env);
   return [
     authSecretCheck(env),
     requiredCheck(
@@ -263,5 +264,6 @@ export function envChecks(env: Env): Check[] {
     settings,
     log,
     tenants,
+    tenancyLog,
   ];
 }

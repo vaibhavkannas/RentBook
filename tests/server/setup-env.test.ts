@@ -51,6 +51,7 @@ describe("envChecks, as a whole", () => {
       ["settings-tab-name", 5, "SETTINGS_TAB"],
       ["log-tab-name", 5, "LOG_TAB"],
       ["tenants-tab-name", 5, "TENANTS_TAB"],
+      ["tenancy-log-tab-name", 5, "TENANCY_LOG_TAB"],
     ]);
   });
 
@@ -342,6 +343,7 @@ describe("the tab and total settings (steps 4 and 5)", () => {
     ["settings-tab-name", "SETTINGS_TAB", "Settings"],
     ["log-tab-name", "LOG_TAB", "Payments Log"],
     ["tenants-tab-name", "TENANTS_TAB", "Tenants"],
+    ["tenancy-log-tab-name", "TENANCY_LOG_TAB", "Tenancy Log"],
   ])("%s says which name is used when %s is not set", (id, name, fallback) => {
     for (const value of [undefined, "", "  "]) {
       expect(one(id, { [name]: value })).toMatchObject({ status: "ok", detail: `Not set, so "${fallback}" is used.` });
@@ -392,6 +394,7 @@ describe("the tab and total settings (steps 4 and 5)", () => {
       ["settings-tab-name", "SETTINGS_TAB"],
       ["log-tab-name", "LOG_TAB"],
       ["tenants-tab-name", "TENANTS_TAB"],
+      ["tenancy-log-tab-name", "TENANCY_LOG_TAB"],
     ]) {
       expect(one(id, { [name]: "x".repeat(101) }), id).toMatchObject({
         status: "fail",
@@ -408,6 +411,9 @@ describe("the tab and total settings (steps 4 and 5)", () => {
       { SCHEDULE_TAB: "Tenants", TENANTS_TAB: "Renters" },
       { LOG_TAB: "x".repeat(101) },
       { TENANTS_TAB: "Schedule" },
+      { TENANCY_LOG_TAB: "Schedule" },
+      { TENANCY_LOG_TAB: "tenants" },
+      { SCHEDULE_TAB: "Tenancy Log", TENANCY_LOG_TAB: "RentBook History" },
     ];
     for (const extra of cases) {
       const env = { ...GOOD, ...extra };
@@ -436,8 +442,9 @@ describe("what a check may carry", () => {
     "canary-project-id",
     "canary-key-id",
     "CANARY-host",
+    "CANARY-tenancy-log-tab",
   ];
-  const [secret, googleId, googleSecret, owner, member, sheetId, schedule, total, settings, log, tenants, privateKey, project, keyId, host] =
+  const [secret, googleId, googleSecret, owner, member, sheetId, schedule, total, settings, log, tenants, privateKey, project, keyId, host, tenancyLog] =
     CANARIES;
   const CANARY_EMAIL = "robot@canary-account.iam.gserviceaccount.com";
   const canaryKey = JSON.stringify({
@@ -463,6 +470,7 @@ describe("what a check may carry", () => {
     SETTINGS_TAB: settings,
     LOG_TAB: log,
     TENANTS_TAB: tenants,
+    TENANCY_LOG_TAB: tenancyLog,
   };
 
   /** What every kind of problem looks like with a canary in the value that caused it. */
@@ -479,6 +487,8 @@ describe("what a check may carry", () => {
     { ...healthy, SETTINGS_TAB: "CANARY-same", LOG_TAB: "canary-same" },
     { ...healthy, SCHEDULE_TAB: "Tenants" },
     { ...healthy, TENANTS_TAB: `CANARY-${"x".repeat(100)}` },
+    { ...healthy, TENANCY_LOG_TAB: `CANARY-${"x".repeat(100)}` },
+    { ...healthy, TENANCY_LOG_TAB: "CANARY-same", LOG_TAB: "canary-same" },
   ];
 
   /** The text of the checks, with the one thing that may be there taken out. */

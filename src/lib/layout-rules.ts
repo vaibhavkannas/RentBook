@@ -40,7 +40,7 @@ export const LAYOUT_RULES: readonly { topic: string; text: string }[] = [
   },
   {
     topic: "Naming a tab",
-    text: `To give one of ${BRAND.name}'s own tabs another name (SETTINGS_TAB, LOG_TAB, TENANTS_TAB), rename the tab in your Sheet first, then set the variable. A name that is not in your Sheet yet makes ${BRAND.name} start a new tab, with the default values for Settings, and leave your old one alone.`,
+    text: `To give one of ${BRAND.name}'s own tabs another name (SETTINGS_TAB, LOG_TAB, TENANTS_TAB, TENANCY_LOG_TAB), rename the tab in your Sheet first, then set the variable. A name that is not in your Sheet yet makes ${BRAND.name} start a new tab, with the default values for Settings, and leave your old one alone.`,
   },
   {
     topic: "What the app never does",

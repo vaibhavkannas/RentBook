@@ -290,6 +290,29 @@ describe("GoogleSheetsGateway", () => {
     );
   });
 
+  it("appends several rows with ONE values.append: RAW, INSERT_ROWS, every row in the request", async () => {
+    const { api, valuesAppend } = mockApi();
+    const rows = [
+      ["2026-11-03T09:30:00.000Z", "t-1", "p1", "Edited", "Phone", "", "", "owner@example.com"],
+      ["2026-11-03T09:30:00.000Z", "t-1", "p1", "Edited", "Advance", 20000, "=HYPERLINK(1)", "owner@example.com"],
+    ];
+    await new GoogleSheetsGateway(api, "sheet-id").appendRows("Tenancy Log", rows);
+    expect(valuesAppend).toHaveBeenCalledTimes(1);
+    expect(valuesAppend).toHaveBeenCalledWith({
+      spreadsheetId: "sheet-id",
+      range: "'Tenancy Log'!A1",
+      valueInputOption: "RAW",
+      insertDataOption: "INSERT_ROWS",
+      requestBody: { values: rows },
+    });
+  });
+
+  it("skips the API call when there are no rows to append", async () => {
+    const { api, valuesAppend } = mockApi();
+    await new GoogleSheetsGateway(api, "sheet-id").appendRows("Tenancy Log", []);
+    expect(valuesAppend).not.toHaveBeenCalled();
+  });
+
   it("skips the API call for an empty write list", async () => {
     const { api, valuesBatchUpdate } = mockApi();
     await new GoogleSheetsGateway(api, "sheet-id").updateValues([]);

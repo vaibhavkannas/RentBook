@@ -98,7 +98,7 @@ describe("LAYOUT_RULES", () => {
 
   it("says to rename a tab in the Sheet first, then set the variable, and why", () => {
     const text = rule("Naming a tab");
-    for (const name of ["SETTINGS_TAB", "LOG_TAB", "TENANTS_TAB"]) expect(text).toContain(name);
+    for (const name of ["SETTINGS_TAB", "LOG_TAB", "TENANTS_TAB", "TENANCY_LOG_TAB"]) expect(text).toContain(name);
     expect(text).toMatch(/rename the tab in your Sheet first, then set the variable/);
     expect(text).toMatch(/new tab/);
     expect(text).toMatch(/default/);

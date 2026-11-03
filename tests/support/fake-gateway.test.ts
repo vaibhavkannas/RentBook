@@ -77,6 +77,36 @@ describe("FakeGateway writes", () => {
     expect(fake.tabs.get("T")).toEqual([["a"], ["b", 2]]);
   });
 
+  it("appendRows adds every row after the last one, in order, as ONE call", async () => {
+    const fake = new FakeGateway({ T: [["a"]] });
+    await fake.appendRows("T", [["b", 2], ["c", 3], ["d"]]);
+    expect(fake.tabs.get("T")).toEqual([["a"], ["b", 2], ["c", 3], ["d"]]);
+    // It is its own call: the counts of appendRow stay what they were.
+    expect(fake.calls).toEqual(["appendRows"]);
+    await fake.appendRow("T", ["e"]);
+    expect(fake.calls).toEqual(["appendRows", "appendRow"]);
+  });
+
+  it("appendRows copies the rows it is given, and refuses a tab that is not there", async () => {
+    const fake = new FakeGateway({ T: [] });
+    const rows = [["b", 2]];
+    await fake.appendRows("T", rows);
+    rows[0][0] = "changed";
+    expect(fake.tabs.get("T")).toEqual([["b", 2]]);
+    await expect(fake.appendRows("Nope", [["x"]])).rejects.toThrow(/No tab named Nope/);
+  });
+
+  it("appendRows obeys failOn: nothing is added while it is listed, and the call is still recorded", async () => {
+    const fake = new FakeGateway({ T: [["a"]] });
+    fake.failOn.add("appendRows");
+    await expect(fake.appendRows("T", [["b"], ["c"]])).rejects.toThrow("appendRows failed");
+    expect(fake.tabs.get("T")).toEqual([["a"]]);
+    expect(fake.calls).toEqual(["appendRows"]);
+    // appendRow is a different method: failing one does not fail the other.
+    await fake.appendRow("T", ["d"]);
+    expect(fake.tabs.get("T")).toEqual([["a"], ["d"]]);
+  });
+
   it("addTab refuses a duplicate title and keeps the existing data", async () => {
     const fake = new FakeGateway({ T: [["a"]] });
     await expect(fake.addTab("T")).rejects.toThrow(/already exists/);
@@ -160,6 +190,10 @@ describe("FakeGateway latency", () => {
     await fake.appendRow("T", ["b"]);
     await fake.cloneRow("T", 1, 3, [], []);
     expect(performance.now() - started).toBeGreaterThanOrEqual(40);
+
+    started = performance.now();
+    await fake.appendRows("T", [["c"], ["d"]]);
+    expect(performance.now() - started).toBeGreaterThanOrEqual(20);
   });
 
   it("applies a write after its delay, and a read sees the sheet as it is when the delay is over", async () => {

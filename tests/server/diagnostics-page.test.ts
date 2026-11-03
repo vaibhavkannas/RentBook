@@ -253,7 +253,7 @@ describe("Diagnostics when the Sheet is not as it should be", () => {
       [LOG_TAB]: [[...LOG_HEADERS]],
     });
     setEnv({ ...ENV, TENANTS_TAB: "RentBook Tenants" });
-    serveSheet(new NamedTabsGateway(inner, { schedule: "Schedule", settings: SETTINGS_TAB, log: LOG_TAB, tenants: "RentBook Tenants" }));
+    serveSheet(new NamedTabsGateway(inner, { schedule: "Schedule", settings: SETTINGS_TAB, log: LOG_TAB, tenants: "RentBook Tenants", "tenancy-log": "Tenancy Log" }));
     const text = visibleText(await render());
     expect(text).toContain('Schedule ("schedule"): 2 month rows');
     expect(text).toContain('Settings ("settings"): 5 portions on');

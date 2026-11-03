@@ -236,6 +236,7 @@ describe("a healthy Sheet", () => {
       settings: "Settings",
       log: "Payments Log",
       tenants: "RentBook Tenants",
+      "tenancy-log": "Tenancy Log",
     });
     const { checks } = await checkSheet(wrapper, { scheduleTab: "Rent", totalHeader: "Total Rent" });
     expect(statuses(checks)).toEqual(Object.fromEntries(ALL_IDS.map((id) => [id, "ok"])));
