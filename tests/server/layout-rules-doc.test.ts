@@ -275,6 +275,7 @@ describe("the labels the docs tell a person to tap are in the source", () => {
     ["Add tenant", ["src/components/PortionBoard.tsx"]],
     ["Move out", ["src/app/tenants/[portionId]/page.tsx"]],
     ["Add details", ["src/components/PortionBoard.tsx"]],
+    ["Tenant page", ["src/components/PortionBoard.tsx"]],
     ["Past tenants", ["src/app/tenants/[portionId]/page.tsx"]],
   ];
 

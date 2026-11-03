@@ -210,7 +210,7 @@ RentBook keeps each portion's tenancy details (phone, move-in date, agreement en
 
 ### How to use it
 
-1. On the month screen, each portion card that has a tenant has a small link under the tenant's name: **Details** when the tenant already has details, **Add details** when not. Tap it to open that portion's details page.
+1. On the month screen, each portion card that has a tenant has a small link under the tenant's name: **Details** when the tenant already has details, **Add details** when not. Tap it to open that portion's details page. On the card of a switched-off portion, which takes no new details, the link reads **Tenant page** (that is where a move-out is recorded).
 2. **Add details:** on the details page, under Current tenancy, fill in the move-in date and whatever else you know, then tap Save details. Only the move-in date is needed. It starts as today, so change it if the tenant moved in earlier.
 3. **Edit:** tap Edit under the details, change what you want, then tap Save details. Only what you changed is written to the Sheet.
 4. **Move out:** tap Move out, choose the move-out date, say what happened to the advance (Refunded, Adjusted or Held), type the refund and deductions if there are any, then tap Record move-out. The tenant moves to Past tenants on the same page, and the portion shows as Vacant from the month the date leaves vacant. A tenant with no details on file can be moved out too, without adding details first. See "Moving out and vacant portions" below for what a move-out writes and does.
