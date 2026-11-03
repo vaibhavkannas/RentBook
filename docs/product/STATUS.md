@@ -1,6 +1,6 @@
 # RentBook v1.0: build status
 
-Last updated: 2026-10-17, at the end of wave 2. Waves 3 to 5 are not started in this file's snapshot; this file is updated at the end of every wave.
+Last updated: 2026-11-03, with wave 3 finished and wave 4 about two thirds done (tasks 4-1 to 4-10 of 13). Wave 5 is not started. This file is updated at the end of every wave and again at the end of the work.
 
 ## Where things are
 
@@ -10,6 +10,8 @@ Every wave is a branch stacked on the one before it, so the newest branch contai
 | --- | --- | --- | --- |
 | `v1-wave-1b` | Wave 1 in full: data layer (1A) and server and security (1B) | d6a2130 | 79 files, 1,782 tests |
 | `v1-wave-2` | Wave 1 plus wave 2 (app feel, items 8 to 13) | f02f900 | 117 files, 2,696 tests |
+| `v1-wave-3` | Wave 2 plus wave 3 (setup, vacant units, add, switch off and reorder units, looser Sheet rules) | 5b105bc | 143 files, 3,967 tests |
+| `v1-wave-4` | Wave 3 plus wave 4 so far (overdue, year view, alerts, Tenancy Log writes) | 15e443d | 161 files, 4,616 tests |
 
 The baseline before this work was 1,420 tests. At every commit `npm test`, `npm run typecheck`, `npm run lint` and `npm run build` were green, and the build passes with no sign-in settings in the environment.
 
@@ -71,6 +73,44 @@ Method: an implementer agent per sitting (test first, one commit per task), a se
 
 Plans: `docs/superpowers/plans/2026-10-14-v1-wave-1-trust.md` and `docs/superpowers/plans/2026-10-17-v1-wave-2-app-feel.md`.
 
+### Wave 3: product setup (items 17, 20, 21, 22)
+
+| Task | What | Commit |
+| --- | --- | --- |
+| 3-1 | Looser Sheet header matching; a Payments Log header that is not ours is never overwritten | 0392e9a |
+| 3-2 | `TOTAL_HEADER` optional: with none set, no total column is written | d40016f |
+| 3-3 | Tabs found by a forgiving match; the owner can name the app's own tabs | 7ab3358 |
+| 3-4 | The environment checked in plain words; the problems the server logs are counted | 8dfbcf9, 5403778 |
+| 3-5 | The owner's Sheet checked without writing, in plain words, with counts and times | 3fd1b52 |
+| 3-6 | The Set up page and "Prepare my Sheet" | ac38f33 |
+| 3-7 | The Diagnostics page, its rows, and a Set up link on a failed page | eec6024 |
+| 3-8 | The vacancy rule; a vacant portion shows as Vacant, counts only let portions, and refuses a plain log for a vacant month | adb762d, 0ef57b5 |
+| 3-9 | A portion is left cleanly vacant when its tenant moves out, including with no details | fab6137 |
+| 3-10 to 3-12 | Active column in Settings; plan, write and reorder portions; owner-only routes and the Portion settings screen | 0628f9c, 7d085db, 2c363bc, 6013d4b, f72ea3d |
+| 3-13 to 3-17 | Docs for Set up, Diagnostics, vacancy and the layout rules; fixtures | 8eed205, 70f65ed |
+| Reviews and fixes | Switch-off no longer hides owed rent; settings saved under the write lock; Active-cell warnings; reorder as one range; a New tenant's closing no longer reads as a move-out; the final fix pass (what a portion change really writes over, the unpaid-rent scan, the Set up button on a warning, switched-off wording, New tenant refused on a switched-off portion) | ba3003e, 0fb52ea, 60cfd0b, e31671f, 5227ad4, afe2beb, 035f719, 15de7fa, ebacfe0, ae14947, b7b3df3, eba632a, ea22a65, b76848e, 5b105bc |
+
+Plan: `docs/superpowers/plans/2026-10-17-v1-wave-3-product-setup.md`.
+
+### Wave 4: features (items 25 to 28), in progress
+
+| Task | What | Commit |
+| --- | --- | --- |
+| 4-1 | Calendar-day helpers and the due-date rule (rent falls due on the 1st, overdue from the 6th) | d53bd23 |
+| 4-2 | Overdue list: who owes what and since when, from the month cards | 0f85ae8 |
+| 4-3 | Year view: each portion's twelve months with what was received | 54fe2bb |
+| 4-4 | Agreement-end and rent-hike alerts, the home card's words, an "Agreement ended" chip | 7e3a555 |
+| 4-5 | The Overdue rent screen (`/overdue`); every page reads the one cached snapshot | 8370cc1 |
+| 4-6 | The Year at a glance screen (`/year`) and its link from the month summary | 3fcd630 |
+| 4-7 | The Agreements and hikes screen (`/alerts`), the Needs attention card, More rows | 90edc2f |
+| 4-8 to 4-10 | The Tenancy Log tab: a history row per changed field after every tenancy change, never able to fail the change itself, with one signed retry from the browser | a482b1f, 3880df9, d9255c5, 3fdb631 |
+| Review fixes | Half-rupee shortfalls match the card; no hike alert for a month that is already vacant; moved-out hints; darker text in vacant year cells; a warning over the hikes when the Tenants tab cannot be read | ab5986d, 15e443d |
+| 4-11 to 4-13 | Not done yet: History on the tenant page, Set up and docs lines for the Tenancy Log, verify | |
+
+The wave 3 final fixes were merged into wave 4 by merge commit 7e56a06 (no rebase). Plan: `docs/superpowers/plans/2026-10-28-v1-wave-4-features.md`.
+
+Reviews so far: waves 1 to 3 had a final whole-wave review each. Wave 4's pure logic (tasks 4-1 to 4-4) and screens (4-5 to 4-7) were reviewed with no Critical or Important findings; the Tenancy Log writes (4-8 to 4-10) were being reviewed when this was written.
+
 ## Not verified (could not be, in the cloud)
 
 - **The write path against real Google.** Read-back, the Payments Log, undo and edit have only run against the in-memory fake. `npm run verify:testcopy` needs your `TEST_SHEET_ID` and credentials, which exist only on your laptop, and I never ran it.
@@ -78,6 +118,8 @@ Plans: `docs/superpowers/plans/2026-10-14-v1-wave-1-trust.md` and `docs/superpow
 - Safari, iOS (safe areas, status bar, focus return after closing a sheet), Firefox, an installed home-screen app (the exit guard), a screen reader, a real keyboard on Android, and the maskable icon crop on a device.
 - Vercel itself: the deployment, `x-vercel-id`, the wording of its Sensitive-variable menu, and whether GitHub private vulnerability reporting, Dependabot and secret scanning are switched on.
 - Real Google latency, and a Payments Log with hundreds of rows.
+- Wave 3: a real Sheet with a tab renamed by the owner, the header-matching rules on the owner's real headers, the Active column (column H), adding, switching off and reordering portions on a real Sheet, and whether Google's multi-row and single-range writes behave as the in-memory fake does.
+- Wave 4: the Tenancy Log tab on a real Sheet (creation on first page view, the many-row append being all or nothing, its latency), the overdue and alert figures on years of real data, and history behaviour of the system Back button between the month, Overdue and Year screens (checked in Chromium on a scratch copy only).
 
 ## Owner steps
 
@@ -85,7 +127,9 @@ Plans: `docs/superpowers/plans/2026-10-14-v1-wave-1-trust.md` and `docs/superpow
 2. Before going live: your `AUTH_SECRET` must be at least 32 characters, or sign-in reports a configuration error. Set `AUTH_URL` in production. Switch on private vulnerability reporting in the GitHub repository settings (the link in `SECURITY.md` and `security.txt` needs it). Renew `Expires` in `public/.well-known/security.txt` by 2027-10-16.
 3. Merge to `main` as fast-forwards, in order: `v1-wave-1b`, then `v1-wave-2` (each branch contains the ones before it, so one fast-forward to the newest branch brings everything). For example `git push origin v1-wave-1b:main`, later `git push origin v1-wave-2:main`. Roll back by promoting the previous Vercel deployment.
 4. After deploying, check Google sign-in, one real payment (log and undo), and the browser console on the live site for Content Security Policy messages. If the policy blocks something, set `CSP_REPORT_ONLY=1` and redeploy: it reports instead of blocking.
-5. Tell me if the gmail.com and googlemail.com addresses in `tests/server/env.test.ts` (they test the Gmail dot rule) and the made-up `*.iam.gserviceaccount.com` names in the Google client tests are acceptable under "example.com only".
+5. Before first using the app after the wave 4 deploy: the first page view adds an empty "Tenancy Log" tab to your Sheet. If your Sheet already has an unrelated tab with that name, rename it first or set `TENANCY_LOG_TAB`. In the same way, if you use a custom tab name for any app tab, rename the tab in the Sheet first: Prepare my Sheet or the first page view would otherwise create new tabs with default cycle and hike values.
+6. Before using "Switch off" on a portion: clear any old closed Tenants rows left by a New tenant of the same name or one that was undone, make sure Settings cell H1 and column H are empty, and on the test copy try appending a column, a single-range reorder, clearing a Move-out cell with a raw empty value, a checkbox rule in column H, and case-insensitive tab titles. Then run `npm run verify:testcopy` again.
+7. Tell me if the gmail.com and googlemail.com addresses in `tests/server/env.test.ts` (they test the Gmail dot rule) and the made-up `*.iam.gserviceaccount.com` names in the Google client tests are acceptable under "example.com only".
 
 ## What changes for you and the people who use the app
 
@@ -100,6 +144,9 @@ Plans: `docs/superpowers/plans/2026-10-14-v1-wave-1-trust.md` and `docs/superpow
 
 ## Known limits and deferred items
 
+- Wave 3: a New tenant corrected by a second New tenant of the old name with Replace leaves the old tenancy closed, so the portion shows Vacant with "Add tenant"; adding details for the same name ends the vacancy. A move-out recorded without details cannot be undone in the app. After a switch-off an old gap month keeps its pending card, so it stays in what is due until logged or the Schedule is edited. Typed (non-formula) totals go stale when `TOTAL_HEADER` is not set. On a switched-off card with no details the link reads "Tenant page".
+- Wave 4: a card measures a month against the payment before it, so an extra payment lifts the next month's reference rent and the next month can read "less than rent"; the overdue list and year view agree with the card (the card rule is unchanged). A blank tenant cell is a name of its own and ends a tenant's run. A portion whose tenant left without a recorded move-out shows long arrears, a hike and an ended agreement until the move-out is recorded (the screens say so). A hike alert is not hidden for a move-out recorded for a future day until that month is vacant. The year grid can show an unpaid month of an earlier tenant that the overdue list ignores. `/year?year=2099` shows a grid of "Not due yet" cells. Undoing a New tenant's first payment reopens the old tenancy with no Tenancy Log row; a New tenant that fails halfway writes no history; the page does not refresh after a successful browser retry of a history write.
+
 - Back and history: after Month, More, Settings, Month there is one extra history entry (More). Browsers without the Navigation API (Firefox) add one history entry per round trip. The phone's own Back button shows a screen as it was kept, so it can show an out-of-date screen; the tab bar and the back arrow refresh.
 - On Android, closing the keyboard with Back usually leaves the field focused, so the tab bar stays hidden until the next tap elsewhere (unchecked on a device).
 - The toast cannot be paused (4 seconds). Focus drops to the page after a save. Sheets cover the tab bar, so "tap another tab" in a message inside an open sheet asks for a hidden bar (one message says "Close this, then").
@@ -110,6 +157,8 @@ Plans: `docs/superpowers/plans/2026-10-14-v1-wave-1-trust.md` and `docs/superpow
 - Smaller items I left alone: a hack in `tests/support/render-open.ts` that forces forms open for rendering, no red border on invalid fields (the message under the field is the only signal), a 15 px un-dimmed strip beside a sheet on desktop browsers with classic scrollbars, some tests that read source text instead of running the component, a few wall-clock checks in `tests/support/fake-gateway.test.ts`, and the Portion filter on Activity listing every portion name ever logged, including renamed ones.
 
 ## Rulings made on your behalf
+
+- Wave 3: `/api/health` stays a plain liveness check; the Set up and Diagnostics pages report configuration. A portion's tenant leaving is detected by the tenant's name. Wave 4: rent is due on the 1st and overdue from the 6th; lists never disagree with the month cards; the Tenancy Log never blocks a tenancy change and is never read with the snapshot.
 
 - `/api/health` stays a plain liveness check (`{ ok, version }`); the wave 3 setup and diagnostics pages will report configuration.
 - Sessions without a recorded sign-in time keep working until they expire or are renewed once; renewing stamps them and the 7-day cap then applies.
