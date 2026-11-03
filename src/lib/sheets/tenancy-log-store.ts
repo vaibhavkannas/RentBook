@@ -36,9 +36,10 @@ export const TENANCY_LOG_RANGE = `A1:${LAST_COLUMN}`;
 
 /**
  * Creates the Tenancy Log tab with its headers when it is missing, and writes the headers into a tab that is empty. Says which
- * it did ("created", "filled", or "none"). A tab with anything in it is never touched, and its headers are not judged here: a
- * wrong one is told on every read (see `parseTenancyLog`), and never stops anything else. `existingTabs` is the tab list the
- * caller already read.
+ * it did ("created", "filled", or "none"). A tab whose first row holds anything is never written over, and its headers are not
+ * judged here: a wrong one is told on every read (see `parseTenancyLog`), and never stops anything else. Only an empty first
+ * row (columns A to H) is filled with the headers, whatever sits below it. `existingTabs` is the tab list the caller already
+ * read.
  */
 export async function ensureTenancyLogTab(
   gateway: SheetsGateway,
