@@ -1,8 +1,9 @@
 import { createElement, type ReactElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { MonthView, PortionCard } from "@/lib/domain/types";
-import { AppError } from "@/lib/errors";
+import { AppError, unavailable } from "@/lib/errors";
+import { baseRows, PORTIONS, tenancyRow } from "../support/fixtures";
 import { smallTargets, unpressedTargets } from "../support/tap-targets";
 
 // A smoke test of the home page: the month summary and the cards, with the data layer replaced. The
@@ -11,6 +12,7 @@ import { smallTargets, unpressedTargets } from "../support/tap-targets";
 const mocks = vi.hoisted(() => ({
   getViewer: vi.fn(),
   loadMonthView: vi.fn(),
+  loadPageSnapshot: vi.fn(),
   redirect: vi.fn((to: string) => {
     throw new Error(`redirect:${to}`);
   }),
@@ -25,7 +27,7 @@ vi.mock("next/navigation", () => ({
 vi.mock("@/auth", () => ({ signOut: vi.fn() }));
 vi.mock("@/lib/server/auth-guard", () => ({ getViewer: mocks.getViewer }));
 vi.mock("@/lib/server/context", () => ({ getSheetsContext: () => ({}) }));
-vi.mock("@/lib/server/freshness", () => ({ loadMonthView: mocks.loadMonthView }));
+vi.mock("@/lib/server/freshness", () => ({ loadMonthView: mocks.loadMonthView, loadPageSnapshot: mocks.loadPageSnapshot }));
 
 import Home from "@/app/page";
 
@@ -71,6 +73,8 @@ beforeEach(() => {
   vi.clearAllMocks();
   mocks.getViewer.mockResolvedValue({ email: "member@example.com", isOwner: false });
   mocks.loadMonthView.mockResolvedValue(view());
+  // A quiet Sheet: nothing is overdue, no agreement or hike is coming, so the Needs attention card has nothing to say.
+  mocks.loadPageSnapshot.mockResolvedValue({ portions: [], rows: [], tenancies: [] });
 });
 
 describe("the home page", () => {
@@ -136,6 +140,119 @@ describe("the link to the Year screen", () => {
   it("is not there when the Sheet could not be read: the summary is not either", async () => {
     mocks.loadMonthView.mockRejectedValue(new AppError("sheet-structure", "The Schedule tab has no Month header."));
     expect(await render()).not.toContain("Year at a glance");
+  });
+});
+
+describe("the Needs attention card", () => {
+  /** 17 October 2026, noon in India: this month is October, and the base Schedule's four let portions are overdue. */
+  const NOW = new Date("2026-10-17T06:30:00Z");
+  const busy = (tenancies = [tenancyRow({ id: "t-1", portionId: "p1", tenant: "Asha", agreementEnd: "2026-10-05" })]) => ({
+    portions: PORTIONS,
+    rows: baseRows(),
+    tenancies,
+  });
+  const card = (html: string) => /<section aria-label="Needs attention"[^>]*>[\s\S]*?<\/section>/.exec(html)?.[0] ?? "";
+  const rowsIn = (html: string) =>
+    [...card(html).matchAll(/<a [^>]*href="([^"]*)"[^>]*>([\s\S]*?)<\/a>/g)].map((match) => ({
+      href: match[1],
+      text: match[2].replace(/<[^>]+>/g, "").replace(/ ?›$/, "").trim(),
+    }));
+
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["Date"], now: NOW });
+    mocks.loadPageSnapshot.mockResolvedValue(busy());
+  });
+  afterEach(() => vi.useRealTimers());
+
+  it("shows, this month, a row for overdue rent, an ended agreement and a hike, in that order, each with its screen", async () => {
+    const html = await render({ month: "2026-10" });
+    expect(rowsIn(html)).toEqual([
+      { href: "/overdue?month=2026-10", text: "Rent overdue: 4 portions, ₹\u00a032,885" },
+      { href: "/alerts?month=2026-10", text: "1 agreement ended" },
+      { href: "/alerts?month=2026-10#hikes", text: "Rent goes up soon for 1 portion" },
+    ]);
+  });
+
+  it("is this month's, so it shows when the address has no month too", async () => {
+    expect(rowsIn(await render({})).map((row) => row.href)).toEqual([
+      "/overdue?month=2026-10",
+      "/alerts?month=2026-10",
+      "/alerts?month=2026-10#hikes",
+    ]);
+  });
+
+  it("sits between the month header and the summary", async () => {
+    const html = await render({ month: "2026-10" });
+    expect(html.indexOf('<nav aria-label="Month"')).toBeLessThan(html.indexOf('aria-label="Needs attention"'));
+    expect(html.indexOf('aria-label="Needs attention"')).toBeLessThan(html.indexOf('aria-label="Month summary"'));
+  });
+
+  it("reads the snapshot for the signed-in person, after the month view", async () => {
+    await render({ month: "2026-10" });
+    expect(mocks.loadPageSnapshot).toHaveBeenCalledTimes(1);
+    expect(mocks.loadPageSnapshot).toHaveBeenCalledWith(expect.anything(), "member@example.com");
+    expect(mocks.loadMonthView.mock.invocationCallOrder[0]).toBeLessThan(mocks.loadPageSnapshot.mock.invocationCallOrder[0]);
+  });
+
+  it("has no card for another month, and does not read the snapshot for one", async () => {
+    for (const month of ["2026-09", "2026-11", "2025-10"]) {
+      expect(await render({ month })).not.toContain("Needs attention");
+    }
+    expect(mocks.loadPageSnapshot).not.toHaveBeenCalled();
+  });
+
+  it("has no card when nothing is due", async () => {
+    mocks.loadPageSnapshot.mockResolvedValue({ portions: [], rows: [], tenancies: [] });
+    const html = await render({ month: "2026-10" });
+    expect(html).not.toContain("Needs attention");
+    expect(html).toContain('aria-label="Month summary"');
+  });
+
+  it("has no card when the month view could not be read, and the problem is the only thing said", async () => {
+    mocks.loadMonthView.mockRejectedValue(new AppError("sheet-structure", "The Schedule tab has no Month header."));
+    const html = await render({ month: "2026-10" });
+    expect(html).not.toContain("Needs attention");
+    expect(html).toContain("The Schedule tab has no Month header.");
+    expect(mocks.loadPageSnapshot).not.toHaveBeenCalled();
+  });
+
+  it("shows nothing, and the rest of the page as usual, when its own read fails", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      mocks.loadPageSnapshot.mockRejectedValue(unavailable());
+      const html = await render({ month: "2026-10" });
+      expect(html).not.toContain("Needs attention");
+      expect(html).toContain('aria-label="Month summary"');
+      expect(html).not.toContain('role="alert"');
+      // the failure is logged, in words that carry no tenant's name
+      expect(warn).toHaveBeenCalledTimes(1);
+      expect(String(warn.mock.calls[0][0])).toContain("attention-card-failed");
+      expect(String(warn.mock.calls[0][0])).not.toContain("Asha");
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it("gives every row a 44 px target that answers a press", async () => {
+    const out = card(await render({ month: "2026-10" }));
+    expect(out).not.toBe("");
+    expect(smallTargets(out)).toEqual([]);
+    expect(unpressedTargets(out)).toEqual([]);
+  });
+
+  it("adds a row for an agreement that ends soon", async () => {
+    mocks.loadPageSnapshot.mockResolvedValue(
+      busy([
+        tenancyRow({ id: "t-1", portionId: "p1", tenant: "Asha", agreementEnd: "2026-10-05" }),
+        tenancyRow({ id: "t-3", portionId: "p3", tenant: "Chitra", agreementEnd: "2026-12-01" }),
+      ]),
+    );
+    expect(rowsIn(await render({ month: "2026-10" })).map((row) => row.text)).toEqual([
+      "Rent overdue: 4 portions, ₹\u00a032,885",
+      "1 agreement ended",
+      "1 agreement ends within 60 days",
+      "Rent goes up soon for 1 portion",
+    ]);
   });
 });
 

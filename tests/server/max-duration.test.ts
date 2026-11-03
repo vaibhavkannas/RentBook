@@ -27,6 +27,7 @@ describe("maxDuration", () => {
     const names = entries.filter((entry) => touchesTheSheet(entry.source)).map((entry) => entry.name).sort();
     expect(names).toEqual([
       "activity/page.tsx",
+      "alerts/page.tsx",
       "api/payments/log-retry/route.ts",
       "api/payments/route.ts",
       "api/payments/undo/route.ts",

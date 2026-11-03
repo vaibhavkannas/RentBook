@@ -100,7 +100,7 @@ export default function PortionBoard({ monthKey, monthLabel, cards, defaultDate 
                   <>
                     <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
                       {card.tenancy &&
-                        tenancyChips(card.tenancy).map((chip) => (
+                        tenancyChips(card.tenancy, defaultDate).map((chip) => (
                           <Pill key={chip} tone="neutral">
                             {chip}
                           </Pill>

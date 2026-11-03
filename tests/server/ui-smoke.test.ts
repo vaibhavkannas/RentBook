@@ -125,6 +125,28 @@ describe("PortionBoard", () => {
   });
 });
 
+describe("PortionBoard: an agreement that has ended", () => {
+  const boardOn = (day: string, agreementEnd: string) =>
+    html(
+      createElement(PortionBoard, {
+        monthKey: "2026-10",
+        monthLabel: "October 2026",
+        cards: [card({ tenancy: { ...SUMMARY, agreementEnd } })],
+        defaultDate: day,
+      }),
+    );
+
+  it("says the agreement ended, with its date, once the day has gone by", () => {
+    expect(boardOn("2026-10-17", "2026-10-05")).toContain("Agreement ended 5 Oct 2026");
+  });
+
+  it("still says it ends on the day itself, and before", () => {
+    expect(boardOn("2026-10-05", "2026-10-05")).toContain("Agreement ends 5 Oct 2026");
+    expect(boardOn("2026-10-04", "2026-10-05")).toContain("Agreement ends 5 Oct 2026");
+    expect(boardOn("2026-10-17", "2026-10-05")).not.toContain("Agreement ends");
+  });
+});
+
 describe("PortionBoard on the shared pieces", () => {
   const paid = card({ status: "paid", entry: { tenant: "Asha", count: 3, amount: 10000 }, next: null, tenancy: SUMMARY });
 

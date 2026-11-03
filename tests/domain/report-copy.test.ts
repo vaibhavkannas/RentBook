@@ -1,15 +1,21 @@
 import { describe, expect, it } from "vitest";
-import { agreementAlerts, hikeAlerts } from "@/lib/domain/alerts";
+import { AGREEMENT_NOTICE_DAYS, agreementAlerts, HIKE_NOTICE_MONTHS, hikeAlerts } from "@/lib/domain/alerts";
 import { overdueList } from "@/lib/domain/overdue";
 import { OVERDUE_GRACE_DAYS, RENT_DUE_DAY } from "@/lib/domain/rent-due";
 import type { YearCell } from "@/lib/domain/year-view";
 import {
   AGREEMENT_HINT,
+  agreementPill,
   agreementSentence,
+  ALERTS_FOOTNOTE,
+  ALERTS_TENANTS_PROBLEM_NOTICE,
   attentionItems,
-  hikeSentence,
   earlierMonthsText,
+  hikePill,
+  hikeSentence,
   MOVED_OUT_HINT,
+  NO_AGREEMENTS_TEXT,
+  NO_HIKES_TEXT,
   nothingOverdueText,
   OVERDUE_MONTHS_SHOWN,
   OVERDUE_RULES,
@@ -338,6 +344,55 @@ describe("hikeSentence", () => {
   it("writes a percent with a fraction as it is", () => {
     expect(hikeSentence(hike({ hikePercent: 2.5 }))).toContain("Rent goes up 2.5% with");
     expect(hikeSentence(hike({ hikePercent: 0.1 }))).toContain("Rent goes up 0.1% with");
+  });
+});
+
+describe("agreementPill", () => {
+  const end = "2026-12-01";
+
+  it("says Ended in the danger tone for an agreement that has ended", () => {
+    expect(agreementPill({ state: "ended", days: -12, agreementEnd: end })).toEqual({ tone: "danger", label: "Ended" });
+  });
+
+  it("says Ends today in the warn tone", () => {
+    expect(agreementPill({ state: "today", days: 0, agreementEnd: end })).toEqual({ tone: "warn", label: "Ends today" });
+  });
+
+  it("counts the days left in the warn tone, in the singular for one", () => {
+    expect(agreementPill({ state: "soon", days: 45, agreementEnd: end })).toEqual({ tone: "warn", label: "45 days left" });
+    expect(agreementPill({ state: "soon", days: 1, agreementEnd: end })).toEqual({ tone: "warn", label: "1 day left" });
+    expect(agreementPill({ state: "soon", days: AGREEMENT_NOTICE_DAYS, agreementEnd: end }).label).toBe("60 days left");
+  });
+});
+
+describe("hikePill", () => {
+  it("says Next payment in the warn tone for a hike that is due", () => {
+    expect(hikePill({ state: "due", hikeMonth: { year: 2026, month: 10 } })).toEqual({ tone: "warn", label: "Next payment" });
+  });
+
+  it("names the month in the neutral tone for one that is coming", () => {
+    expect(hikePill({ state: "soon", hikeMonth: { year: 2026, month: 12 } })).toEqual({ tone: "neutral", label: "December 2026" });
+  });
+});
+
+describe("the Agreements and hikes screen's other words", () => {
+  it("says what an empty section means, from the constants that decide it", () => {
+    expect(NO_AGREEMENTS_TEXT).toBe(`No agreement ends in the next ${AGREEMENT_NOTICE_DAYS} days.`);
+    expect(NO_AGREEMENTS_TEXT).toBe("No agreement ends in the next 60 days.");
+    expect(NO_HIKES_TEXT).toBe(`No rent hike in the next ${HIKE_NOTICE_MONTHS} months.`);
+    expect(NO_HIKES_TEXT).toBe("No rent hike in the next 2 months.");
+  });
+
+  it("explains that a hike comes with a payment, and that nothing is sent", () => {
+    expect(ALERTS_FOOTNOTE).toBe(
+      "A hike comes with the first payment of a new cycle (see Portion settings). The app sends no reminders: check here.",
+    );
+  });
+
+  it("warns that agreements cannot be checked while the Tenants tab cannot be read", () => {
+    expect(ALERTS_TENANTS_PROBLEM_NOTICE("The Tenants tab has no Phone header.")).toBe(
+      "The Tenants tab can't be read, so agreements can't be checked. The Tenants tab has no Phone header.",
+    );
   });
 });
 

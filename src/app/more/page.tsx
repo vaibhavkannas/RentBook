@@ -55,6 +55,15 @@ export default async function MorePage({
         </div>
       </Card>
 
+      <section aria-labelledby="rent-heading" className="mt-6">
+        <h2 id="rent-heading" className="text-sm text-muted">
+          Rent
+        </h2>
+        <MoreLink href={withMonth("/overdue", month)} title="Overdue rent" hint="Who owes what, most first" />
+        <MoreLink href={withMonth("/year", month)} title="Year at a glance" hint="Each portion, month by month" />
+        <MoreLink href={withMonth("/alerts", month)} title="Agreements and hikes" hint="Agreements ending and rent going up" />
+      </section>
+
       {viewer.isOwner && (
         <>
           <MoreLink

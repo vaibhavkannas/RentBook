@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import pkg from "../../package.json";
 import { BRAND } from "@/lib/brand";
 import { buttonClasses, pillClasses } from "@/lib/ui-classes";
+import { smallTargets, unpressedTargets } from "../support/tap-targets";
 
 // The More screen: who is signed in, the owner's way to the portion settings, Set up and Diagnostics, Sign out, and the version.
 
@@ -70,6 +71,62 @@ describe("the More page", () => {
     expect(visibleText(html)).toContain("Signed in as member@example.com");
     expect(html).toContain(`<span class="${pillClasses("neutral")}">Member</span>`);
     expect(html).not.toContain(">Owner<");
+  });
+
+  describe("the Rent group, for every viewer", () => {
+    const ROWS = [
+      ["Overdue rent", "/overdue", "Who owes what, most first"],
+      ["Year at a glance", "/year", "Each portion, month by month"],
+      ["Agreements and hikes", "/alerts", "Agreements ending and rent going up"],
+    ] as const;
+
+    it.each(ROWS)("shows %s with what it is for, as a 44 px link that carries the month", async (title, path, hint) => {
+      for (const as of [asMember, asOwner]) {
+        as();
+        const html = await render({ month: "2026-10" });
+        const link = new RegExp(`<a [^>]*href="${path}\\?month=2026-10"[^>]*>[\\s\\S]*?</a>`).exec(html)?.[0] ?? "";
+        expect(link).toContain(`>${title}<`);
+        expect(link).toContain(hint);
+        expect(link).toMatch(/class="[^"]*\bmin-h-11\b/);
+        expect(link).toMatch(/class="[^"]*\bpress\b/);
+      }
+    });
+
+    it("links without a month when there is none, or it is not one", async () => {
+      for (const [, path] of ROWS) {
+        expect(await render()).toContain(`href="${path}"`);
+        expect(await render({ month: "garbage" })).toContain(`href="${path}"`);
+      }
+    });
+
+    it("sits under a Rent heading, after who is signed in and before Sign out, with the three rows in order", async () => {
+      for (const as of [asMember, asOwner]) {
+        as();
+        const html = await render();
+        const at = (text: string) => html.indexOf(text);
+        expect(html).toMatch(/<h2 [^>]*>Rent<\/h2>/);
+        expect(at(">Rent<")).toBeGreaterThan(at("Signed in as"));
+        expect(at("Overdue rent")).toBeGreaterThan(at(">Rent<"));
+        expect(at("Year at a glance")).toBeGreaterThan(at("Overdue rent"));
+        expect(at("Agreements and hikes")).toBeGreaterThan(at("Year at a glance"));
+        expect(at("Sign out")).toBeGreaterThan(at("Agreements and hikes"));
+      }
+    });
+
+    it("keeps the owner's own rows after it", async () => {
+      asOwner();
+      const html = await render();
+      expect(html.indexOf("Portion settings")).toBeGreaterThan(html.indexOf("Agreements and hikes"));
+    });
+
+    it("has no 44 px miss: every link and button on the page is tall enough, and answers a press", async () => {
+      for (const as of [asMember, asOwner]) {
+        as();
+        const html = await render({ month: "2026-10" });
+        expect(smallTargets(html)).toEqual([]);
+        expect(unpressedTargets(html)).toEqual([]);
+      }
+    });
   });
 
   it("lets the owner open the portion settings, with what is in them, and carries the month", async () => {

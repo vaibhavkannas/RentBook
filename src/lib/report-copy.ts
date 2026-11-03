@@ -1,10 +1,11 @@
 import { withMonth } from "@/lib/app-nav";
-import { AGREEMENT_NOTICE_DAYS, type AgreementAlert, type HikeAlert } from "@/lib/domain/alerts";
+import { AGREEMENT_NOTICE_DAYS, HIKE_NOTICE_MONTHS, type AgreementAlert, type HikeAlert } from "@/lib/domain/alerts";
 import { overdueTotals, type OverdueItem, type OverdueMonth } from "@/lib/domain/overdue";
 import { OVERDUE_GRACE_DAYS, RENT_DUE_DAY } from "@/lib/domain/rent-due";
 import type { YearMonth } from "@/lib/domain/types";
 import type { YearCell, YearCellState } from "@/lib/domain/year-view";
 import { formatDay, formatMonthTitle, formatRupees } from "@/lib/format";
+import type { PillTone } from "@/lib/ui-classes";
 
 /**
  * The words the overdue list, the year view and the alerts show, kept here so they can be tested. Every figure in them comes
@@ -177,6 +178,36 @@ export function hikeSentence(
       : `from the payment for ${month}, after ${plural(alert.paymentsLeft, "more payment")}`;
   return `Rent goes up ${alert.hikePercent}% ${when}: ${rents}.`;
 }
+
+/** The pill on an agreement's card: Ended (danger), Ends today, or the days left (both warn). */
+export function agreementPill(alert: Pick<AgreementAlert, "state" | "days" | "agreementEnd">): { tone: PillTone; label: string } {
+  switch (alert.state) {
+    case "ended":
+      return { tone: "danger", label: "Ended" };
+    case "today":
+      return { tone: "warn", label: "Ends today" };
+    case "soon":
+      return { tone: "warn", label: `${plural(alert.days, "day")} left` };
+  }
+}
+
+/** The pill on a hike's card: Next payment (warn) when it is due, else the month it comes (neutral). */
+export function hikePill(alert: Pick<HikeAlert, "state" | "hikeMonth">): { tone: PillTone; label: string } {
+  return alert.state === "due"
+    ? { tone: "warn", label: "Next payment" }
+    : { tone: "neutral", label: formatMonthTitle(alert.hikeMonth) };
+}
+
+/** What each section of the Agreements and hikes screen says when it has nothing, from the constants that decide it. */
+export const NO_AGREEMENTS_TEXT = `No agreement ends in the next ${AGREEMENT_NOTICE_DAYS} days.`;
+export const NO_HIKES_TEXT = `No rent hike in the next ${HIKE_NOTICE_MONTHS} months.`;
+
+/** Under both sections: where the hike comes from, and that nothing is sent. */
+export const ALERTS_FOOTNOTE =
+  "A hike comes with the first payment of a new cycle (see Portion settings). The app sends no reminders: check here.";
+
+/** In place of the agreements when the Tenants tab cannot be read: without it no agreement is known, so none can be said to be far off. */
+export const ALERTS_TENANTS_PROBLEM_NOTICE = (problem: string) => `The Tenants tab can't be read, so agreements can't be checked. ${problem}`;
 
 // The home screen's "Needs attention" card
 
