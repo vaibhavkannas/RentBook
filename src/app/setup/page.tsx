@@ -48,7 +48,8 @@ export default async function SetupPage({
   const month = monthParam((await searchParams)?.month);
   const { checks, facts, appTabNames } = await setupReport(process.env, getSheetsContext);
   const offer = prepareOffer(checks, facts, appTabNames ?? {});
-  const settingsReady = checks.some((check) => check.id === "settings" && check.status === "ok");
+  // A warning (an Active cell that is not Yes or No) means the tab is readable, so it keeps the link; a failure or a tab not made yet does not.
+  const settingsReady = checks.some((check) => check.id === "settings" && (check.status === "ok" || check.status === "warn"));
   const allGood = checks.every((check) => check.status === "ok");
 
   return (
