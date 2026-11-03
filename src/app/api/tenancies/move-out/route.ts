@@ -1,6 +1,7 @@
 import { requireUser } from "@/lib/server/auth-guard";
 import { getSheetsContext } from "@/lib/server/context";
 import { handle, parseBody, readJsonBody } from "@/lib/server/http";
+import { withHistoryToken } from "@/lib/server/retry-token";
 import { moveOutBody } from "@/lib/server/schemas";
 import { runWrite } from "@/lib/server/writes";
 import { moveOutTenancy, moveOutWithoutDetails } from "@/lib/sheets/tenancy-service";
@@ -24,6 +25,7 @@ export async function POST(request: Request) {
         ? moveOutTenancy(getSheetsContext(), body, stamp)
         : moveOutWithoutDetails(getSheetsContext(), body, stamp),
     );
-    return { ...result };
+    // The Tenancy Log rows stay here: the browser gets a signed retry token when the history did not save.
+    return withHistoryToken(result, viewer.email);
   }, request);
 }

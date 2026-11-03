@@ -18,6 +18,10 @@ export const TENANCY_NO_CONFIRMATION = PAYMENT_NO_CONFIRMATION;
 export type TenancyApiBody = {
   ok: boolean;
   error?: { code: string; message: string; details?: Record<string, unknown> };
+  /** False when the change was saved but its Tenancy Log rows were not (see settleHistory). Absent for a refusal. */
+  historyWritten?: boolean;
+  /** Present when the history did not save: the signed token to send back to add its rows. */
+  historyRetryToken?: string;
 };
 
 /**

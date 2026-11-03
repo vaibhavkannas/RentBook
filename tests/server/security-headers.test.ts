@@ -42,7 +42,7 @@ describe("next.config headers", () => {
   });
 
   it("keeps API answers out of every cache", async () => {
-    for (const path of ["/api/payments", "/api/payments/log-retry", "/api/settings", "/api/auth/session"]) {
+    for (const path of ["/api/payments", "/api/payments/log-retry", "/api/tenancies/history-retry", "/api/settings", "/api/auth/session"]) {
       expect((await headersFor(path)).get("cache-control"), path).toBe("private, no-store, max-age=0");
     }
   });

@@ -8,6 +8,7 @@ import { Notice } from "@/components/ui/Notice";
 import { SlowHint } from "@/components/ui/SlowHint";
 import { useToast } from "@/components/ui/Toast";
 import { afterEdit, fieldProblem, plainMessage, plainProblem, problemAt, type FormProblem } from "@/lib/form-errors";
+import { HISTORY_NOT_SAVED, settleHistory } from "@/lib/history-retry";
 import { sendJson } from "@/lib/post-json";
 import { sendFailureMessage } from "@/lib/request-copy";
 import { DETAILS_SAVED_TOAST } from "@/lib/toast-copy";
@@ -90,6 +91,9 @@ export default function TenancyForm({ target, initial, noticeShown = false, mont
     if (sent.kind === "answer" && sent.body.ok) {
       applyPageMove(router, pageAfterSave(target.portionId, noticeShown, monthKey));
       toast.show(DETAILS_SAVED_TOAST);
+      // The change is saved. Its history is settled in the background, one automatic retry at most: the person hears of it
+      // only when it still cannot be added.
+      void settleHistory(sent.body).then((ok) => ok || toast.show(HISTORY_NOT_SAVED));
       setSaved(true);
       // An edit form closes. A create form stays disabled until the refreshed page replaces it.
       if (editing) {

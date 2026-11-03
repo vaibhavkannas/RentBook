@@ -131,6 +131,7 @@ describe("proxy matcher", () => {
     "/api",
     "/api/payments",
     "/api/payments/log-retry",
+    "/api/tenancies/history-retry",
     "/api/auth/session",
     "/_next/static/chunks/main.js",
     "/_next/image",

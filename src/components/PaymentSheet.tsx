@@ -34,6 +34,7 @@ import {
   paymentOutcome,
   TENANCY_NOT_SAVED_MESSAGE,
 } from "@/lib/payment-request";
+import { HISTORY_NOT_SAVED, settleHistory } from "@/lib/history-retry";
 import { sendJson } from "@/lib/post-json";
 import { PAYMENT_NO_CONFIRMATION, sendFailureMessage } from "@/lib/request-copy";
 import { exitToastText, logEntryState, paymentToasts, type LogEntryState, type PaymentToasts } from "@/lib/toast-copy";
@@ -59,6 +60,8 @@ type ApiBody = {
   logWritten?: boolean;
   retryToken?: string;
   tenancyWritten?: boolean;
+  historyWritten?: boolean;
+  historyRetryToken?: string;
 };
 
 /** What the sheet still has to tell the person after the payment was saved. */
@@ -186,6 +189,9 @@ export default function PaymentSheet({
         amount: request.body.amount,
         monthLabel,
       });
+      // A new tenant's details are saved with the payment. Their history is settled in the background, one automatic retry at
+      // most, and is nothing to wait for or to show unless it cannot be added.
+      void settleHistory(body).then((ok) => ok || toast.show(HISTORY_NOT_SAVED));
       const outcome = paymentOutcome(body);
       if (outcome.done) {
         toast.show(toasts.saved);

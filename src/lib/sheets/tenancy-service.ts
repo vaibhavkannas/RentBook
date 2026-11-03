@@ -13,16 +13,19 @@ import {
   type Tenancy,
   type TenancyFields,
 } from "@/lib/domain/tenancy";
-import { tenancyLogRows } from "@/lib/domain/tenancy-log";
+import { tenancyLogRows, type TenancyLogRow } from "@/lib/domain/tenancy-log";
 import type { PortionConfig } from "@/lib/domain/types";
 import { lastRentMonth, vacancyOf } from "@/lib/domain/vacancy";
 import { isValidIsoDay, ymKey } from "@/lib/domain/year-month";
 import { conflict, PAGE_OUT_OF_DATE_MESSAGE, sheetStructure, unknownPortion, validation } from "@/lib/errors";
 import { formatMonthTitle, wholeRupeesMessage } from "@/lib/format";
 import { RELOAD_HINT, reloadThen } from "@/lib/recovery-hint";
+import { errorLogFields, logEvent } from "@/lib/server/log";
+import { text } from "./cells";
 import { getSnapshot, invalidateCaches, loadSnapshot, type SheetsContext, type Snapshot } from "./service";
+import { ensureTabs } from "./settings-store";
 import { withWriteLock } from "./write-lock";
-import { recordTenancyHistory, type HistoryOutcome } from "./tenancy-log-store";
+import { appendTenancyHistory, recordTenancyHistory, TENANCY_LOG_RANGE, TENANCY_LOG_TAB, type HistoryOutcome } from "./tenancy-log-store";
 import { checkNewTenancy, recordNewTenant, type WriteStamp } from "./tenancy-writes";
 import { appendTenancy, readTenancies, writeTenancyEdit, writeTenancyMoveOut } from "./tenants-store";
 
@@ -490,4 +493,52 @@ export async function getPortionTenants(
     past: pastTenancies(snapshot.tenancies, portionId),
     vacantSince: vacancyOf(snapshot.rows, snapshot.tenancies, portionId)?.since ?? null,
   };
+}
+
+/** How many of the newest Tenancy Log rows a retry looks through for the rows it is about to add. */
+const HISTORY_LOOKBACK_ROWS = 30;
+
+/**
+ * The same entry of the Tenancy Log: saved at, tenancy ID, action and field match. Whoever saved it, and the values, do not
+ * matter. All the rows of one save go in with one append, so one of them being there means all of them are.
+ */
+const sameHistoryEntry = (stored: unknown[], row: TenancyLogRow) =>
+  text(stored[0]) === row[0] && text(stored[1]) === row[1] && text(stored[3]) === row[3] && text(stored[4]) === row[4];
+
+/**
+ * Second chance for the Tenancy Log rows of a save whose history did not reach the Tenancy Log. Safe to repeat: when the newest
+ * 30 rows of the tab already hold the first row's entry (an earlier try landed although it said it failed, or the same retry
+ * arrived twice) it returns true and adds nothing. When the tab cannot be read it cannot tell, so it adds nothing and returns
+ * false. The rows are added in one append, like the first time (see appendTenancyHistory). It takes its turn among the writes,
+ * so two retries that arrive together cannot both find the rows missing, and the page caches are thrown away after it.
+ *
+ * It lives here and not in tenancy-log-store.ts because it needs the write lock and `invalidateCaches`, which the store may not
+ * import: service.ts imports the store, and a circular import would follow.
+ */
+export async function retryTenancyHistory(
+  ctx: SheetsContext,
+  rows: readonly TenancyLogRow[],
+  retryDelayMs = 400,
+): Promise<boolean> {
+  return withWriteLock(async () => {
+    try {
+      await ensureTabs(ctx.gateway, ctx.scheduleTab);
+      if (rows.length === 0) return true;
+      let recent: unknown[][];
+      try {
+        recent = (await ctx.gateway.getValues(TENANCY_LOG_TAB, TENANCY_LOG_RANGE, "UNFORMATTED_VALUE")).slice(-HISTORY_LOOKBACK_ROWS);
+      } catch (error) {
+        logEvent(
+          "error",
+          "tenancy-log-check-failed",
+          errorLogFields(error, "Tenancy Log: could not check whether the rows are already there, so nothing was added"),
+        );
+        return false;
+      }
+      if (recent.some((stored) => sameHistoryEntry(stored, rows[0]))) return true;
+      return await appendTenancyHistory(ctx.gateway, rows, retryDelayMs);
+    } finally {
+      invalidateCaches(ctx);
+    }
+  });
 }

@@ -36,6 +36,7 @@ describe("maxDuration", () => {
       "api/portions/route.ts",
       "api/settings/route.ts",
       "api/setup/prepare/route.ts",
+      "api/tenancies/history-retry/route.ts",
       "api/tenancies/move-out/route.ts",
       "api/tenancies/route.ts",
       "diagnostics/page.tsx",

@@ -2,6 +2,7 @@ import "server-only";
 import { z } from "zod";
 import { MAX_NAME_LENGTH } from "@/lib/domain/input-rules";
 import { ADVANCE_STATUSES, MAX_NOTES_LENGTH, MAX_PHONE_LENGTH } from "@/lib/domain/tenancy";
+import { TENANCY_LOG_ACTIONS } from "@/lib/domain/tenancy-log";
 import { PAGE_OUT_OF_DATE_MESSAGE } from "@/lib/errors";
 import { isoDay, MAX_TEXT, safeText } from "./validators";
 
@@ -74,6 +75,24 @@ export const logRowSchema = z.tuple([
 
 /** A retry sends back only the token the server gave it: the row inside is signed and cannot be changed. */
 export const logRetryBody = z.object({ token: z.string().min(1).max(2000) });
+
+/**
+ * A Tenancy Log row as the server wrote it: saved at, tenancy id, portion, action, field, old value, new value (each a text or an
+ * amount), changed by.
+ */
+export const tenancyLogRowSchema = z.tuple([
+  z.string(),
+  z.string(),
+  z.string(),
+  z.enum(TENANCY_LOG_ACTIONS),
+  z.string(),
+  z.union([z.string(), z.number()]),
+  z.union([z.string(), z.number()]),
+  z.string(),
+]);
+
+/** A history retry sends back only the token the server gave it: the rows inside are signed and cannot be changed. */
+export const historyRetryBody = z.object({ token: z.string().min(1).max(4000) });
 
 export const settingsBody = z.object({
   portions: z

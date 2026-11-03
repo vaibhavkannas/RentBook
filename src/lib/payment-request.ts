@@ -151,6 +151,10 @@ export type PaymentResponse = {
   retryToken?: string;
   /** Absent unless the payment started a new tenant. */
   tenancyWritten?: boolean;
+  /** Absent unless the new tenant's tenancy rows were written. False when their Tenancy Log rows were not (see settleHistory). */
+  historyWritten?: boolean;
+  /** Present when the history did not save: the signed token to send back to add its rows. */
+  historyRetryToken?: string;
 };
 
 export type PaymentOutcome = {

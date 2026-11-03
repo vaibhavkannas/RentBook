@@ -9,6 +9,7 @@ import { SlowHint } from "@/components/ui/SlowHint";
 import { useToast } from "@/components/ui/Toast";
 import type { AdvanceStatus } from "@/lib/domain/tenancy";
 import { afterEdit, fieldProblem, plainMessage, plainProblem, problemAt, type FormProblem } from "@/lib/form-errors";
+import { HISTORY_NOT_SAVED, settleHistory } from "@/lib/history-retry";
 import { sendJson } from "@/lib/post-json";
 import { sendFailureMessage } from "@/lib/request-copy";
 import { moveOutToastText } from "@/lib/toast-copy";
@@ -118,6 +119,8 @@ export default function MoveOutForm({
       // The refreshed page shows the tenancy as a past one and replaces this form. Until then it stays disabled.
       applyPageMove(router, pageAfterSave(portionId, noticeShown, monthKey));
       toast.show(moveOutToastText(tenant, portionName, request.body.moveOut));
+      // The move-out is saved. Its history is settled in the background, one automatic retry at most.
+      void settleHistory(sent.body).then((ok) => ok || toast.show(HISTORY_NOT_SAVED));
       return;
     }
     setBusy(false);

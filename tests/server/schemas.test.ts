@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { ZodType } from "zod";
 import {
   addPortionBody,
+  historyRetryBody,
   moveOutBody,
   paymentBody,
   portionActiveBody,
@@ -9,6 +10,7 @@ import {
   prepareBody,
   settingsBody,
   tenancyBody,
+  tenancyLogRowSchema,
 } from "@/lib/server/schemas";
 
 /** The first problem a schema finds with `value`, as "path: message", or null when it is fine. */
@@ -385,5 +387,44 @@ describe("portionOrderBody", () => {
 
   it("refuses the same id twice, in plain words", () => {
     expect(problem(portionOrderBody, { ids: ["p1", "p2", "p1"] })).toBe("ids: Each portion can be in the order only once.");
+  });
+});
+
+describe("tenancyLogRowSchema", () => {
+  const row = ["2026-11-03T09:30:00.000Z", "t-1", "p1", "Edited", "Advance", 20000, "", "owner@example.com"];
+
+  it("takes a Tenancy Log row as the server wrote it: eight values, a known action, each value a text or an amount", () => {
+    expect(problem(tenancyLogRowSchema, row)).toBeNull();
+    for (const action of ["Added", "Edited", "Moved out", "Closed"]) {
+      expect(problem(tenancyLogRowSchema, [...row.slice(0, 3), action, ...row.slice(4)])).toBeNull();
+    }
+    expect(problem(tenancyLogRowSchema, [...row.slice(0, 5), "2027-01-14", 5, row[7]])).toBeNull();
+  });
+
+  it.each([
+    ["seven values", row.slice(0, 7)],
+    ["nine values", [...row, "x"]],
+    ["an action it does not know", [...row.slice(0, 3), "Deleted", ...row.slice(4)]],
+    ["an old value that is neither text nor an amount", [...row.slice(0, 5), null, ...row.slice(6)]],
+    ["a new value that is an object", [...row.slice(0, 6), { phone: "x" }, row[7]]],
+    ["a saved-at that is not text", [5, ...row.slice(1)]],
+    ["something that is not a row", "row"],
+  ])("refuses %s", (_name, value) => {
+    expect(problem(tenancyLogRowSchema, value)).not.toBeNull();
+  });
+});
+
+describe("historyRetryBody", () => {
+  it("takes a token of 1 to 4000 characters", () => {
+    expect(problem(historyRetryBody, { token: "a" })).toBeNull();
+    expect(problem(historyRetryBody, { token: "a".repeat(4000) })).toBeNull();
+    expect(problem(historyRetryBody, { token: "" })).not.toBeNull();
+    expect(problem(historyRetryBody, { token: "a".repeat(4001) })).not.toBeNull();
+    expect(problem(historyRetryBody, { token: 5 })).not.toBeNull();
+    expect(problem(historyRetryBody, {})).not.toBeNull();
+  });
+
+  it("gives back only the token, so rows sent with it are never read", () => {
+    expect(historyRetryBody.parse({ token: "a.b", rows: [["x"]] })).toEqual({ token: "a.b" });
   });
 });

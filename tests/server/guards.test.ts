@@ -162,6 +162,7 @@ describe("the pages and routes under src/app", () => {
         "api/setup/prepare/route.ts",
         "api/tenancies/route.ts",
         "api/tenancies/move-out/route.ts",
+        "api/tenancies/history-retry/route.ts",
         "robots.ts",
         "manifest.ts",
         "icon.tsx",

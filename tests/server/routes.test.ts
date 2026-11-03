@@ -15,6 +15,7 @@ const markWritten = vi.hoisted(() => vi.fn(async () => undefined));
 const saveTenancy = vi.hoisted(() => vi.fn());
 const moveOutTenancy = vi.hoisted(() => vi.fn());
 const moveOutWithoutDetails = vi.hoisted(() => vi.fn());
+const retryTenancyHistory = vi.hoisted(() => vi.fn<(...args: unknown[]) => Promise<boolean>>(async () => true));
 const addPortion = vi.hoisted(() => vi.fn());
 const setPortionActive = vi.hoisted(() => vi.fn());
 const reorderPortions = vi.hoisted(() => vi.fn());
@@ -39,11 +40,19 @@ vi.mock("@/lib/sheets/tenancy-service", async (importOriginal) => ({
   saveTenancy,
   moveOutTenancy,
   moveOutWithoutDetails,
+  retryTenancyHistory,
 }));
 
 import { AppError, conflict, configError, rateLimited, unavailable, validation } from "@/lib/errors";
 import { captureLogs, loggedLines, type LogSpies } from "../support/logs";
-import { createRetryToken, RETRY_TOKEN_MAX_AGE_MS } from "@/lib/server/retry-token";
+import type { TenancyLogRow } from "@/lib/domain/tenancy-log";
+import {
+  createHistoryRetryToken,
+  createRetryToken,
+  readHistoryRetryToken,
+  RETRY_TOKEN_MAX_AGE_MS,
+} from "@/lib/server/retry-token";
+import { POST as postHistoryRetry } from "@/app/api/tenancies/history-retry/route";
 import { POST as postRetry } from "@/app/api/payments/log-retry/route";
 import { POST as postPayment } from "@/app/api/payments/route";
 import { POST as postUndo } from "@/app/api/payments/undo/route";
@@ -70,6 +79,12 @@ const signedInAs = (email: string | null) =>
 
 const SECRET = "a-test-secret-that-is-at-least-32-characters-long";
 
+/** Tenancy Log rows as a service gives them back, for the routes that turn them into a retry token. */
+const HISTORY_ROWS: TenancyLogRow[] = [
+  ["2026-11-03T09:30:00.000Z", "t-abc", "p1", "Edited", "Phone", "", "", "member@example.com"],
+  ["2026-11-03T09:30:00.000Z", "t-abc", "p1", "Edited", "Agreement end", "2027-01-14", "2027-03-31", "member@example.com"],
+];
+
 // Every refused request is logged as one line (see handle): held back, so the output stays clean.
 let logs: LogSpies;
 let savedEnv: string | undefined;
@@ -88,6 +103,8 @@ beforeEach(() => {
   saveTenancy.mockReset();
   moveOutTenancy.mockReset();
   moveOutWithoutDetails.mockReset();
+  retryTenancyHistory.mockReset();
+  retryTenancyHistory.mockResolvedValue(true);
   prepareSheet.mockClear();
   addPortion.mockReset();
   setPortionActive.mockReset();
@@ -572,6 +589,57 @@ describe("POST /api/payments", () => {
     });
   });
 
+  describe("when the history of a new tenant did not save", () => {
+    const newTenant = () =>
+      new Request("http://localhost/api/payments", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ month: "2026-10", portionId: "p1", amount: 6000, dateReceived: "2026-10-05", newTenantName: "Hari" }),
+      });
+
+    it("gives a token for the history, beside the answer, and never the rows", async () => {
+      signedInAs("member@example.com");
+      logPayment.mockResolvedValueOnce({
+        logWritten: true,
+        tenancyWritten: true,
+        historyWritten: false,
+        historyRows: HISTORY_ROWS,
+      } as never);
+      const body = await (await postPayment(newTenant())).json();
+      expect(body).toMatchObject({ ok: true, logWritten: true, tenancyWritten: true, historyWritten: false });
+      expect(body).not.toHaveProperty("historyRows");
+      expect(body).not.toHaveProperty("retryToken");
+      expect(readHistoryRetryToken(body.historyRetryToken, "member@example.com")).toEqual(HISTORY_ROWS);
+    });
+
+    it("gives both tokens when the Payments Log entry and the history both did not save", async () => {
+      signedInAs("member@example.com");
+      logPayment.mockResolvedValueOnce({
+        logWritten: false,
+        logRow: ["x", "2026-10", "p", "t", 1, 1, "d", "member@example.com", "Logged"],
+        tenancyWritten: true,
+        historyWritten: false,
+        historyRows: HISTORY_ROWS,
+      } as never);
+      const body = await (await postPayment(newTenant())).json();
+      expect(typeof body.retryToken).toBe("string");
+      expect(typeof body.historyRetryToken).toBe("string");
+      expect(body).not.toHaveProperty("logRow");
+      expect(body).not.toHaveProperty("historyRows");
+    });
+
+    it("says the history was written, without the rows, when it was", async () => {
+      signedInAs("member@example.com");
+      logPayment.mockResolvedValueOnce({ logWritten: true, tenancyWritten: true, historyWritten: true, historyRows: HISTORY_ROWS } as never);
+      expect(await (await postPayment(newTenant())).json()).toEqual({
+        ok: true,
+        logWritten: true,
+        tenancyWritten: true,
+        historyWritten: true,
+      });
+    });
+  });
+
   describe("when Google cannot be used", () => {
     const DETAIL = "Google rejected the service account key. Create a new key and update GOOGLE_SERVICE_ACCOUNT_JSON.";
     let log: MockInstance<typeof console.error>;
@@ -921,6 +989,33 @@ describe("POST /api/tenancies", () => {
     await postTenancy(request(create));
     expect(markWritten.mock.calls).toEqual([["member@example.com"]]);
   });
+
+  describe("and its history", () => {
+    it("says the history was written, and never sends the rows", async () => {
+      signedInAs("member@example.com");
+      saveTenancy.mockResolvedValue({ ...saved, historyWritten: true, historyRows: HISTORY_ROWS });
+      const body = await (await postTenancy(request(update))).json();
+      expect(body).toEqual({ ok: true, ...saved, historyWritten: true });
+    });
+
+    it("gives a signed token for the rows, and not the rows, when the history did not save", async () => {
+      signedInAs("Member@Example.com");
+      saveTenancy.mockResolvedValue({ ...saved, historyWritten: false, historyRows: HISTORY_ROWS });
+      const res = await postTenancy(request(update));
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body).toMatchObject({ ok: true, ...saved, historyWritten: false });
+      expect(body).not.toHaveProperty("historyRows");
+      expect(readHistoryRetryToken(body.historyRetryToken, "member@example.com")).toEqual(HISTORY_ROWS);
+      expect(JSON.stringify(body)).not.toContain("Agreement end");
+    });
+
+    it("keeps the save, with no token, when the history failed and there are no rows to send again", async () => {
+      signedInAs("member@example.com");
+      saveTenancy.mockResolvedValue({ ...saved, historyWritten: false, historyRows: [] });
+      expect(await (await postTenancy(request(update))).json()).toEqual({ ok: true, ...saved, historyWritten: false });
+    });
+  });
 });
 
 describe("POST /api/tenancies/move-out", () => {
@@ -1020,6 +1115,22 @@ describe("POST /api/tenancies/move-out", () => {
     moveOutTenancy.mockResolvedValue(closed);
     await postMoveOut(request(good));
     expect(markWritten.mock.calls).toEqual([["member@example.com"]]);
+  });
+
+  describe("and its history", () => {
+    it("treats both kinds of move-out like a save: no rows, a token when the history did not save", async () => {
+      signedInAs("member@example.com");
+      moveOutTenancy.mockResolvedValue({ ...closed, historyWritten: false, historyRows: HISTORY_ROWS });
+      const withId = await (await postMoveOut(request(good))).json();
+      expect(withId).not.toHaveProperty("historyRows");
+      expect(readHistoryRetryToken(withId.historyRetryToken, "member@example.com")).toEqual(HISTORY_ROWS);
+
+      moveOutWithoutDetails.mockResolvedValue({ tenancy: { id: "t-new" }, historyWritten: true, historyRows: HISTORY_ROWS });
+      const without = await (
+        await postMoveOut(request({ portionId: "p1", tenant: "Asha", moveOut: "2026-10-20" }))
+      ).json();
+      expect(without).toEqual({ ok: true, tenancy: { id: "t-new" }, historyWritten: true });
+    });
   });
 
   describe("with no details on file: the portion, the tenant and the day, with no id", () => {
@@ -1244,6 +1355,142 @@ describe("POST /api/payments/log-retry", () => {
   });
 });
 
+function historyRetryRequest(token: unknown) {
+  return new Request("http://localhost/api/tenancies/history-retry", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ token }),
+  });
+}
+
+describe("POST /api/tenancies/history-retry", () => {
+  const tokenFor = (viewer: string, now = Date.now(), rows: TenancyLogRow[] = HISTORY_ROWS) => createHistoryRetryToken(rows, viewer, now);
+
+  it("rejects a visitor who is not signed in", async () => {
+    signedInAs(null);
+    const res = await postHistoryRetry(historyRetryRequest(tokenFor("member@example.com")));
+    expect(res.status).toBe(401);
+    expect(retryTenancyHistory).not.toHaveBeenCalled();
+    expect(markWritten).not.toHaveBeenCalled();
+  });
+
+  it("rejects a signed-in address that is not on the list", async () => {
+    signedInAs("stranger@example.com");
+    expect((await postHistoryRetry(historyRetryRequest(tokenFor("stranger@example.com")))).status).toBe(401);
+    expect(retryTenancyHistory).not.toHaveBeenCalled();
+  });
+
+  it("lets any listed member retry, and answers whether the rows are in the Tenancy Log now", async () => {
+    signedInAs("Member@Example.com");
+    const res = await postHistoryRetry(historyRetryRequest(tokenFor("member@example.com")));
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ ok: true, historyWritten: true });
+    retryTenancyHistory.mockResolvedValueOnce(false);
+    expect(await (await postHistoryRetry(historyRetryRequest(tokenFor("member@example.com")))).json()).toEqual({ ok: true, historyWritten: false });
+  });
+
+  it("writes the rows of the token, each with the signed-in email as who changed it", async () => {
+    signedInAs("Member@Example.com");
+    const forged = HISTORY_ROWS.map((row) => [...row.slice(0, 7), "someone-else@example.com"] as unknown as TenancyLogRow);
+    await postHistoryRetry(historyRetryRequest(tokenFor("member@example.com", Date.now(), forged)));
+    expect(retryTenancyHistory).toHaveBeenCalledOnce();
+    expect(retryTenancyHistory.mock.calls[0][1]).toEqual(HISTORY_ROWS.map((row) => [...row.slice(0, 7), "member@example.com"]));
+  });
+
+  it("rejects a request that carries rows and no token, so rows can never be forged", async () => {
+    signedInAs("member@example.com");
+    const forged = new Request("http://localhost/api/tenancies/history-retry", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ rows: HISTORY_ROWS }),
+    });
+    expect((await postHistoryRetry(forged)).status).toBe(400);
+    expect(retryTenancyHistory).not.toHaveBeenCalled();
+  });
+
+  it("uses only the token when rows are sent along with it", async () => {
+    signedInAs("member@example.com");
+    const both = new Request("http://localhost/api/tenancies/history-retry", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ token: tokenFor("member@example.com"), rows: [["x", "x", "x", "Added", "", "", "", "x"]] }),
+    });
+    expect((await postHistoryRetry(both)).status).toBe(200);
+    expect((retryTenancyHistory.mock.calls[0][1] as unknown[][])[0][1]).toBe("t-abc");
+  });
+
+  it.each([
+    ["an empty token", ""],
+    ["a token that is not text", 5],
+    ["a token over 4000 characters", "a".repeat(4001)],
+  ])("rejects %s", async (_name, token) => {
+    signedInAs("member@example.com");
+    expect((await postHistoryRetry(historyRetryRequest(token))).status).toBe(400);
+    expect(retryTenancyHistory).not.toHaveBeenCalled();
+  });
+
+  it("rejects a token whose payload was changed, one signed with another secret, and one for someone else", async () => {
+    signedInAs("member@example.com");
+    const [payload, mac] = tokenFor("member@example.com").split(".");
+    const edited = JSON.parse(Buffer.from(payload, "base64url").toString("utf8"));
+    edited.rows[1][6] = "2099-01-01";
+    const tampered = `${Buffer.from(JSON.stringify(edited)).toString("base64url")}.${mac}`;
+    const res = await postHistoryRetry(historyRetryRequest(tampered));
+    expect(res.status).toBe(400);
+    expect((await res.json()).error.code).toBe("validation");
+
+    vi.stubEnv("AUTH_SECRET", "another-secret-that-is-also-32-characters-long");
+    const foreign = tokenFor("member@example.com");
+    vi.stubEnv("AUTH_SECRET", SECRET);
+    expect((await postHistoryRetry(historyRetryRequest(foreign))).status).toBe(400);
+
+    signedInAs("owner@example.com");
+    expect((await postHistoryRetry(historyRetryRequest(tokenFor("member@example.com")))).status).toBe(400);
+    expect(retryTenancyHistory).not.toHaveBeenCalled();
+  });
+
+  it("rejects an expired token, in words about the history", async () => {
+    signedInAs("member@example.com");
+    const res = await postHistoryRetry(historyRetryRequest(tokenFor("member@example.com", Date.now() - RETRY_TOKEN_MAX_AGE_MS - 1_000)));
+    expect(res.status).toBe(400);
+    expect((await res.json()).error.message).toMatch(/expired.*History/);
+    expect(retryTenancyHistory).not.toHaveBeenCalled();
+  });
+
+  it("refuses a Payments Log retry token, and the Payments Log retry refuses a history token", async () => {
+    signedInAs("member@example.com");
+    const paymentsToken = createRetryToken(
+      ["2026-10-05T04:30:00.000Z", "2026-10", "First floor, single bedroom", "Asha", 5450, 4, "", "member@example.com", "Undone"],
+      "member@example.com",
+    );
+    expect((await postHistoryRetry(historyRetryRequest(paymentsToken))).status).toBe(400);
+    expect((await postRetry(retryTokenRequest(tokenFor("member@example.com")))).status).toBe(400);
+    expect(retryTenancyHistory).not.toHaveBeenCalled();
+    expect(retryLogRow).not.toHaveBeenCalled();
+  });
+
+  it("marks the write time for the person, so their next page is not answered from the cache", async () => {
+    signedInAs("Member@Example.com");
+    await postHistoryRetry(historyRetryRequest(tokenFor("member@example.com")));
+    expect(markWritten.mock.calls).toEqual([["member@example.com"]]);
+  });
+
+  it("lets the same token be sent again: the service adds the rows only once", async () => {
+    signedInAs("member@example.com");
+    const token = tokenFor("member@example.com");
+    expect((await postHistoryRetry(historyRetryRequest(token))).status).toBe(200);
+    expect((await postHistoryRetry(historyRetryRequest(token))).status).toBe(200);
+    expect(retryTenancyHistory).toHaveBeenCalledTimes(2);
+    expect(retryTenancyHistory.mock.calls[1][1]).toEqual(retryTenancyHistory.mock.calls[0][1]);
+  });
+
+  it("never puts the rows in its answer", async () => {
+    signedInAs("member@example.com");
+    const body = await (await postHistoryRetry(historyRetryRequest(tokenFor("member@example.com")))).json();
+    expect(Object.keys(body).sort()).toEqual(["historyWritten", "ok"]);
+  });
+});
+
 // Request integrity: every route refuses a request that did not come from the app's own page as JSON, and a body
 // over 32 KB, before it asks who is signed in.
 // A refusal says what is wrong in plain words and names the field in details.field, so a screen can show it beside the
@@ -1352,6 +1599,7 @@ describe("request integrity on every route", () => {
     ["POST /api/payments/log-retry", postRetry, "POST", "http://localhost/api/payments/log-retry"],
     ["POST /api/tenancies", postTenancy, "POST", "http://localhost/api/tenancies"],
     ["POST /api/tenancies/move-out", postMoveOut, "POST", "http://localhost/api/tenancies/move-out"],
+    ["POST /api/tenancies/history-retry", postHistoryRetry, "POST", "http://localhost/api/tenancies/history-retry"],
     ["PUT /api/settings", putSettings, "PUT", "http://localhost/api/settings"],
     ["POST /api/setup/prepare", postPrepare, "POST", "http://localhost/api/setup/prepare"],
     ["POST /api/portions", postPortion, "POST", "http://localhost/api/portions"],
@@ -1366,6 +1614,7 @@ describe("request integrity on every route", () => {
     saveTenancy,
     moveOutTenancy,
     moveOutWithoutDetails,
+    retryTenancyHistory,
     prepareSheet,
     addPortion,
     setPortionActive,
