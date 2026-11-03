@@ -18,6 +18,7 @@ import OverdueLoading from "@/app/overdue/loading";
 import SettingsLoading from "@/app/settings/loading";
 import SetupLoading from "@/app/setup/loading";
 import TenantsLoading from "@/app/tenants/[portionId]/loading";
+import YearLoading from "@/app/year/loading";
 import { CARD, CHIP_ROW } from "@/lib/ui-classes";
 
 const html = (element: Parameters<typeof renderToStaticMarkup>[0]) => renderToStaticMarkup(element);
@@ -29,6 +30,7 @@ describe.each([
   ["diagnostics", DiagnosticsLoading, "Loading diagnostics"],
   ["tenant details", TenantsLoading, "Loading tenant details"],
   ["overdue rent", OverdueLoading, "Loading overdue rent"],
+  ["year at a glance", YearLoading, "Loading year at a glance"],
 ] as const)("the %s loading screen", (_name, Loading, loadingText) => {
   const out = html(createElement(Loading));
 
@@ -168,6 +170,40 @@ describe("the Overdue loading screen", () => {
   });
 });
 
+describe("the Year loading screen", () => {
+  const out = html(createElement(YearLoading));
+
+  it("has the header Year at a glance, with an arrow back to the month, as the page has", () => {
+    expect(out).toContain('<h1 class="text-lg font-semibold">Year at a glance</h1>');
+    expect(out).toMatch(/<a [^>]*href="\/"[^>]*>‹<\/a>/);
+    expect(out).toContain('aria-label="Back to month"');
+  });
+
+  it("shows the year between two 44 px arrows, the total's card with its bar, and the key", () => {
+    // the arrows are 44 px squares and the year is a heading's height
+    expect(out.match(/\bsize-11\b/g)).toHaveLength(2);
+    expect(out.match(new RegExp(`class="${CARD}`, "g"))).toHaveLength(3);
+    const total = out.split(`class="${CARD}`)[1];
+    expect(total).toMatch(/\bh-8\b/);
+    expect(total).toMatch(/\bh-1\.5\b/);
+  });
+
+  it("shows two portion cards of twelve 44 px months in six columns, as the real cards are", () => {
+    const cards = out.split(`class="${CARD}`).slice(2);
+    expect(cards).toHaveLength(2);
+    for (const card of cards) {
+      expect(card).toMatch(/\bh-6\b/);
+      expect(card).toContain("grid grid-cols-6 gap-1.5");
+      expect(card.match(/(?<![-\w])h-11\b/g)).toHaveLength(12);
+    }
+  });
+
+  it("has no link of its own besides the arrow back: nothing can be done on it", () => {
+    expect(out.match(/<a /g)).toHaveLength(1);
+    expect(out).not.toContain("<button");
+  });
+});
+
 describe("the Set up loading screen", () => {
   const out = html(createElement(SetupLoading));
 
@@ -224,7 +260,7 @@ describe("the Diagnostics loading screen", () => {
 
 describe("the pages that read the Sheet up to three times in a row", () => {
   it("each have a loading screen beside them, so a tap is answered at once", () => {
-    for (const page of ["setup", "diagnostics", "overdue"]) {
+    for (const page of ["setup", "diagnostics", "overdue", "year"]) {
       expect(existsSync(new URL(`../../src/app/${page}/loading.tsx`, import.meta.url)), page).toBe(true);
     }
   });

@@ -1,9 +1,11 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import ExitGuard from "@/components/ExitGuard";
 import LoadProblem from "@/components/LoadProblem";
 import MonthFrame from "@/components/MonthFrame";
 import PortionBoard from "@/components/PortionBoard";
 import { Page } from "@/components/ui/Page";
+import { yearHref } from "@/lib/app-nav";
 import type { MonthView } from "@/lib/domain/types";
 import { currentYm, parseYmKey, todayIso, ymKey } from "@/lib/domain/year-month";
 import { formatMonthTitle, formatRupees } from "@/lib/format";
@@ -73,6 +75,13 @@ export default async function Home({
               <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-line" role="presentation">
                 <div className="h-full bg-accent" style={{ width: `${progress}%` }} />
               </div>
+              {/* The link's 44 px give the card's bottom padding back, so the card grows by the link's text only. */}
+              <Link
+                href={yearHref(month.year, ymKey(month))}
+                className="press -mb-2 mt-0.5 inline-flex min-h-11 items-center text-sm text-muted underline"
+              >
+                Year at a glance
+              </Link>
             </section>
 
             <PortionBoard

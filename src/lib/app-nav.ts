@@ -33,6 +33,11 @@ export function monthScreenHref(monthKey: string | null | undefined): string {
   return withMonth("/", monthKey);
 }
 
+/** The Year screen for a year, in the month that was showing: `/year?year=2026&month=2026-10` (no month when there is none). */
+export function yearHref(year: number, monthKey: string | null | undefined): string {
+  return withMonth(`/year?year=${year}`, monthKey);
+}
+
 export type TabId = "month" | "activity" | "more";
 export type Tab = { id: TabId; label: string; path: string };
 

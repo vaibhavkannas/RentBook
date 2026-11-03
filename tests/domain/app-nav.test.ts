@@ -7,6 +7,7 @@ import {
   TABS,
   tabForPath,
   withMonth,
+  yearHref,
 } from "@/lib/app-nav";
 
 // The rules of the tab bar and the back arrows: which month an address carries, which tab a screen belongs to, and
@@ -64,6 +65,19 @@ describe("monthScreenHref", () => {
     expect(monthScreenHref(null)).toBe("/");
     expect(monthScreenHref(undefined)).toBe("/");
     expect(monthScreenHref("garbage")).toBe("/");
+  });
+});
+
+describe("yearHref", () => {
+  it("is the Year screen for a year, in the month that was showing", () => {
+    expect(yearHref(2026, "2026-10")).toBe("/year?year=2026&month=2026-10");
+    expect(yearHref(2025, "2026-10")).toBe("/year?year=2025&month=2026-10");
+  });
+
+  it("carries no month when there is none, or it is not one", () => {
+    expect(yearHref(2026, null)).toBe("/year?year=2026");
+    expect(yearHref(2026, undefined)).toBe("/year?year=2026");
+    expect(yearHref(2026, "garbage")).toBe("/year?year=2026");
   });
 });
 

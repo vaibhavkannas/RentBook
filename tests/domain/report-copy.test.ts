@@ -22,7 +22,10 @@ import {
   showMovedOutHint,
   TENANTS_PROBLEM_NOTICE,
   YEAR_LEGEND,
+  YEAR_TENANTS_PROBLEM_NOTICE,
   yearCellLabel,
+  yearEmptyText,
+  yearEmptyTitle,
 } from "@/lib/report-copy";
 import { baseRows, PORTIONS, tenancyRow } from "../support/fixtures";
 
@@ -190,6 +193,23 @@ describe("showMovedOutHint", () => {
   it("works across a year end", () => {
     expect(showMovedOutHint({ year: 2026, month: 10 }, { year: 2027, month: 1 })).toBe(false);
     expect(showMovedOutHint({ year: 2026, month: 9 }, { year: 2027, month: 1 })).toBe(true);
+  });
+});
+
+describe("the Year screen's empty words", () => {
+  it("says which year has nothing recorded", () => {
+    expect(yearEmptyTitle(2024)).toBe("Nothing recorded for 2024");
+  });
+
+  it("says where the Schedule starts, or that it has no months yet", () => {
+    expect(yearEmptyText({ year: 2026, month: 8 })).toBe("Your Schedule starts in August 2026.");
+    expect(yearEmptyText(null)).toBe("Your Schedule has no months yet.");
+  });
+
+  it("warns that months after a move-out can read as unpaid while the Tenants tab cannot be read", () => {
+    expect(YEAR_TENANTS_PROBLEM_NOTICE("The Tenants tab has no Phone header.")).toBe(
+      "The Tenants tab can't be read, so months after a move-out may show as unpaid. The Tenants tab has no Phone header.",
+    );
   });
 });
 

@@ -98,6 +98,18 @@ export function showMovedOutHint(oldest: YearMonth, thisMonth: YearMonth): boole
 
 // Year at a glance
 
+/** The Year screen's title when a year has nothing in it. */
+export const yearEmptyTitle = (year: number) => `Nothing recorded for ${year}`;
+
+/** Under it: where the Schedule starts, or that it has no months yet. */
+export function yearEmptyText(firstMonth: YearMonth | null): string {
+  return firstMonth === null ? "Your Schedule has no months yet." : `Your Schedule starts in ${formatMonthTitle(firstMonth)}.`;
+}
+
+/** Above the year when the Tenants tab cannot be read: without it a month after a move-out cannot be told from an unpaid one. */
+export const YEAR_TENANTS_PROBLEM_NOTICE = (problem: string) =>
+  `The Tenants tab can't be read, so months after a move-out may show as unpaid. ${problem}`;
+
 /**
  * What a screen reader says for one cell of the year view: "January 2026, First floor: paid ₹ 5,450". A cell shows a glyph
  * and a short month name, so this is its full name.

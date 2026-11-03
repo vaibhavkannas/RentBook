@@ -43,6 +43,7 @@ describe("maxDuration", () => {
       "settings/page.tsx",
       "setup/page.tsx",
       "tenants/[portionId]/page.tsx",
+      "year/page.tsx",
     ]);
   });
 

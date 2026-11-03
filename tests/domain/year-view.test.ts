@@ -6,6 +6,7 @@ import {
   deriveYearView,
   parseYear,
   yearBounds,
+  yearNeighbours,
   type YearCell,
   type YearCellState,
   type YearView,
@@ -399,5 +400,33 @@ describe("parseYear", () => {
     }
     expect(parseYear(undefined)).toBeNull();
     expect(parseYear(null)).toBeNull();
+  });
+});
+
+describe("yearNeighbours", () => {
+  const bounds = { first: 2024, last: 2026 };
+
+  it("leads to the year before and the year after, inside the bounds", () => {
+    expect(yearNeighbours(2025, bounds)).toEqual({ previous: 2024, next: 2026 });
+  });
+
+  it("has no previous year at the first year and no next year at the last", () => {
+    expect(yearNeighbours(2024, bounds)).toEqual({ previous: null, next: 2025 });
+    expect(yearNeighbours(2026, bounds)).toEqual({ previous: 2025, next: null });
+  });
+
+  it("has neither for a single year", () => {
+    expect(yearNeighbours(2026, { first: 2026, last: 2026 })).toEqual({ previous: null, next: null });
+  });
+
+  it("brings a year outside the bounds back to the nearest year inside them, not one empty year at a time", () => {
+    expect(yearNeighbours(2040, bounds)).toEqual({ previous: 2026, next: null });
+    expect(yearNeighbours(2027, bounds)).toEqual({ previous: 2026, next: null });
+    expect(yearNeighbours(2010, bounds)).toEqual({ previous: null, next: 2024 });
+    expect(yearNeighbours(2023, bounds)).toEqual({ previous: null, next: 2024 });
+  });
+
+  it("for a Schedule that starts after this year, offers the Schedule's first year as next", () => {
+    expect(yearNeighbours(2026, yearBounds(parsedRows([2027, 2, [["Asha", 1, 5000]]]), TODAY))).toEqual({ previous: null, next: 2027 });
   });
 });

@@ -7,6 +7,8 @@
  * (0.75rem, rounded-xl) and rounded-chip (0.5rem, rounded-lg), so the three sizes are named once.
  */
 
+import type { YearCellState } from "@/lib/domain/year-view";
+
 export type ButtonVariant = "primary" | "secondary" | "outline" | "danger" | "dangerText" | "quiet";
 export type ButtonSize = "lg" | "md";
 export type Tone = "success" | "warn" | "danger";
@@ -46,6 +48,27 @@ export const iconButtonClasses = (tone: "default" | "muted" = "default") =>
     "press grid min-h-11 min-w-11 place-items-center rounded-chip text-xl disabled:opacity-60",
     tone === "muted" && "text-muted",
   );
+
+/**
+ * What an icon button becomes where it has nowhere to go (the year arrow at the end of the Schedule): the same 44 px square, so
+ * the row does not move, muted and dimmed, with no press feedback because there is nothing to press. It is a span, not a button.
+ */
+export const ICON_BUTTON_OFF = "grid min-h-11 min-w-11 place-items-center rounded-chip text-xl text-muted opacity-40";
+
+/**
+ * The colours of one month in the year view (tokens only; the screen gives it its size and corners). Each state differs by more
+ * than the colour of its text: a fill, or a dashed border, and a glyph the screen draws in it.
+ */
+const YEAR_CELL: Record<YearCellState, string> = {
+  paid: "bg-success-bg text-success-ink",
+  partial: "bg-warn-bg text-warn-ink",
+  unpaid: "bg-danger-bg text-danger-ink",
+  vacant: "bg-line text-muted",
+  upcoming: "border border-dashed border-line text-muted",
+  none: "text-muted",
+};
+
+export const yearCellClasses = (state: YearCellState) => YEAR_CELL[state];
 
 /** A text field, a select and a date field. 16 px text, so a phone does not zoom in when it takes focus. */
 export const FIELD_CONTROL =

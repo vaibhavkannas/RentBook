@@ -127,6 +127,17 @@ export function yearBounds(rows: ScheduleRow[], today: string): { first: number;
   return { first, last };
 }
 
+/**
+ * The years the year screen's arrows lead to from `year`: the one before and the one after, or null where the Schedule has none
+ * (the arrow is then dimmed). A year outside the bounds (typed into the address) leads back to the nearest year inside them
+ * instead of one empty year at a time.
+ */
+export function yearNeighbours(year: number, bounds: { first: number; last: number }): { previous: number | null; next: number | null } {
+  const previous = year > bounds.last ? bounds.last : year - 1;
+  const next = year < bounds.first ? bounds.first : year + 1;
+  return { previous: previous >= bounds.first ? previous : null, next: next <= bounds.last ? next : null };
+}
+
 const YEAR_PATTERN = /^\d{4}$/;
 
 /** The year of an address's `year` parameter: four digits from 2000 to 2100, else null. The first value is used when there are several. */

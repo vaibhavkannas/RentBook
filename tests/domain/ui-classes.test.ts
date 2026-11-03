@@ -6,14 +6,17 @@ import {
   cx,
   FIELD_CONTROL,
   fieldControlClasses,
+  ICON_BUTTON_OFF,
   iconButtonClasses,
   noticeClasses,
   pageClasses,
   pillClasses,
   SKELETON_BAR,
+  yearCellClasses,
   type ButtonSize,
   type ButtonVariant,
 } from "@/lib/ui-classes";
+import type { YearCellState } from "@/lib/domain/year-view";
 
 // The class strings the shared pieces are drawn with. They are the ones the screens use today, so moving a screen
 // onto a primitive moves nothing; Tailwind finds them here, in full, as it does anywhere in src.
@@ -74,6 +77,41 @@ describe("iconButtonClasses", () => {
   it("can be muted, for a close button that should not shout", () => {
     expect(iconButtonClasses("muted")).toBe(`${iconButtonClasses()} text-muted`);
     expect(iconButtonClasses("default")).toBe(iconButtonClasses());
+  });
+});
+
+describe("ICON_BUTTON_OFF", () => {
+  it("is the same 44 px square as an icon button, muted and dimmed, with no press feedback: an arrow that has nowhere to go", () => {
+    expect(ICON_BUTTON_OFF).toBe("grid min-h-11 min-w-11 place-items-center rounded-chip text-xl text-muted opacity-40");
+    expect(tokens(ICON_BUTTON_OFF)).not.toContain("press");
+    const square = (classes: string) => tokens(classes).filter((name) => /^(?:min-h-11|min-w-11|place-items-center|rounded-chip|text-xl|grid)$/.test(name)).sort();
+    expect(square(ICON_BUTTON_OFF)).toEqual(square(iconButtonClasses()));
+  });
+});
+
+describe("yearCellClasses", () => {
+  it.each([
+    ["paid", "bg-success-bg text-success-ink"],
+    ["partial", "bg-warn-bg text-warn-ink"],
+    ["unpaid", "bg-danger-bg text-danger-ink"],
+    ["vacant", "bg-line text-muted"],
+    ["upcoming", "border border-dashed border-line text-muted"],
+    ["none", "text-muted"],
+  ] as [YearCellState, string][])("colours a %s cell with the tokens %s", (state, classes) => {
+    expect(yearCellClasses(state)).toBe(classes);
+  });
+
+  it("tells each state apart by more than the colour of its text: a fill, or a dashed border", () => {
+    const states: YearCellState[] = ["paid", "partial", "unpaid", "vacant", "upcoming", "none"];
+    expect(new Set(states.map(yearCellClasses)).size).toBe(states.length);
+    for (const state of ["paid", "partial", "unpaid", "vacant"] as const) expect(yearCellClasses(state)).toMatch(/\bbg-/);
+    expect(yearCellClasses("upcoming")).toContain("border-dashed");
+  });
+
+  it("uses tokens only: no palette colour, no hex, and no size or corner (the screen gives those)", () => {
+    for (const state of ["paid", "partial", "unpaid", "vacant", "upcoming", "none"] as const) {
+      expect(yearCellClasses(state)).not.toMatch(/#|rgb|\b(?:red|green|amber|gray|slate)-\d|rounded|min-h/);
+    }
   });
 });
 

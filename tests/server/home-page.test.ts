@@ -3,6 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { MonthView, PortionCard } from "@/lib/domain/types";
 import { AppError } from "@/lib/errors";
+import { smallTargets, unpressedTargets } from "../support/tap-targets";
 
 // A smoke test of the home page: the month summary and the cards, with the data layer replaced. The
 // client components render their first (server) output only.
@@ -100,6 +101,41 @@ describe("the home page without a footer", () => {
 
   it("leaves room for the tab bar under the last card", async () => {
     expect(await render()).toMatch(/^<main class="[^"]*\bpb-tabbar\b/);
+  });
+});
+
+describe("the link to the Year screen", () => {
+  const link = (html: string) => /<a [^>]*href="\/year\?[^"]*"[^>]*>[\s\S]*?<\/a>/.exec(html)?.[0] ?? "";
+
+  it("sits in the month summary, under the progress bar, as a quiet 44 px link", async () => {
+    const out = summary(await render());
+    const year = link(out);
+    expect(year).toContain(">Year at a glance</a>");
+    expect(year).toMatch(/class="[^"]*\bmin-h-11\b/);
+    expect(year).toMatch(/class="[^"]*\btext-muted\b[^"]*\bunderline\b|class="[^"]*\bunderline\b[^"]*\btext-muted\b/);
+    expect(out.indexOf('role="presentation"')).toBeLessThan(out.indexOf("Year at a glance"));
+    expect(smallTargets(year)).toEqual([]);
+    expect(unpressedTargets(year)).toEqual([]);
+  });
+
+  it("carries the month on show and its year", async () => {
+    expect(link(await render({ month: "2026-10" }))).toContain('href="/year?year=2026&amp;month=2026-10"');
+    expect(link(await render({ month: "2025-12" }))).toContain('href="/year?year=2025&amp;month=2025-12"');
+    expect(link(await render({ month: "2026-02" }))).toContain('href="/year?year=2026&amp;month=2026-02"');
+  });
+
+  it("carries this month, with its year, when the address has no month", async () => {
+    vi.useFakeTimers({ toFake: ["Date"], now: new Date("2026-10-17T06:30:00Z") });
+    try {
+      expect(link(await render({}))).toContain('href="/year?year=2026&amp;month=2026-10"');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("is not there when the Sheet could not be read: the summary is not either", async () => {
+    mocks.loadMonthView.mockRejectedValue(new AppError("sheet-structure", "The Schedule tab has no Month header."));
+    expect(await render()).not.toContain("Year at a glance");
   });
 });
 

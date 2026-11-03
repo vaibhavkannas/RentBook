@@ -147,6 +147,7 @@ describe("the pages and routes under src/app", () => {
         "overdue/page.tsx",
         "setup/page.tsx",
         "tenants/[portionId]/page.tsx",
+        "year/page.tsx",
         "signin/page.tsx",
         "api/auth/[...nextauth]/route.ts",
         "api/health/route.ts",
