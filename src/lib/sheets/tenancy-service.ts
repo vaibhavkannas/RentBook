@@ -19,7 +19,7 @@ import { isValidIsoDay, ymKey } from "@/lib/domain/year-month";
 import { conflict, PAGE_OUT_OF_DATE_MESSAGE, sheetStructure, unknownPortion, validation } from "@/lib/errors";
 import { formatMonthTitle, wholeRupeesMessage } from "@/lib/format";
 import { RELOAD_HINT, reloadThen } from "@/lib/recovery-hint";
-import { invalidateCaches, loadSnapshot, type SheetsContext, type Snapshot } from "./service";
+import { getSnapshot, invalidateCaches, loadSnapshot, type SheetsContext, type Snapshot } from "./service";
 import { withWriteLock } from "./write-lock";
 import { checkNewTenancy, recordNewTenant, type WriteStamp } from "./tenancy-writes";
 import { appendTenancy, readTenancies, writeTenancyEdit, writeTenancyMoveOut } from "./tenants-store";
@@ -426,7 +426,7 @@ export async function getPortionTenants(
   portionId: string,
   options: { minFetchedAt?: number } = {},
 ): Promise<PortionTenants> {
-  const snapshot = ctx.cache ? await ctx.cache.get(options.minFetchedAt) : await loadSnapshot(ctx);
+  const snapshot = await getSnapshot(ctx, options);
   const portion = requirePortion(snapshot, portionId);
 
   const scheduleTenant = scheduleTenantOf(snapshot, portionId);

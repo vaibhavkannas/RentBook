@@ -84,6 +84,13 @@ describe("tabForPath", () => {
     expect(tabForPath("/tenants/first%20floor%2F2")).toBe("month");
   });
 
+  it("puts the Overdue, Year and Alerts screens under Month, with the screens they lead back to", () => {
+    expect(tabForPath("/overdue")).toBe("month");
+    expect(tabForPath("/year")).toBe("month");
+    expect(tabForPath("/alerts")).toBe("month");
+    expect(tabForPath("/overdue/")).toBe("month");
+  });
+
   it("puts Activity under Activity", () => {
     expect(tabForPath("/activity")).toBe("activity");
   });
@@ -96,7 +103,7 @@ describe("tabForPath", () => {
   });
 
   it("puts nothing else under any tab, so the bar is not shown on the sign-in page or a page that was not found", () => {
-    for (const other of ["/signin", "/no-such-page", "/tenants", "/tenants/", "/activity/extra", "/morex", "/settings/x", "/setup/x", "/diagnostics/x", "/api/health"]) {
+    for (const other of ["/signin", "/no-such-page", "/tenants", "/tenants/", "/activity/extra", "/morex", "/settings/x", "/setup/x", "/diagnostics/x", "/overdue/x", "/year/2026", "/alerts/x", "/overdues", "/api/health"]) {
       expect(tabForPath(other), other).toBeNull();
     }
     expect(tabForPath(null)).toBeNull();

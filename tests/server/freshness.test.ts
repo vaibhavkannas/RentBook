@@ -10,7 +10,7 @@ const jar = vi.hoisted(() => {
 });
 vi.mock("next/headers", () => ({ cookies: async () => jar }));
 
-import { loadMonthView, markWritten, readWrittenAt } from "@/lib/server/freshness";
+import { loadMonthView, loadPageSnapshot, markWritten, readWrittenAt } from "@/lib/server/freshness";
 import { sign } from "@/lib/server/signing";
 import { logPayment, withSnapshotCache, type SheetsContext } from "@/lib/sheets/service";
 import { FakeGateway } from "../support/fake-gateway";
@@ -210,5 +210,54 @@ describe("loadMonthView", () => {
     await logElsewhere();
     await markWritten("owner@example.com", Date.now() + 1);
     expect((await loadMonthView(ctx, OCT, EMAIL)).cards[0].status).toBe("pending");
+  });
+});
+
+describe("loadPageSnapshot", () => {
+  const OCT = { year: 2026, month: 10 };
+  const OPTIONS = { now: new Date("2026-10-05T04:30:00Z"), retryDelayMs: 0, loggedBy: "owner@example.com" };
+
+  function setup() {
+    const fake = new FakeGateway({ Schedule: baseSchedule() });
+    const ctx = withSnapshotCache({ gateway: fake, scheduleTab: "Schedule", totalHeader: TOTAL_HEADER } as SheetsContext);
+    const other = { gateway: fake, scheduleTab: "Schedule", totalHeader: TOTAL_HEADER } as SheetsContext;
+    const logElsewhere = () =>
+      logPayment(other, { month: OCT, portionId: "p1", amount: 5450, dateReceived: "2026-10-05" }, OPTIONS);
+    const hasOctober = (snapshot: Awaited<ReturnType<typeof loadPageSnapshot>>) =>
+      snapshot.rows.some((row) => row.month.month === 10);
+    return { fake, ctx, logElsewhere, hasOctober };
+  }
+
+  it("shares the month view's cache entry: both together are one read of the Sheet", async () => {
+    const { fake, ctx } = setup();
+    await loadMonthView(ctx, OCT, EMAIL); // creates the missing tabs, so the reads below are plain ones
+    fake.calls.length = 0;
+    await loadMonthView(ctx, OCT, EMAIL);
+    const snapshot = await loadPageSnapshot(ctx, EMAIL);
+    expect(fake.calls).toEqual([]);
+    expect(snapshot.portions).toHaveLength(5);
+  });
+
+  it("serves the cached snapshot to someone who has not written", async () => {
+    const { ctx, logElsewhere, hasOctober } = setup();
+    await loadPageSnapshot(ctx, EMAIL);
+    await logElsewhere();
+    expect(hasOctober(await loadPageSnapshot(ctx, EMAIL))).toBe(false);
+  });
+
+  it("reloads when this person wrote after the cached copy was read", async () => {
+    const { ctx, logElsewhere, hasOctober } = setup();
+    await loadPageSnapshot(ctx, EMAIL);
+    await logElsewhere();
+    await markWritten(EMAIL, Date.now() + 1);
+    expect(hasOctober(await loadPageSnapshot(ctx, EMAIL))).toBe(true);
+  });
+
+  it("does not reload for another person's write", async () => {
+    const { ctx, logElsewhere, hasOctober } = setup();
+    await loadPageSnapshot(ctx, EMAIL);
+    await logElsewhere();
+    await markWritten("owner@example.com", Date.now() + 1);
+    expect(hasOctober(await loadPageSnapshot(ctx, EMAIL))).toBe(false);
   });
 });

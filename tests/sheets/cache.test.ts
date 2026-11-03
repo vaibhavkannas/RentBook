@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   getMonthView,
   getSettings,
+  getSnapshot,
   logPayment,
   saveSettings,
   undoPayment,
@@ -171,6 +172,58 @@ describe("a single page view read", () => {
     fake.calls.length = 0;
     await getMonthView(ctx, OCT);
     expect(fake.calls).toEqual(["getManyValues"]);
+  });
+});
+
+describe("the snapshot the cross-month screens read", () => {
+  it("costs no read beyond the month view's: both come from one getManyValues on a cold cache", async () => {
+    const { fake, ctx } = setup();
+    await getSettings(ctx); // creates the missing tabs, so the reads below are plain ones
+    fake.calls.length = 0;
+    await getMonthView(ctx, OCT);
+    const snapshot = await getSnapshot(ctx);
+    await getSnapshot(ctx);
+    expect(fake.calls.filter((call) => call === "getManyValues")).toHaveLength(1);
+    expect(fake.calls.filter((call) => call === "getValues")).toHaveLength(0);
+    expect(snapshot.portions).toHaveLength(5);
+    expect(snapshot.rows).toHaveLength(2);
+    expect(snapshot.tenancies).toEqual([]);
+  });
+
+  it("reads once for a snapshot first and a month view after it, too", async () => {
+    const { fake, ctx } = setup();
+    await getSettings(ctx);
+    fake.calls.length = 0;
+    await getSnapshot(ctx);
+    await getMonthView(ctx, OCT);
+    expect(fake.calls.filter((call) => call === "getManyValues")).toHaveLength(1);
+  });
+
+  it("shows a payment straight away after logging it", async () => {
+    const { ctx } = setup();
+    await getSnapshot(ctx);
+    await logPayment(ctx, { month: OCT, portionId: "p1", amount: 5450, dateReceived: "2026-10-05" }, OPTIONS);
+    const octoberRow = (await getSnapshot(ctx)).rows.find((row) => row.month.month === 10);
+    expect(octoberRow?.entries.get("p1")?.amount).toBe(5450);
+  });
+
+  it("can demand data newer than a given time, like the month view", async () => {
+    const { fake, ctx } = setup();
+    await getSnapshot(ctx);
+    const other = { gateway: fake, scheduleTab: "Schedule", totalHeader: TOTAL_HEADER } as SheetsContext;
+    await logPayment(other, { month: OCT, portionId: "p1", amount: 5450, dateReceived: "2026-10-05" }, OPTIONS);
+    expect((await getSnapshot(ctx)).rows.some((row) => row.month.month === 10)).toBe(false);
+    expect((await getSnapshot(ctx, { minFetchedAt: Date.now() + 1 })).rows.some((row) => row.month.month === 10)).toBe(true);
+  });
+
+  it("reads the Sheet afresh when the context has no cache", async () => {
+    const fake = new FakeGateway({ Schedule: baseSchedule() });
+    const ctx = { gateway: fake, scheduleTab: "Schedule", totalHeader: TOTAL_HEADER } as SheetsContext;
+    await getSnapshot(ctx);
+    fake.calls.length = 0;
+    await getSnapshot(ctx);
+    await getSnapshot(ctx);
+    expect(fake.calls.filter((call) => call === "getManyValues")).toHaveLength(2);
   });
 });
 

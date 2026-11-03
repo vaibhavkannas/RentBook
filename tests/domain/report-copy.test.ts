@@ -8,12 +8,19 @@ import {
   agreementSentence,
   attentionItems,
   hikeSentence,
+  earlierMonthsText,
   MOVED_OUT_HINT,
+  nothingOverdueText,
+  OVERDUE_MONTHS_SHOWN,
   OVERDUE_RULES,
   ordinalDay,
   overdueAge,
+  overdueCountLine,
   overdueMonthLine,
+  overdueMonthsShown,
   overdueSummary,
+  showMovedOutHint,
+  TENANTS_PROBLEM_NOTICE,
   YEAR_LEGEND,
   yearCellLabel,
 } from "@/lib/report-copy";
@@ -118,6 +125,71 @@ describe("OVERDUE_RULES", () => {
 describe("MOVED_OUT_HINT", () => {
   it("points at the tenant page", () => {
     expect(MOVED_OUT_HINT).toBe("Moved out? Record the move-out on the tenant page and the months after it stop counting.");
+  });
+});
+
+describe("the Overdue screen's own words", () => {
+  it("counts portions and says the month they are counted up to", () => {
+    expect(overdueCountLine(4, { year: 2026, month: 10 })).toBe("4 portions · counted up to October 2026");
+    expect(overdueCountLine(1, { year: 2026, month: 9 })).toBe("1 portion · counted up to September 2026");
+  });
+
+  it("says what an empty list means", () => {
+    expect(nothingOverdueText({ year: 2026, month: 10 })).toBe("Every let portion has paid in full up to October 2026.");
+  });
+
+  it("warns that the Tenants tab cannot be read, and what is wrong with it", () => {
+    expect(TENANTS_PROBLEM_NOTICE("The Tenants tab has no Phone header.")).toBe(
+      "The Tenants tab can't be read, so tenants who moved out may show here. The Tenants tab has no Phone header.",
+    );
+  });
+
+  it("says how many earlier months are left out of a list", () => {
+    expect(earlierMonthsText(1)).toBe("and 1 earlier month");
+    expect(earlierMonthsText(4)).toBe("and 4 earlier months");
+  });
+});
+
+describe("overdueMonthsShown", () => {
+  const months = (count: number) => Array.from({ length: count }, (_, index) => index + 1);
+
+  it("lists up to 12 months newest first, and leaves nothing out", () => {
+    expect(OVERDUE_MONTHS_SHOWN).toBe(12);
+    expect(overdueMonthsShown(months(1))).toEqual({ shown: [1], earlier: 0 });
+    expect(overdueMonthsShown(months(12))).toEqual({ shown: months(12).reverse(), earlier: 0 });
+  });
+
+  it("keeps the 12 newest of more, and counts the rest", () => {
+    const result = overdueMonthsShown(months(16));
+    expect(result.shown).toEqual([16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5]);
+    expect(result.earlier).toBe(4);
+    expect(overdueMonthsShown(months(13)).earlier).toBe(1);
+  });
+
+  it("does not change the list it is given", () => {
+    const given = months(3);
+    overdueMonthsShown(given);
+    expect(given).toEqual([1, 2, 3]);
+  });
+});
+
+describe("showMovedOutHint", () => {
+  const OCT = { year: 2026, month: 10 };
+
+  it("is for a portion whose oldest overdue month is more than 3 months before this month", () => {
+    expect(showMovedOutHint({ year: 2026, month: 6 }, OCT)).toBe(true);
+    expect(showMovedOutHint({ year: 2025, month: 12 }, OCT)).toBe(true);
+  });
+
+  it("is not for three months or fewer", () => {
+    expect(showMovedOutHint({ year: 2026, month: 7 }, OCT)).toBe(false);
+    expect(showMovedOutHint({ year: 2026, month: 8 }, OCT)).toBe(false);
+    expect(showMovedOutHint(OCT, OCT)).toBe(false);
+  });
+
+  it("works across a year end", () => {
+    expect(showMovedOutHint({ year: 2026, month: 10 }, { year: 2027, month: 1 })).toBe(false);
+    expect(showMovedOutHint({ year: 2026, month: 9 }, { year: 2027, month: 1 })).toBe(true);
   });
 });
 

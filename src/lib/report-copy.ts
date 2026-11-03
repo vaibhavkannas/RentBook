@@ -2,6 +2,7 @@ import { withMonth } from "@/lib/app-nav";
 import { AGREEMENT_NOTICE_DAYS, type AgreementAlert, type HikeAlert } from "@/lib/domain/alerts";
 import { overdueTotals, type OverdueItem, type OverdueMonth } from "@/lib/domain/overdue";
 import { OVERDUE_GRACE_DAYS, RENT_DUE_DAY } from "@/lib/domain/rent-due";
+import type { YearMonth } from "@/lib/domain/types";
 import type { YearCell, YearCellState } from "@/lib/domain/year-view";
 import { formatDay, formatMonthTitle, formatRupees } from "@/lib/format";
 
@@ -60,6 +61,40 @@ export const OVERDUE_RULES: readonly string[] = [
 
 /** Under a portion that has been overdue for a long time: a tenant who has left is not asked for rent once the move-out is recorded. */
 export const MOVED_OUT_HINT = "Moved out? Record the move-out on the tenant page and the months after it stop counting.";
+
+/** "4 portions · counted up to October 2026": under the total on the Overdue screen. */
+export function overdueCountLine(portions: number, upTo: YearMonth): string {
+  return `${plural(portions, "portion")} · counted up to ${formatMonthTitle(upTo)}`;
+}
+
+/** What the Overdue screen says when no portion owes anything. */
+export function nothingOverdueText(upTo: YearMonth): string {
+  return `Every let portion has paid in full up to ${formatMonthTitle(upTo)}.`;
+}
+
+/** Above the Overdue list when the Tenants tab cannot be read: without it a tenant who moved out is not known to have left. */
+export const TENANTS_PROBLEM_NOTICE = (problem: string) =>
+  `The Tenants tab can't be read, so tenants who moved out may show here. ${problem}`;
+
+/** How many months a portion's card lists on the Overdue screen; older ones are only counted. */
+export const OVERDUE_MONTHS_SHOWN = 12;
+
+/** The months a portion's card lists, newest first (`months` is oldest first), and how many older ones are left out. */
+export function overdueMonthsShown<T>(months: readonly T[]): { shown: T[]; earlier: number } {
+  const newestFirst = [...months].reverse();
+  return { shown: newestFirst.slice(0, OVERDUE_MONTHS_SHOWN), earlier: Math.max(0, newestFirst.length - OVERDUE_MONTHS_SHOWN) };
+}
+
+/** "and 4 earlier months": after the 12 newest months of a portion that has been behind for longer. */
+export const earlierMonthsText = (count: number) => `and ${plural(count, "earlier month")}`;
+
+/** The hint about a move-out comes when a portion's oldest overdue month is more than this many months before this month. */
+const MOVED_OUT_HINT_MONTHS = 3;
+
+/** Whether a portion's card carries `MOVED_OUT_HINT`: its oldest overdue month is more than 3 months before `thisMonth`. */
+export function showMovedOutHint(oldest: YearMonth, thisMonth: YearMonth): boolean {
+  return thisMonth.year * 12 + thisMonth.month - (oldest.year * 12 + oldest.month) > MOVED_OUT_HINT_MONTHS;
+}
 
 // Year at a glance
 

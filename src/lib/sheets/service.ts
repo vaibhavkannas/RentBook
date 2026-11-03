@@ -119,14 +119,21 @@ export function invalidateCaches(ctx: SheetsContext): void {
   ctx.settingsCache?.invalidate();
 }
 
+/**
+ * The snapshot a page reads: the cached copy when the context has a cache (`minFetchedAt`, ms since epoch, rejects a copy read
+ * before that time), a fresh read when it has none. The month views, the tenant pages and the screens that look across months
+ * all take it from here, so they share one cache entry and cost one Google read between them.
+ */
+export async function getSnapshot(ctx: SheetsContext, options: { minFetchedAt?: number } = {}): Promise<Snapshot> {
+  return ctx.cache ? ctx.cache.get(options.minFetchedAt) : loadSnapshot(ctx);
+}
+
 export async function getMonthView(
   ctx: SheetsContext,
   month: YearMonth,
   options: { minFetchedAt?: number } = {},
 ): Promise<MonthView> {
-  const { portions, rows, tenancies } = ctx.cache
-    ? await ctx.cache.get(options.minFetchedAt)
-    : await loadSnapshot(ctx);
+  const { portions, rows, tenancies } = await getSnapshot(ctx, options);
   return deriveMonthView(rows, portions, month, tenancies);
 }
 

@@ -48,14 +48,14 @@ function plain(path: string): string {
 }
 
 /**
- * The tab a screen belongs to: the month screen and a tenant page are Month, Activity is Activity, More, the settings
- * page, Set up and Diagnostics are More. Anything else (the sign-in page, a page that was not found) has none, and then
- * no bar shows.
+ * The tab a screen belongs to: the month screen, a tenant page and the Overdue, Year and Alerts screens are Month, Activity
+ * is Activity, More, the settings page, Set up and Diagnostics are More. Anything else (the sign-in page, a page that was
+ * not found) has none, and then no bar shows.
  */
 export function tabForPath(pathname: string | null | undefined): TabId | null {
   if (!pathname) return null;
   const path = plain(pathname);
-  if (path === "/" || /^\/tenants\/[^/]+$/.test(path)) return "month";
+  if (path === "/" || /^\/tenants\/[^/]+$/.test(path) || ["/overdue", "/year", "/alerts"].includes(path)) return "month";
   if (path === "/activity") return "activity";
   if (path === "/more" || path === "/settings" || path === "/setup" || path === "/diagnostics") return "more";
   return null;

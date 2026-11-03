@@ -1,7 +1,7 @@
 import "server-only";
 import { cookies } from "next/headers";
 import type { MonthView, YearMonth } from "@/lib/domain/types";
-import { getMonthView, type SheetsContext } from "@/lib/sheets/service";
+import { getMonthView, getSnapshot, type SheetsContext, type Snapshot } from "@/lib/sheets/service";
 import { errorLogFields, logEvent } from "./log";
 import { MAX_CLOCK_SKEW_MS, macMatches, sign } from "./signing";
 
@@ -56,4 +56,13 @@ export async function readWrittenAt(email: string, now = Date.now()): Promise<nu
 /** The month view for a page, never older than this person's own last change to the Sheet. */
 export async function loadMonthView(ctx: SheetsContext, month: YearMonth, email: string): Promise<MonthView> {
   return getMonthView(ctx, month, { minFetchedAt: await readWrittenAt(email) });
+}
+
+/**
+ * The snapshot for a page that looks across months (Overdue, Year, Alerts, the home screen's Needs attention card), never
+ * older than this person's own last change to the Sheet. It is the cache entry `loadMonthView` reads, so a page that needs
+ * both costs one Google read.
+ */
+export async function loadPageSnapshot(ctx: SheetsContext, email: string): Promise<Snapshot> {
+  return getSnapshot(ctx, { minFetchedAt: await readWrittenAt(email) });
 }

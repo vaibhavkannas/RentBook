@@ -14,6 +14,7 @@ vi.mock("next/navigation", () => ({
 
 import ActivityLoading from "@/app/activity/loading";
 import DiagnosticsLoading from "@/app/diagnostics/loading";
+import OverdueLoading from "@/app/overdue/loading";
 import SettingsLoading from "@/app/settings/loading";
 import SetupLoading from "@/app/setup/loading";
 import TenantsLoading from "@/app/tenants/[portionId]/loading";
@@ -27,6 +28,7 @@ describe.each([
   ["set up", SetupLoading, "Loading set up"],
   ["diagnostics", DiagnosticsLoading, "Loading diagnostics"],
   ["tenant details", TenantsLoading, "Loading tenant details"],
+  ["overdue rent", OverdueLoading, "Loading overdue rent"],
 ] as const)("the %s loading screen", (_name, Loading, loadingText) => {
   const out = html(createElement(Loading));
 
@@ -135,6 +137,37 @@ describe("the tenant details loading screen", () => {
   });
 });
 
+describe("the Overdue loading screen", () => {
+  const out = html(createElement(OverdueLoading));
+
+  it("has the header Overdue rent, with an arrow back to the month, as the page has", () => {
+    expect(out).toContain('<h1 class="text-lg font-semibold">Overdue rent</h1>');
+    expect(out).toMatch(/<a [^>]*href="\/"[^>]*>‹<\/a>/);
+    expect(out).toContain('aria-label="Back to month"');
+  });
+
+  it("shows the total's card and two portion cards, laid out like the real ones", () => {
+    const cards = out.split(`class="${CARD}`).slice(1);
+    expect(cards).toHaveLength(3);
+    // the total: a 32 px figure and a 20 px line
+    expect(cards[0]).toMatch(/\bh-8\b/);
+    expect(cards[0]).toMatch(/\bh-5\b/);
+    // each portion: a name row (24 px) with a pill, two 20 px lines, and a 44 px row for each month
+    for (const card of cards.slice(1)) {
+      expect(card).toMatch(/\bh-6\b/);
+      expect(card.match(/\bh-5\b/g)!.length).toBeGreaterThanOrEqual(3);
+      expect(card).toMatch(/\bh-11\b/);
+    }
+    expect(cards[1].match(/\bh-11\b/g)).toHaveLength(1);
+    expect(cards[2].match(/\bh-11\b/g)).toHaveLength(2);
+  });
+
+  it("has no link of its own besides the arrow back: nothing can be done on it", () => {
+    expect(out.match(/<a /g)).toHaveLength(1);
+    expect(out).not.toContain("<button");
+  });
+});
+
 describe("the Set up loading screen", () => {
   const out = html(createElement(SetupLoading));
 
@@ -191,7 +224,7 @@ describe("the Diagnostics loading screen", () => {
 
 describe("the pages that read the Sheet up to three times in a row", () => {
   it("each have a loading screen beside them, so a tap is answered at once", () => {
-    for (const page of ["setup", "diagnostics"]) {
+    for (const page of ["setup", "diagnostics", "overdue"]) {
       expect(existsSync(new URL(`../../src/app/${page}/loading.tsx`, import.meta.url)), page).toBe(true);
     }
   });
