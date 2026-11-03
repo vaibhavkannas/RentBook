@@ -241,7 +241,8 @@ function freeSettingsRow(input: PlanInput, rows: PortionRow[]): number {
  * The plan for a request whose portion is already there, or null when it is not clearly that. It is the same request again after an
  * add that landed and whose answer was lost: the portion has the same name and numbers, is the last one in Settings, its three
  * headers are in the Schedule's header row, and nothing is under them yet. Then the owner is told it is added, as it is. Anything
- * else (another cycle or hike, entries, another place in the list) is a portion that is somebody's, and the name is taken.
+ * else (another cycle or hike, entries, another place in the list) is a portion that is somebody's, and the name is taken. A portion
+ * that is switched off is never that (the caller checks): an add leaves a portion on, so it was switched off since.
  */
 function alreadyAdded(input: PlanInput, rows: PortionRow[], twin: PortionRow, request: NewPortion): AddPlan | null {
   const { portion } = twin;
@@ -280,6 +281,10 @@ export function planAddPortion(input: PlanInput, request: NewPortion): AddPlan {
   if (rows.length >= MAX_PORTIONS) throw validation(`You can have at most ${MAX_PORTIONS} portions.`);
   const twin = rows.find((row) => headerKey(row.portion.name) === headerKey(name));
   if (twin !== undefined) {
+    // A switched-off portion is not the one the owner just added: it stays off, and "added" would be false.
+    if (twin.portion.inactive) {
+      throw validation(`There is already a portion called "${twin.portion.name}" (switched off). Switch it on, or choose a different name.`, "name");
+    }
     const there = alreadyAdded(input, rows, twin, { name, cycleLength, hikePercent });
     if (there !== null) return there;
     throw validation(`There is already a portion called "${twin.portion.name}". Choose a different name.`, "name");

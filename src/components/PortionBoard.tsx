@@ -60,6 +60,7 @@ export default function PortionBoard({ monthKey, monthLabel, cards, defaultDate 
             card.cycleLength !== null && count !== undefined && count === card.cycleLength;
           // A vacant card, like one that never had a tenant, has no rent to show and nothing to log.
           const noTenant = isVacantCard(card);
+          const linkLabel = card.tenancy ? "Details" : card.inactive ? "Tenant page" : "Add details";
           // Only a paid card says how the amount received compares with the rent.
           const rentLine =
             card.status === "paid" ? cardDifferenceText(card.rentDifference, card.rentReference) : null;
@@ -105,12 +106,13 @@ export default function PortionBoard({ monthKey, monthLabel, cards, defaultDate 
                             {chip}
                           </Pill>
                         ))}
+                      {/* A switched-off portion takes no new details (the tenant page refuses them), but its page is where a move-out is recorded. */}
                       <Link
                         href={tenantsPagePath(card.portionId, monthKey)}
-                        aria-label={`${card.tenancy ? "Details" : "Add details"} for ${card.name}`}
+                        aria-label={`${linkLabel} for ${card.name}`}
                         className="press inline-flex min-h-11 min-w-11 items-center text-sm text-muted underline"
                       >
-                        {card.tenancy ? "Details" : "Add details"}
+                        {linkLabel}
                       </Link>
                     </div>
                     <p className="mt-2 text-lg font-medium">

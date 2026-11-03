@@ -102,7 +102,7 @@ describe("SettingsForm", () => {
   it("has a Switched off section with a card for each portion that is off, and none when none is", () => {
     expect(out).toMatch(/<h2[^>]*>Switched off<\/h2>/);
     expect(out).toContain("Roof room");
-    expect(visibleText(out)).toContain("Hidden from the month screen. History kept.");
+    expect(visibleText(out)).toContain("Switched off. Its history is kept.");
     expect(button(out, "Switch on Roof room")).toContain(`class="${buttonClasses("secondary", "md")} mt-3"`);
     const none = html(createElement(SettingsForm, { portions: [ground, first] }));
     expect(none).not.toContain("Switched off");
@@ -305,8 +305,10 @@ describe("SwitchedOffPortions", () => {
     expect(out).toContain("Annex");
   });
 
-  it("says each is hidden and keeps its history, and offers Switch on", () => {
-    expect(out.match(/Hidden from the month screen\. History kept\./g)).toHaveLength(2);
+  it("says each is switched off and keeps its history, and offers Switch on", () => {
+    expect(out.match(/Switched off\. Its history is kept\./g)).toHaveLength(2);
+    // a portion switched off by hand may still be let, so its card does not say it is hidden from the month screen
+    expect(out).not.toMatch(/Hidden|month screen/);
     expect(button(out, "Switch on Roof room")).toBeDefined();
     expect(button(out, "Switch on Annex")).toBeDefined();
     expect(out.match(/>Switch on<\/button>/g)).toHaveLength(2);

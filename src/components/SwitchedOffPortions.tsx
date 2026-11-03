@@ -19,7 +19,7 @@ type Props = {
   onSwitchedOn: (portions: PortionConfig[] | undefined) => void;
 };
 
-/** The "Switched off" section of Portion settings: a card for each portion that is off, hidden but with its history, and a way back on. */
+/** The "Switched off" section of Portion settings: a card for each portion that is off, with its history kept, and a way back on. */
 export default function SwitchedOffPortions({ portions, onSwitchedOn }: Props) {
   const router = useRouter();
   const toast = useToast();
@@ -53,7 +53,7 @@ export default function SwitchedOffPortions({ portions, onSwitchedOn }: Props) {
         {portions.map((portion) => (
           <Card key={portion.id}>
             <p className="break-words font-medium">{portion.name}</p>
-            <p className="mt-1 text-sm text-muted">Hidden from the month screen. History kept.</p>
+            <p className="mt-1 text-sm text-muted">Switched off. Its history is kept.</p>
             <LiveNotice tone="danger" className="mt-3">
               {problem?.id === portion.id ? problem.message : null}
             </LiveNotice>

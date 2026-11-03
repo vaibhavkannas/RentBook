@@ -9,7 +9,7 @@ import { LOG_HEADERS, LOG_TAB, SETTINGS_TAB } from "@/lib/sheets/settings-store"
 import { TENANT_HEADERS, TENANTS_TAB } from "@/lib/sheets/tenants-store";
 import { captureLogs, type LogSpies } from "../support/logs";
 import { FakeGateway } from "../support/fake-gateway";
-import { baseSchedule, settingsGrid } from "../support/fixtures";
+import { baseSchedule, settingsGrid, settingsGridWithActive } from "../support/fixtures";
 import { smallTargets, unpressedTargets } from "../support/tap-targets";
 
 // The Set up page: the owner's guided check of the connection between the app and the Google Sheet, with the one button
@@ -223,6 +223,30 @@ describe("the owner's view of a connected Sheet", () => {
       "Set each portion's payments per cycle (or Count never resets) and hike before the first payment: the app cannot change a payment count later.",
     );
     expect(step).toMatch(/<a [^>]*href="\/settings"[^>]*>Open Portion settings<\/a>/);
+  });
+
+  it("keeps the link to the portion settings when the Settings tab only has a warning (an Active cell that is not Yes or No): the tab is readable, and the step is not held up", async () => {
+    serveSheet(
+      new FakeGateway({
+        Schedule: baseSchedule(),
+        [SETTINGS_TAB]: settingsGridWithActive({ p2: "nope" }),
+        [LOG_TAB]: [[...LOG_HEADERS]],
+        [TENANTS_TAB]: [[...TENANT_HEADERS], tenantRow()],
+      }),
+    );
+    const html = await render();
+    const step5 = html.slice(html.indexOf('id="step-5"'), html.indexOf('id="step-6"'));
+    expect(visibleText(step5)).toContain("Cell H3 is not Yes or No");
+    expect(step5).toMatch(/^id="step-5"[^>]*>[^<]*<\/h2><span class="[^"]*">Check<\/span>/);
+    expect(html.slice(html.indexOf('id="step-6"'))).toMatch(/<a [^>]*href="\/settings"[^>]*>Open Portion settings<\/a>/);
+  });
+
+  it("has no link to the portion settings while the Settings tab cannot be read (a portion row with a header missing)", async () => {
+    const settings = settingsGrid();
+    settings[1][2] = "";
+    serveSheet(new FakeGateway({ Schedule: baseSchedule(), [SETTINGS_TAB]: settings, [LOG_TAB]: [[...LOG_HEADERS]], [TENANTS_TAB]: [[...TENANT_HEADERS], tenantRow()] }));
+    const html = await render();
+    expect(html.slice(html.indexOf('id="step-6"'))).not.toContain('href="/settings"');
   });
 
   it("lists what the Sheet needs, in a closed section, one rule for each part", async () => {

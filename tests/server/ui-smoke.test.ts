@@ -502,6 +502,29 @@ describe("a portion that is switched off", () => {
     expect(board([card({ status: "paid", entry: { tenant: "Dev", count: 2, amount: 7000 }, next: null })])).not.toContain("Switched off");
   });
 
+  it("does not offer Add details on its card, which the tenant page would refuse, but a link to the tenant page, where a move-out is recorded", () => {
+    for (const off of [paidOff(), card({ inactive: true })]) {
+      const out = board([off]);
+      expect(out).not.toContain("Add details");
+      expect(out).toContain('aria-label="Tenant page for Ground floor"');
+      expect(out).toMatch(/<a [^>]*href="\/tenants\/p1\?month=2026-10"[^>]*>Tenant page<\/a>/);
+    }
+  });
+
+  it("keeps the Details link and the chips on its card when its tenant has details", () => {
+    const out = board([card({ inactive: true, tenancy: SUMMARY })]);
+    expect(out).toContain('aria-label="Details for Ground floor"');
+    expect(out).toContain("Agreement ends 15 Mar 2027");
+    expect(out).not.toContain("Add details");
+    expect(out).not.toContain("Tenant page");
+  });
+
+  it("still offers Add details on a card that is on, and no Tenant page link", () => {
+    const out = board([card()]);
+    expect(out).toContain('aria-label="Add details for Ground floor"');
+    expect(out).not.toContain("Tenant page");
+  });
+
   it("keeps every target of a board with a switched-off card large enough and pressable", () => {
     const out = board([paidOff(), card({ portionId: "p2", name: "First floor" })]);
     expect(smallTargets(out)).toEqual([]);

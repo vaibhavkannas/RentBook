@@ -1,7 +1,7 @@
 import { deriveMonthView, findLatestEntry } from "@/lib/domain/month-view";
 import { currentTenancy } from "@/lib/domain/tenancy";
 import type { PortionConfig, YearMonth } from "@/lib/domain/types";
-import { occupancyFor } from "@/lib/domain/vacancy";
+import { latestEntryRow, occupancyFor } from "@/lib/domain/vacancy";
 import { addMonths, compareYm, isValidIsoDay } from "@/lib/domain/year-month";
 import { AppError, conflict, sheetStructure, unknownPortion, validation } from "@/lib/errors";
 import { formatMonthTitle } from "@/lib/format";
@@ -26,8 +26,9 @@ import { withWriteLock } from "./write-lock";
 /**
  * Adding, switching off and switching on, and reordering portions: the only code that changes which portions the app has. The cells
  * each change writes are decided by portion-plan.ts; this reads the Sheet, asks for the plan, writes it RAW in an order whose
- * failure is always harmless, and checks what it wrote. Every change runs alone (withWriteLock), reads fresh (never a page cache),
- * never deletes or overwrites a cell that holds something, and throws the page caches away whether it worked or not.
+ * failure is always harmless, and checks what it wrote. Every change runs alone (withWriteLock), reads fresh (never a page cache)
+ * and throws the page caches away whether it worked or not. It never deletes anything; apart from the Settings rows a reorder
+ * rewrites with the values it just read and the Active cell a switch changes, it never writes over a cell that holds something.
  */
 
 const SET_UP_HINT = " Set up shows what is wrong.";
@@ -201,15 +202,18 @@ export type SetPortionActiveInput = {
 };
 
 /**
- * The first month, from the Schedule's first month up to and including today's, in which the portion is let (by the vacancy
- * rule: no entry, and its tenant has not moved out by the 1st) and nothing is logged for it: the rent that is still owed. It is
- * the month view's own rule (a pending card), so what is found here is exactly what would be on the screen as due. Null when there
- * is none.
+ * The first month after the portion's latest entry, up to and including today's, in which the portion is let (by the vacancy rule:
+ * no entry, and its tenant has not moved out by the 1st) and nothing is logged for it: the rent its current tenant still owes. It
+ * is the month view's own rule (a pending card), so what is found here is exactly what would be on the screen as due. The latest
+ * entry's own month holds an entry, so it is never owed. Months before the latest entry are not looked at: one left blank there is
+ * a gap in the history (a let portion left blank before move-outs were tracked), which the tenant's move-out cannot settle, and
+ * its card stays on the screen after a switch-off all the same (a switched-off portion shows in every month it is let in). Null
+ * when there is no such month, and for a portion with no entry at all.
  */
 function firstUnpaidMonth(snapshot: Snapshot, portion: PortionConfig, today: YearMonth): YearMonth | null {
-  const first = snapshot.rows.reduce<YearMonth | null>((least, row) => (least === null || compareYm(row.month, least) < 0 ? row.month : least), null);
-  if (first === null) return null;
-  for (let month = first; compareYm(month, today) <= 0; month = addMonths(month, 1)) {
+  const latest = latestEntryRow(snapshot.rows, portion.id);
+  if (latest === null) return null;
+  for (let month = addMonths(latest.month, 1); compareYm(month, today) <= 0; month = addMonths(month, 1)) {
     const card = deriveMonthView(snapshot.rows, [portion], month, snapshot.tenancies).cards[0];
     if (card?.status === "pending") return month;
   }
@@ -219,8 +223,8 @@ function firstUnpaidMonth(snapshot: Snapshot, portion: PortionConfig, today: Yea
 /**
  * Why a portion that is on may not be switched off yet, or nothing. It must have no open tenancy and be vacant, or never have had
  * a tenant, in the month after today's month (so a tenant who moves out on the 1st of next month already lets it be switched off),
- * and no month up to and including today's may have rent owed and not logged (the card would leave the screen, and the rent with
- * it). Another portion must stay on. A Tenants tab that cannot be read refuses: a tenant cannot be ruled out.
+ * and no month after its latest entry, up to and including today's, may have rent owed and not logged (log it first: see
+ * firstUnpaidMonth). Another portion must stay on. A Tenants tab that cannot be read refuses: a tenant cannot be ruled out.
  */
 function requireCanSwitchOff(snapshot: Snapshot, portion: PortionConfig, today: string): void {
   if (snapshot.tenantsProblem !== undefined) throw sheetStructure(snapshot.tenantsProblem);
