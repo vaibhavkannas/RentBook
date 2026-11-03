@@ -177,6 +177,19 @@ describe("SETUP.md: Adding, switching off and reordering portions", () => {
     expect(portions).toMatch(/OWNER STEP|Before you use it/i);
   });
 
+  it("says what a portion change overwrites, as portion-plan.ts does it: a reorder rewrites Settings rows and a switch changes the Active cell, nothing else", () => {
+    // A reorder writes the rows of its block (the unchanged ones with the cells just read) and switching on writes Yes over No, so
+    // "never writes over a cell that holds something" without those two exceptions would be false.
+    const truth =
+      "never deletes anything; apart from the Settings rows a reorder rewrites with the values it just read and the Active cell a switch changes, it never writes over a cell that holds something";
+    const code = read("src/lib/sheets/portion-service.ts").replace(/\s*\n\s*\*\s*/g, " ");
+    for (const [name, doc] of [["SETUP.md", portions], ["THREAT-MODEL.md", threat], ["portion-service.ts", code]] as const) {
+      expect(doc, name).toContain(truth);
+      expect(doc, name).not.toMatch(/never deletes or overwrites a cell that holds something/);
+      expect(doc, name).not.toMatch(/never deletes a row, a column or a tab, or writes over a cell that holds something/);
+    }
+  });
+
   it("says what is not supported: deleting a portion or its history, renaming or moving its columns, changing its id, editing a Total formula", () => {
     const not = portions.slice(portions.indexOf("not supported"));
     expect(not).toMatch(/deleting a portion/i);

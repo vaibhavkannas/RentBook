@@ -26,8 +26,9 @@ import { withWriteLock } from "./write-lock";
 /**
  * Adding, switching off and switching on, and reordering portions: the only code that changes which portions the app has. The cells
  * each change writes are decided by portion-plan.ts; this reads the Sheet, asks for the plan, writes it RAW in an order whose
- * failure is always harmless, and checks what it wrote. Every change runs alone (withWriteLock), reads fresh (never a page cache),
- * never deletes or overwrites a cell that holds something, and throws the page caches away whether it worked or not.
+ * failure is always harmless, and checks what it wrote. Every change runs alone (withWriteLock), reads fresh (never a page cache)
+ * and throws the page caches away whether it worked or not. It never deletes anything; apart from the Settings rows a reorder
+ * rewrites with the values it just read and the Active cell a switch changes, it never writes over a cell that holds something.
  */
 
 const SET_UP_HINT = " Set up shows what is wrong.";
