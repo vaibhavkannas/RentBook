@@ -39,6 +39,10 @@ export const LAYOUT_RULES: readonly { topic: string; text: string }[] = [
     text: `${BRAND.name}'s own tab. It has 15 headers in columns A to O, in a fixed order; capitals and spaces do not matter. Columns to the right of O are yours.`,
   },
   {
+    topic: "Tenancy Log tab",
+    text: `${BRAND.name}'s own tab, the history of changes to tenant details. It has 8 headers in columns A to H, in a fixed order; capitals and spaces do not matter. ${BRAND.name} only adds rows to it, one for each detail that changed, and Phone and Notes are recorded only as changed, never copied. The tab may be hidden, but not renamed or reordered. Columns to the right of H are yours.`,
+  },
+  {
     topic: "Naming a tab",
     text: `To give one of ${BRAND.name}'s own tabs another name (SETTINGS_TAB, LOG_TAB, TENANTS_TAB, TENANCY_LOG_TAB), rename the tab in your Sheet first, then set the variable. A name that is not in your Sheet yet makes ${BRAND.name} start a new tab, with the default values for Settings, and leave your old one alone.`,
   },

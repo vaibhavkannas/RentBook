@@ -151,6 +151,12 @@ export function diagnosticsRows(input: DiagnosticsInput): DiagnosticsSection[] {
       row("Tenants", "tenants", "tenants", () =>
         facts?.tenantsRows == null ? "can't be read (see Set up)" : `${plural(facts.tenantsRows, "row", "rows")}, ${facts.openTenancies ?? 0} current`,
       ),
+      row("Tenancy Log", "tenancy-log", "tenancy-log", () => {
+        // A Tenancy Log with a wrong header only warns (saving changes does not need it), and then its rows are not counted.
+        if (facts?.tenancyLogRows == null) return "can't be read (see Set up)";
+        if (facts.tenancyLogRows === 0) return "0 entries";
+        return `${plural(facts.tenancyLogRows, "entry", "entries")}, ${facts.tenancyLogLastSavedAt ? `last saved ${when(facts.tenancyLogLastSavedAt)}` : "no saved time recorded"}`;
+      }),
     ],
   };
   // A tab named by the owner that is not in the Sheet yet: the same warning as Set up gives.

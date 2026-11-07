@@ -23,6 +23,7 @@ import {
   settingsIsEmpty,
   settingsMissing,
 } from "./settings-store";
+import { parseTenancyLog, TENANCY_LOG_RANGE, TENANCY_LOG_TAB, tenancyLogHeaderProblem } from "./tenancy-log-store";
 import { parseTenancies, TENANTS_RANGE, TENANTS_TAB } from "./tenants-store";
 
 /**
@@ -58,6 +59,10 @@ export type SheetFacts = {
   openTenancies: number | null;
   /** The latest time in the Tenants tab's Updated at column that is a time (an ISO time). */
   lastUpdatedAt: string | null;
+  /** Entries in the Tenancy Log (rows with anything in them); null when the tab is not there, empty, or has a wrong header. */
+  tenancyLogRows: number | null;
+  /** The latest time in the Tenancy Log's Saved at column that is a time (an ISO time). */
+  tenancyLogLastSavedAt: string | null;
 };
 
 export type SheetCheckResult = { checks: Check[]; facts: SheetFacts };
@@ -66,7 +71,7 @@ export type SheetCheckOptions = {
   scheduleTab: string;
   /** The header of the Schedule's total column, or null when TOTAL_HEADER is not set. */
   totalHeader: string | null;
-  /** What the owner called the app's own tabs (SETTINGS_TAB, LOG_TAB, TENANTS_TAB). Left out, they have the usual names. */
+  /** What the owner called the app's own tabs (SETTINGS_TAB, LOG_TAB, TENANTS_TAB, TENANCY_LOG_TAB). Left out, they have the usual names. */
   appTabNames?: Partial<Record<AppTab, string>>;
   /**
    * The title each tab has in the Sheet, shown where it is not the app's usual name for it. Asked once, right after the tab
@@ -80,7 +85,7 @@ const GENERAL_FAILURE = "Couldn't reach Google Sheets. Try again.";
 /** How many tab titles "No tab named" lists. */
 const MAX_LISTED_TABS = 8;
 
-/** The ten checks, in the order they are shown, with the step and the title each has. */
+/** The eleven checks, in the order they are shown, with the step and the title each has. */
 const DEFINITIONS = [
   { id: "connection", step: 3, title: "Opening your Sheet" },
   { id: "schedule-tab", step: 4, title: "Schedule tab" },
@@ -91,6 +96,7 @@ const DEFINITIONS = [
   { id: "settings", step: 5, title: "Settings tab" },
   { id: "log", step: 5, title: "Payments Log tab" },
   { id: "tenants", step: 5, title: "Tenants tab" },
+  { id: "tenancy-log", step: 5, title: "Tenancy Log tab" },
   { id: "portion-settings", step: 6, title: "Payments per cycle and hike" },
 ] as const satisfies readonly { id: string; step: SetupStep; title: string }[];
 
@@ -122,6 +128,8 @@ function blankFacts(): SheetFacts {
     tenantsRows: null,
     openTenancies: null,
     lastUpdatedAt: null,
+    tenancyLogRows: null,
+    tenancyLogLastSavedAt: null,
   };
 }
 
@@ -254,6 +262,7 @@ export async function checkSheet(
     { tab: scheduleTab, a1: "A1:ZZ" },
     { tab: LOG_TAB, a1: "A1:I" },
     { tab: TENANTS_TAB, a1: TENANTS_RANGE },
+    { tab: TENANCY_LOG_TAB, a1: TENANCY_LOG_RANGE },
   ].filter(({ tab }) => tabs.includes(tab));
   const grids = new Map<string, unknown[][]>();
   if (wanted.length > 0) {
@@ -350,6 +359,7 @@ export async function checkSheet(
   const settingsGrid = grids.get(SETTINGS_TAB);
   const logGrid = grids.get(LOG_TAB);
   const tenantsGrid = grids.get(TENANTS_TAB);
+  const tenancyLogGrid = grids.get(TENANCY_LOG_TAB);
 
   // Settings.
   let portions: PortionConfig[] | null = null;
@@ -548,6 +558,41 @@ export async function checkSheet(
       facts.openTenancies = tenancies.filter((tenancy) => tenancy.moveOut === "").length;
       facts.lastUpdatedAt = latestTime(tenancies.map((tenancy) => tenancy.updatedAt));
       checks.push(make("tenants", "ok", foundAs("tenants", `Headers are right. ${plural(tenancies.length, "row", "rows")}.`)));
+    }
+  }
+
+  // The Tenancy Log. The app adds the tab itself the next time it opens the Sheet, and fills a first row with nothing in it; a
+  // first row that holds anything is never written over, so a wrong header is a warning to put right. Saving changes does not
+  // need the tab: only the History reads it.
+  if (tenancyLogGrid === undefined) {
+    const name = customName("tenancy-log");
+    checks.push(
+      make(
+        "tenancy-log",
+        "todo",
+        `Not created yet. It's added the next time the app opens your Sheet, or by Prepare my Sheet.${name === null ? "" : renameFirst("tenancy-log", name)}`,
+        undefined,
+        "create",
+      ),
+    );
+  } else if ((tenancyLogGrid[0] ?? []).length === 0) {
+    checks.push(make("tenancy-log", "todo", foundAs("tenancy-log", "Empty. Prepare my Sheet writes its headers."), undefined, "fill"));
+  } else {
+    const problem = tenancyLogHeaderProblem(tenancyLogGrid[0]);
+    if (problem !== null) {
+      checks.push(
+        make(
+          "tenancy-log",
+          "warn",
+          foundAs("tenancy-log", problem),
+          "Put the headers back. Saving changes still works; only the History can't be shown.",
+        ),
+      );
+    } else {
+      const { items } = parseTenancyLog(tenancyLogGrid);
+      facts.tenancyLogRows = items.length;
+      facts.tenancyLogLastSavedAt = latestTime(items.map((item) => item.savedAt));
+      checks.push(make("tenancy-log", "ok", foundAs("tenancy-log", `Headers are right. ${plural(items.length, "entry", "entries")}.`)));
     }
   }
 

@@ -17,6 +17,7 @@ const OK_CHECKS: Check[] = [
   check("settings", "ok", 5),
   check("log", "ok", 5),
   check("tenants", "ok", 5),
+  check("tenancy-log", "ok", 5),
   check("portion-settings", "ok", 6),
 ];
 
@@ -35,6 +36,8 @@ const FACTS: SheetFacts = {
   tenantsRows: 9,
   openTenancies: 4,
   lastUpdatedAt: "2026-10-04T05:00:00.000Z",
+  tenancyLogRows: 17,
+  tenancyLogLastSavedAt: "2026-10-04T05:30:00.000Z",
 };
 
 const PROBLEMS = { since: "2026-10-16T05:30:00.000Z", warn: {}, error: {} };
@@ -74,7 +77,7 @@ describe("the App section", () => {
     expect(app.rows.map((row) => row.text)).toEqual([
       "Version 0.1.0",
       "This server started 16 Oct, 11:00 am",
-      "Checks: 9 of 9 OK",
+      "Checks: 10 of 10 OK",
     ]);
     expect(app.rows[2].link).toEqual({ href: "/setup", label: "Open Set up" });
     expect(app.rows[0].link).toBeUndefined();
@@ -82,7 +85,7 @@ describe("the App section", () => {
 
   it("counts the checks that are not OK as the difference, whatever they are", () => {
     const checks = [...OK_CHECKS, check("a", "warn"), check("b", "fail"), check("c", "todo", 5), check("d", "skip", 4)];
-    expect(texts("app", { checks })[2]).toBe("Checks: 9 of 13 OK");
+    expect(texts("app", { checks })[2]).toBe("Checks: 10 of 14 OK");
   });
 
   it("keeps the link to Set up that the page gives it, which carries the month", () => {
@@ -140,12 +143,13 @@ describe("the Google Sheet section", () => {
 });
 
 describe("the Tabs section", () => {
-  it("says what each tab holds: month rows, portions, log entries and tenancies", () => {
+  it("says what each tab holds: month rows, portions, log entries, tenancies and changes", () => {
     expect(texts("tabs")).toEqual([
       "Schedule: 14 month rows, October 2025 to November 2026",
       "Settings: 4 portions on, 1 switched off",
       "Payments Log: 120 entries, last saved 5 Oct, 10:00 am",
       "Tenants: 9 rows, 4 current",
+      "Tenancy Log: 17 entries, last saved 4 Oct, 11:00 am",
     ]);
   });
 
@@ -161,12 +165,13 @@ describe("the Tabs section", () => {
   });
 
   it("says one of each in the singular", () => {
-    const facts = { ...FACTS, monthRows: 1, firstMonth: "2026-10", lastMonth: "2026-10", portionsOn: 1, portionsOff: 0, logRows: 1, tenantsRows: 1, openTenancies: 1 };
+    const facts = { ...FACTS, monthRows: 1, firstMonth: "2026-10", lastMonth: "2026-10", portionsOn: 1, portionsOff: 0, logRows: 1, tenantsRows: 1, openTenancies: 1, tenancyLogRows: 1 };
     expect(texts("tabs", { facts })).toEqual([
       "Schedule: 1 month row, October 2026 to October 2026",
       "Settings: 1 portion on, 0 switched off",
       "Payments Log: 1 entry, last saved 5 Oct, 10:00 am",
       "Tenants: 1 row, 1 current",
+      "Tenancy Log: 1 entry, last saved 4 Oct, 11:00 am",
     ]);
   });
 
@@ -175,14 +180,26 @@ describe("the Tabs section", () => {
     expect(texts("tabs", { facts: { ...FACTS, lastSavedAt: null } })[2]).toBe("Payments Log: 120 entries, no saved time recorded");
   });
 
+  it("does the same for the Tenancy Log: no last saved time for an empty one, or one with no time in it", () => {
+    expect(texts("tabs", { facts: { ...FACTS, tenancyLogRows: 0, tenancyLogLastSavedAt: null } })[4]).toBe("Tenancy Log: 0 entries");
+    expect(texts("tabs", { facts: { ...FACTS, tenancyLogLastSavedAt: null } })[4]).toBe("Tenancy Log: 17 entries, no saved time recorded");
+  });
+
+  it("says the Tenancy Log can't be read, and to look at Set up, when its headers are wrong: the check only warns", () => {
+    const checks = OK_CHECKS.map((entry) => (entry.id === "tenancy-log" ? { ...entry, status: "warn" as const } : entry));
+    const facts = { ...FACTS, tenancyLogRows: null, tenancyLogLastSavedAt: null };
+    expect(texts("tabs", { checks, facts })[4]).toBe("Tenancy Log: can't be read (see Set up)");
+  });
+
   it("says Not created yet for an app tab that is missing", () => {
-    const checks = OK_CHECKS.map((entry) => (["settings", "log", "tenants"].includes(entry.id) ? { ...entry, status: "todo" as const } : entry));
-    const facts = { ...FACTS, portionsOn: null, portionsOff: null, logRows: null, lastSavedAt: null, tenantsRows: null, openTenancies: null };
+    const checks = OK_CHECKS.map((entry) => (["settings", "log", "tenants", "tenancy-log"].includes(entry.id) ? { ...entry, status: "todo" as const } : entry));
+    const facts = { ...FACTS, portionsOn: null, portionsOff: null, logRows: null, lastSavedAt: null, tenantsRows: null, openTenancies: null, tenancyLogRows: null, tenancyLogLastSavedAt: null };
     expect(texts("tabs", { checks, facts })).toEqual([
       "Schedule: 14 month rows, October 2025 to November 2026",
       "Settings: Not created yet",
       "Payments Log: Not created yet",
       "Tenants: Not created yet",
+      "Tenancy Log: Not created yet",
     ]);
   });
 
@@ -208,16 +225,18 @@ describe("the Tabs section", () => {
       "Settings: not read",
       "Payments Log: not read",
       "Tenants: not read",
+      "Tenancy Log: not read",
     ]);
   });
 
   it("shows the real title of a tab where it is not the usual name, and says when a named tab is not there yet", () => {
-    const realTitles = { schedule: "rent", settings: "Settings", log: "payments log", tenants: "RentBook Tenants" };
+    const realTitles = { schedule: "rent", settings: "Settings", log: "payments log", tenants: "RentBook Tenants", "tenancy-log": "tenancy log" };
     expect(texts("tabs", { realTitles })).toEqual([
       'Schedule ("rent"): 14 month rows, October 2025 to November 2026',
       "Settings: 4 portions on, 1 switched off",
       'Payments Log ("payments log"): 120 entries, last saved 5 Oct, 10:00 am',
       'Tenants ("RentBook Tenants"): 9 rows, 4 current',
+      'Tenancy Log ("tenancy log"): 17 entries, last saved 4 Oct, 11:00 am',
     ]);
     const checks = OK_CHECKS.map((entry) => (entry.id === "tenants" ? { ...entry, status: "todo" as const } : entry));
     const tabs = section("tabs", { checks, appTabNames: { settings: "Settings", log: "Payments Log", tenants: "RentBook Tenants", "tenancy-log": "Tenancy Log" } });
@@ -232,6 +251,14 @@ describe("the Tabs section", () => {
     const tabs = section("tabs", { checks, appTabNames: { settings: "My Settings", log: "Payments Log", tenants: "RentBook Tenants", "tenancy-log": "Tenancy Log" } });
     expect(tabs.note).toBe(
       "SETTINGS_TAB and TENANTS_TAB name tabs that are not in your Sheet yet. If you already have them under other names, rename them in your Sheet first (see Set up).",
+    );
+  });
+
+  it("names TENANCY_LOG_TAB when that tab is named by the owner and is not there yet", () => {
+    const checks = OK_CHECKS.map((entry) => (entry.id === "tenancy-log" ? { ...entry, status: "todo" as const } : entry));
+    const tabs = section("tabs", { checks, appTabNames: { settings: "Settings", log: "Payments Log", tenants: "Tenants", "tenancy-log": "RentBook History" } });
+    expect(tabs.note).toBe(
+      "TENANCY_LOG_TAB names a tab that is not in your Sheet yet. If you already have it under another name, rename it in your Sheet first (see Set up).",
     );
   });
 

@@ -74,18 +74,16 @@ export type TenancyLogItem = {
 
 /**
  * Compares row 1 with the eight headers, by position (capitals, spaces and invisible characters do not matter: see
- * `headerKey`). The first wrong or missing one in plain words, or null when columns A to H are right.
+ * `headerKey`). The first wrong or missing one in plain words, or null when columns A to H are right. Used by the Set up
+ * check, which adds its own advice; the History's message adds the advice for it (see `parseTenancyLog`).
  */
-function headerProblem(header: unknown[]): string | null {
+export function tenancyLogHeaderProblem(header: unknown[]): string | null {
   for (let index = 0; index < TENANCY_LOG_HEADERS.length; index++) {
     const found = String(header[index] ?? "").trim();
     if (headerKey(found) !== headerKey(TENANCY_LOG_HEADERS[index])) {
       // The header is typed by hand: only a short stretch of it is quoted.
       const quoted = shorten(found);
-      return (
-        `The Tenancy Log tab must have "${TENANCY_LOG_HEADERS[index]}" in column ${colLetter(index)} ` +
-        `(found ${quoted === "" ? "nothing" : `"${quoted}"`}). Put the headers back to see the history; saving changes still works.`
-      );
+      return `The Tenancy Log tab must have "${TENANCY_LOG_HEADERS[index]}" in column ${colLetter(index)} (found ${quoted === "" ? "nothing" : `"${quoted}"`}).`;
     }
   }
   return null;
@@ -102,8 +100,10 @@ const valueOf = (cell: unknown): string | number => (typeof cell === "number" ? 
  * cannot be shown instead of guessing from the wrong columns. Blank rows are skipped. Reads nothing itself.
  */
 export function parseTenancyLog(values: unknown[][]): { items: TenancyLogItem[]; problem?: string } {
-  const problem = headerProblem(values[0] ?? []);
-  if (problem !== null) return { items: [], problem };
+  const found = tenancyLogHeaderProblem(values[0] ?? []);
+  if (found !== null) {
+    return { items: [], problem: `${found} Put the headers back to see the history; saving changes still works.` };
+  }
   const items: TenancyLogItem[] = [];
   values.forEach((cells, index) => {
     if (index === 0 || cells.every(isBlankCell)) return;

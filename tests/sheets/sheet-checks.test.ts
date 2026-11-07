@@ -4,6 +4,7 @@ import type { Check, CheckStatus } from "@/lib/setup-checks";
 import { NamedTabsGateway } from "@/lib/sheets/named-tabs";
 import { checkSheet, waitingChecks, type SheetFacts } from "@/lib/sheets/sheet-checks";
 import { ensureTabs, LOG_HEADERS, LOG_TAB, SETTINGS_HEADERS, SETTINGS_RANGE, SETTINGS_TAB } from "@/lib/sheets/settings-store";
+import { TENANCY_LOG_HEADERS, TENANCY_LOG_RANGE, TENANCY_LOG_TAB } from "@/lib/sheets/tenancy-log-store";
 import { TENANT_HEADERS, TENANTS_RANGE, TENANTS_TAB } from "@/lib/sheets/tenants-store";
 import { captureLogs, loggedLines, type LogSpies } from "../support/logs";
 import { FakeGateway } from "../support/fake-gateway";
@@ -16,6 +17,8 @@ type Grids = Record<string, unknown[][]>;
 
 const SAVED_1 = "2026-08-05T04:30:00.000Z";
 const SAVED_2 = "2026-09-07T06:15:00.000Z";
+const LOGGED_1 = "2026-09-20T08:00:00.000Z";
+const LOGGED_2 = "2026-10-02T09:30:00.000Z";
 const UPDATED_1 = "2026-01-15T05:00:00.000Z";
 const UPDATED_2 = "2026-09-20T08:00:00.000Z";
 
@@ -53,7 +56,18 @@ function tenantRow(overrides: Record<number, unknown> = {}): unknown[] {
   return row;
 }
 
-/** A Sheet as it is when everything is set up: the owner's Schedule and the app's three tabs, with a little history. */
+const historyRow = (savedAt: unknown, field = "Agreement end", by = "owner@example.com"): unknown[] => [
+  savedAt,
+  "t-1",
+  "p1",
+  "Edited",
+  field,
+  "2027-01-14",
+  "2027-03-31",
+  by,
+];
+
+/** A Sheet as it is when everything is set up: the owner's Schedule and the app's four tabs, with a little history. */
 function healthyGrids(): Grids {
   return {
     Schedule: baseSchedule(),
@@ -65,6 +79,7 @@ function healthyGrids(): Grids {
       tenantRow({ 0: "t-2", 1: "p2", 2: "Bala", 12: "2026-06-30", 14: "2026-06-30T05:00:00.000Z" }),
       tenantRow({ 0: "t-3", 1: "p3", 2: "Chitra", 14: UPDATED_2 }),
     ],
+    [TENANCY_LOG_TAB]: [[...TENANCY_LOG_HEADERS], historyRow(LOGGED_1), historyRow(LOGGED_2, "Phone")],
   };
 }
 
@@ -79,7 +94,7 @@ function sheet(changes: Record<string, unknown[][] | null> = {}): FakeGateway {
 }
 
 /** A Sheet with the Schedule alone, as a new owner has it. */
-const fresh = () => sheet({ [SETTINGS_TAB]: null, [LOG_TAB]: null, [TENANTS_TAB]: null });
+const fresh = () => sheet({ [SETTINGS_TAB]: null, [LOG_TAB]: null, [TENANTS_TAB]: null, [TENANCY_LOG_TAB]: null });
 
 const OPTIONS = { scheduleTab: "Schedule", totalHeader: "Total Rent" as string | null };
 
@@ -107,6 +122,7 @@ const ALL_IDS = [
   "settings",
   "log",
   "tenants",
+  "tenancy-log",
   "portion-settings",
 ];
 
@@ -133,6 +149,7 @@ describe("a healthy Sheet", () => {
       ["settings", 5],
       ["log", 5],
       ["tenants", 5],
+      ["tenancy-log", 5],
       ["portion-settings", 6],
     ]);
     for (const check of checks) {
@@ -154,6 +171,7 @@ describe("a healthy Sheet", () => {
       settings: "5 portions, each with its Tenant, Count and Amount columns.",
       log: "Headers are right. 2 entries.",
       tenants: "Headers are right. 3 rows.",
+      "tenancy-log": "Headers are right. 2 entries.",
       "portion-settings": "Check each portion's payments per cycle and hike before the first payment.",
     });
   });
@@ -175,10 +193,12 @@ describe("a healthy Sheet", () => {
       tenantsRows: 3,
       openTenancies: 2,
       lastUpdatedAt: UPDATED_2,
+      tenancyLogRows: 2,
+      tenancyLogLastSavedAt: LOGGED_2,
     } satisfies SheetFacts);
   });
 
-  it("makes exactly three calls: the tab list, one read of the four tabs, and one read of the last month's row and the row under it", async () => {
+  it("makes exactly three calls: the tab list, one read of the five tabs, and one read of the last month's row and the row under it", async () => {
     const fake = sheet();
     const many = vi.spyOn(fake, "getManyValues");
     const one = vi.spyOn(fake, "getValues");
@@ -191,6 +211,7 @@ describe("a healthy Sheet", () => {
           { tab: "Schedule", a1: "A1:ZZ" },
           { tab: LOG_TAB, a1: "A1:I" },
           { tab: TENANTS_TAB, a1: TENANTS_RANGE },
+          { tab: TENANCY_LOG_TAB, a1: TENANCY_LOG_RANGE },
         ],
         "UNFORMATTED_VALUE",
       ],
@@ -229,6 +250,7 @@ describe("a healthy Sheet", () => {
       settings: settingsGrid(),
       [LOG_TAB]: healthyGrids()[LOG_TAB],
       "RentBook Tenants": healthyGrids()[TENANTS_TAB],
+      [TENANCY_LOG_TAB]: healthyGrids()[TENANCY_LOG_TAB],
       Tenants: [["The owner's own tab"]],
     });
     const wrapper = new NamedTabsGateway(inner, {
@@ -269,6 +291,8 @@ describe("the connection", () => {
       tenantsRows: null,
       openTenancies: null,
       lastUpdatedAt: null,
+      tenancyLogRows: null,
+      tenancyLogLastSavedAt: null,
     });
   });
 
@@ -331,11 +355,11 @@ describe("the connection", () => {
 });
 
 describe("waitingChecks", () => {
-  it("are all ten checks of the Sheet, waiting, with the words given", () => {
+  it("are all eleven checks of the Sheet, waiting, with the words given", () => {
     const waiting = waitingChecks("Fix the settings above first.");
     expect(waiting.map((check) => check.id)).toEqual(ALL_IDS);
     for (const check of waiting) expect(check).toMatchObject({ status: "skip", detail: "Fix the settings above first." });
-    expect(waiting.map((check) => check.step)).toEqual([3, 4, 4, 4, 4, 4, 5, 5, 5, 6]);
+    expect(waiting.map((check) => check.step)).toEqual([3, 4, 4, 4, 4, 4, 5, 5, 5, 5, 6]);
   });
 });
 
@@ -345,7 +369,7 @@ describe("the Schedule tab (step 4)", () => {
     const { checks, facts } = await run(fake);
     expect(byId(checks, "schedule-tab")).toMatchObject({
       status: "fail",
-      detail: 'No tab named "Schedule". Your tabs: "Settings", "Payments Log", "Tenants", "Rent".',
+      detail: 'No tab named "Schedule". Your tabs: "Settings", "Payments Log", "Tenants", "Tenancy Log", "Rent".',
       fix: "Rename the tab that holds the month rows, or set SCHEDULE_TAB to its name.",
     });
     for (const id of ["header-row", "months", "row-below", "total"]) {
@@ -922,10 +946,115 @@ describe("the Tenants tab (step 5)", () => {
   });
 });
 
+describe("the Tenancy Log tab (step 5)", () => {
+  it("is OK with its headers right, and counts the entries and the latest saved time", async () => {
+    const { checks, facts } = await run(sheet());
+    expect(byId(checks, "tenancy-log")).toMatchObject({ status: "ok", detail: "Headers are right. 2 entries.", step: 5, title: "Tenancy Log tab" });
+    expect(byId(checks, "tenancy-log").fix).toBeUndefined();
+    expect(facts.tenancyLogRows).toBe(2);
+    expect(facts.tenancyLogLastSavedAt).toBe(LOGGED_2);
+  });
+
+  it("says 1 entry in the singular, and 0 entries for a tab of headers", async () => {
+    expect(byId((await run(sheet({ [TENANCY_LOG_TAB]: [[...TENANCY_LOG_HEADERS], historyRow(LOGGED_1)] }))).checks, "tenancy-log").detail).toBe(
+      "Headers are right. 1 entry.",
+    );
+    const none = await run(sheet({ [TENANCY_LOG_TAB]: [[...TENANCY_LOG_HEADERS]] }));
+    expect(byId(none.checks, "tenancy-log").detail).toBe("Headers are right. 0 entries.");
+    expect(none.facts.tenancyLogRows).toBe(0);
+    expect(none.facts.tenancyLogLastSavedAt).toBeNull();
+  });
+
+  it("does not count blank rows, and ignores a saved time that is not one", async () => {
+    const rows = [[...TENANCY_LOG_HEADERS], historyRow("last Tuesday CANARY"), [], ["", "", "", "", "", "", "", ""], historyRow(LOGGED_1)];
+    const { checks, facts } = await run(sheet({ [TENANCY_LOG_TAB]: rows }));
+    expect(byId(checks, "tenancy-log").detail).toBe("Headers are right. 2 entries.");
+    expect(facts.tenancyLogLastSavedAt).toBe(LOGGED_1);
+  });
+
+  it("is to do, and added by Prepare my Sheet, when the tab is not there", async () => {
+    const missing = await run(sheet({ [TENANCY_LOG_TAB]: null }));
+    expect(byId(missing.checks, "tenancy-log")).toMatchObject({
+      status: "todo",
+      detail: "Not created yet. It's added the next time the app opens your Sheet, or by Prepare my Sheet.",
+      prepare: "create",
+    });
+    expect(missing.facts.tenancyLogRows).toBeNull();
+  });
+
+  it("is to do, and filled by Prepare my Sheet, when the tab is there with nothing in its first row", async () => {
+    expect(byId((await run(sheet({ [TENANCY_LOG_TAB]: [] }))).checks, "tenancy-log")).toMatchObject({
+      status: "todo",
+      detail: "Empty. Prepare my Sheet writes its headers.",
+      prepare: "fill",
+    });
+  });
+
+  it("warns, naming the first wrong header, when a header was changed: saving changes still works, only the History cannot be shown", async () => {
+    const header = [...TENANCY_LOG_HEADERS];
+    header[3] = "What happened";
+    const { checks, facts } = await run(sheet({ [TENANCY_LOG_TAB]: [header, historyRow(LOGGED_1)] }));
+    const found = byId(checks, "tenancy-log");
+    expect(found.status).toBe("warn");
+    expect(found.detail).toBe('The Tenancy Log tab must have "Action" in column D (found "What happened").');
+    expect(found.fix).toBe("Put the headers back. Saving changes still works; only the History can't be shown.");
+    expect(found.prepare).toBeUndefined();
+    expect(facts.tenancyLogRows).toBeNull();
+    expect(facts.tenancyLogLastSavedAt).toBeNull();
+  });
+
+  it("warns for a tab that holds something else (an unrelated tab with this name), and writes nothing", async () => {
+    const fake = sheet({ [TENANCY_LOG_TAB]: [["Date", "Note"], ["5 Oct", "paid"]] });
+    const before = structuredClone(fake.tabs.get(TENANCY_LOG_TAB));
+    const found = byId((await run(fake)).checks, "tenancy-log");
+    expect(found.status).toBe("warn");
+    expect(found.detail).toContain('must have "Saved at" in column A (found "Date")');
+    expect(fake.tabs.get(TENANCY_LOG_TAB)).toEqual(before);
+  });
+
+  it("warns for a first row of only spaces, which Prepare does not write over", async () => {
+    const found = byId((await run(sheet({ [TENANCY_LOG_TAB]: [Array.from({ length: 8 }, () => " "), historyRow(LOGGED_1)] }))).checks, "tenancy-log");
+    expect(found.status).toBe("warn");
+    expect(found.prepare).toBeUndefined();
+    expect(found.detail).toBe('The Tenancy Log tab must have "Saved at" in column A (found nothing).');
+  });
+
+  it("accepts the headers in any case or spacing, and extra columns to the right, as the History does", async () => {
+    const header = [...TENANCY_LOG_HEADERS.map((name) => name.toUpperCase()), "My own note"];
+    expect(byId((await run(sheet({ [TENANCY_LOG_TAB]: [header, historyRow(LOGGED_1)] }))).checks, "tenancy-log").status).toBe("ok");
+  });
+
+  it("agrees with ensureTabs: where it says to do, it writes the headers, and where it warns, it writes nothing", async () => {
+    const blank = sheet({ [TENANCY_LOG_TAB]: [[], historyRow(LOGGED_1)] });
+    expect(byId((await run(blank)).checks, "tenancy-log")).toMatchObject({ status: "todo", prepare: "fill" });
+    await ensureTabs(blank, "Schedule");
+    expect(blank.tabs.get(TENANCY_LOG_TAB)![0]).toEqual(TENANCY_LOG_HEADERS);
+
+    const other = sheet({ [TENANCY_LOG_TAB]: [["Date", "Note"], ["5 Oct", "paid"]] });
+    const before = structuredClone(other.tabs.get(TENANCY_LOG_TAB));
+    expect(byId((await run(other)).checks, "tenancy-log").status).toBe("warn");
+    await ensureTabs(other, "Schedule");
+    expect(other.tabs.get(TENANCY_LOG_TAB)).toEqual(before);
+  });
+
+  it("says to rename an old tab first when TENANCY_LOG_TAB names a tab that is not in the Sheet yet", async () => {
+    const names = { "tenancy-log": "RentBook History" };
+    const { checks } = await checkSheet(sheet({ [TENANCY_LOG_TAB]: null }), { ...OPTIONS, appTabNames: names });
+    expect(byId(checks, "tenancy-log").detail).toBe(
+      'Not created yet. It\'s added the next time the app opens your Sheet, or by Prepare my Sheet. TENANCY_LOG_TAB ("RentBook History") names a tab that is not in your Sheet yet. If you already have it under another name, rename it in your Sheet first, then use Check again: Prepare my Sheet would start a new, empty Tenancy Log tab and leave the old one alone.',
+    );
+  });
+
+  it("shows the tab's real title where it is not the app's usual name for it", async () => {
+    const { checks } = await checkSheet(sheet(), { ...OPTIONS, realTitles: () => ({ "tenancy-log": "tenancy log" }) });
+    expect(byId(checks, "tenancy-log").detail).toBe('Found as "tenancy log". Headers are right. 2 entries.');
+  });
+});
+
 describe("what Prepare my Sheet would do about a to-do check", () => {
   it("is create for a tab that is not there", async () => {
     const { checks } = await run(fresh());
-    for (const id of ["settings", "log", "tenants"]) expect(byId(checks, id), id).toMatchObject({ status: "todo", prepare: "create" });
+    for (const id of ["settings", "log", "tenants", "tenancy-log"]) expect(byId(checks, id), id).toMatchObject({ status: "todo", prepare: "create" });
   });
 
   it("is fill for a tab that is there with nothing in it, a Settings with only its header, or a row 1 with nothing in it", async () => {
@@ -936,10 +1065,12 @@ describe("what Prepare my Sheet would do about a to-do check", () => {
       { [LOG_TAB]: [[]] },
       { [TENANTS_TAB]: [] },
       { [TENANTS_TAB]: [[], tenantRow()] },
+      { [TENANCY_LOG_TAB]: [] },
+      { [TENANCY_LOG_TAB]: [[], historyRow(LOGGED_1)] },
     ]) {
       const { checks } = await run(sheet(changes));
       const [tab] = Object.keys(changes);
-      const id = tab === SETTINGS_TAB ? "settings" : tab === LOG_TAB ? "log" : "tenants";
+      const id = tab === SETTINGS_TAB ? "settings" : tab === LOG_TAB ? "log" : tab === TENANCY_LOG_TAB ? "tenancy-log" : "tenants";
       expect(byId(checks, id), JSON.stringify(changes)).toMatchObject({ status: "todo", prepare: "fill" });
     }
   });
@@ -1010,7 +1141,7 @@ describe("portion settings (step 6)", () => {
 });
 
 describe("a fresh Sheet, with the Schedule alone", () => {
-  it("has three things to do, and the rest OK, with the number of portions Settings would start with", async () => {
+  it("has four things to do, and the rest OK, with the number of portions Settings would start with", async () => {
     const { checks, facts } = await run(fresh());
     expect(statuses(checks)).toEqual({
       connection: "ok",
@@ -1022,19 +1153,20 @@ describe("a fresh Sheet, with the Schedule alone", () => {
       settings: "todo",
       log: "todo",
       tenants: "todo",
+      "tenancy-log": "todo",
       "portion-settings": "todo",
     });
-    expect(facts).toMatchObject({ seedPortions: 5, monthRows: 2, logRows: null, tenantsRows: null, portionsOn: null });
+    expect(facts).toMatchObject({ seedPortions: 5, monthRows: 2, logRows: null, tenantsRows: null, tenancyLogRows: null, portionsOn: null });
   });
 
-  it("reads only the Schedule: the three tabs that are not there are not asked for", async () => {
+  it("reads only the Schedule: the four tabs that are not there are not asked for", async () => {
     const fake = fresh();
     const many = vi.spyOn(fake, "getManyValues");
     await run(fake);
     expect(many.mock.calls[0][0]).toEqual([{ tab: "Schedule", a1: "A1:ZZ" }]);
   });
 
-  it("makes no read of the data at all when none of the four tabs is there", async () => {
+  it("makes no read of the data at all when none of the five tabs is there", async () => {
     const fake = new FakeGateway({ Notes: [["x"]] });
     const { checks, facts } = await run(fake);
     expect(fake.calls).toEqual(["listTabs"]);
@@ -1042,6 +1174,7 @@ describe("a fresh Sheet, with the Schedule alone", () => {
     expect(byId(checks, "settings").status).toBe("skip");
     expect(byId(checks, "log").status).toBe("todo");
     expect(byId(checks, "tenants").status).toBe("todo");
+    expect(byId(checks, "tenancy-log").status).toBe("todo");
     expect(facts.readMs).toBeNull();
   });
 });
@@ -1141,7 +1274,7 @@ describe("what a check may carry", () => {
     "CANARY-owner@example.com",
     "CANARY-advance-status",
   ];
-  const [tenant, phone, amount, note, footer, who] = CANARIES;
+  const [tenant, phone, amount, note, footer, who, advanceStatus] = CANARIES;
 
   /** A Sheet with a canary in every place a person's data can be, beside the places the checks read. */
   function loaded(): FakeGateway {
@@ -1155,6 +1288,11 @@ describe("what a check may carry", () => {
       [SETTINGS_TAB]: settings,
       [LOG_TAB]: [[...LOG_HEADERS], [SAVED_1, "2026-08", "p1", tenant, Number(amount), 2, "2026-08-05", who, "Logged"]],
       [TENANTS_TAB]: [[...TENANT_HEADERS], tenantRow({ 2: tenant, 3: phone, 6: Number(amount), 11: note, 13: who })],
+      [TENANCY_LOG_TAB]: [
+        [...TENANCY_LOG_HEADERS],
+        [LOGGED_1, "t-1", "p1", "Edited", "Advance status", advanceStatus, advanceStatus, who],
+        [LOGGED_2, "t-1", "p1", "Edited", "Refund", Number(amount), Number(amount), who],
+      ],
     });
   }
 
@@ -1168,6 +1306,7 @@ describe("what a check may carry", () => {
   it("holds none of it when a part of the Sheet is wrong either", async () => {
     const fake = loaded();
     fake.tabs.get(TENANTS_TAB)![0][3] = "Mobile";
+    fake.tabs.get(TENANCY_LOG_TAB)![0][6] = "Value now";
     fake.tabs.get(SETTINGS_TAB)![2][2] = "Tenant9";
     fake.tabs.get("Schedule")!.splice(3, 0, ["Autumn", tenant, 1, Number(amount)]);
     const text = JSON.stringify(await run(fake));

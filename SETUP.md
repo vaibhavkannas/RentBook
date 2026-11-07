@@ -108,7 +108,7 @@ Set up only reads. It shows six steps, each with a pill (OK, Check, Fix, To do o
 
 The page shows no secret, key, token or setting value and no tenant data: only tab titles, header texts, counts, times, and the service account's address (the one you share the Sheet with, step 4). Under the steps, "What your Sheet needs" lists the rules in "Your Sheet's layout" below. Tap **Check again** after you fix something.
 
-**Prepare my Sheet.** When one of RentBook's own tabs (Settings, Payments Log or Tenants, under the names you gave them) is missing, or is there but empty, and the service account, the Sheet and the Schedule tab are not failing, Set up offers a Prepare my Sheet button. It adds the missing tabs with their headers and fills in an empty one. It starts Settings from your Schedule's header row, with 11 payments per cycle and a 5% hike for each portion, so check them in Portion settings before the first payment. It also fills in a blank H1 or I1 of the Payments Log. It never changes a cell that already holds something and never deletes anything, and only the owner can tap it. The app does the same on its first page view, so Prepare my Sheet is the way to see it happen, and to see what is wrong if it cannot.
+**Prepare my Sheet.** When one of RentBook's own tabs (Settings, Payments Log, Tenants or Tenancy Log, under the names you gave them) is missing, or is there but empty, and the service account, the Sheet and the Schedule tab are not failing, Set up offers a Prepare my Sheet button. It adds the missing tabs with their headers and fills in an empty one. It starts Settings from your Schedule's header row, with 11 payments per cycle and a 5% hike for each portion, so check them in Portion settings before the first payment. It also fills in a blank H1 or I1 of the Payments Log. It never changes a cell that already holds something and never deletes anything, and only the owner can tap it. The app does the same on its first page view, so Prepare my Sheet is the way to see it happen, and to see what is wrong if it cannot.
 
 **Diagnostics.** More, then **Diagnostics**, shows how the app and your Sheet are doing: the version, when this server started, how many checks are OK (with a link to Set up), whether the Sheet answers and how fast, what each tab holds (counts and times), and how many problems this server has logged since it started. Each server instance counts its own and starts again from zero when it restarts, and Vercel may run several. It shows counts, times and tab names only: no secret and no tenant data.
 
@@ -124,6 +124,7 @@ RentBook works with a Sheet laid out a little differently from the owner's examp
 - **Settings tab.** RentBook's own tab. The headers are in row 1 of columns A to G, and column H, headed Active, says which portions are switched off (No). The portions are in rows 2 to 50. Each portion has its own id (letters, numbers, - and _), and the Tenant, Count and Amount header texts must match the Schedule's header row. A note typed under the table is ignored.
 - **Payments Log tab.** RentBook's own tab, used by column position, A to I. If column H or I already has another heading, RentBook still writes there (who logged the payment, and what was done) and leaves your heading alone.
 - **Tenants tab.** RentBook's own tab. It has 15 headers in columns A to O, in a fixed order; capitals and spaces do not matter. Columns to the right of O are yours.
+- **Tenancy Log tab.** RentBook's own tab, the history of changes to tenant details. It has 8 headers in columns A to H, in a fixed order; capitals and spaces do not matter. RentBook only adds rows to it, one for each detail that changed, and Phone and Notes are recorded only as changed, never copied. The tab may be hidden, but not renamed or reordered. Columns to the right of H are yours.
 - **Naming a tab.** To give one of RentBook's own tabs another name (SETTINGS_TAB, LOG_TAB, TENANTS_TAB, TENANCY_LOG_TAB), rename the tab in your Sheet first, then set the variable. A name that is not in your Sheet yet makes RentBook start a new tab, with the default values for Settings, and leave your old one alone.
 - **What the app never does.** RentBook adds to your Sheet and never deletes a row, a column or a tab.
 
@@ -286,6 +287,33 @@ The owner can add a portion, switch one off and change the order of the portions
 3. Then delete its Settings row (its row in the Settings tab).
 
 Its rows in the Tenants tab and the Payments Log stay. RentBook does not give its id (for example `p4`) to a new portion while the Tenants tab still has rows for it.
+
+## Overdue rent, the year view and alerts
+
+Three screens show the Sheet across months. They read the same data as the month screen and only read: they never write to your Sheet. Open them from More, under Rent, or from the **Needs attention** card at the top of the month screen, which shows for this month only, when something needs a look.
+
+- **Overdue rent** lists who owes rent, the most owed first, with the months behind each amount. Tap a month to open it.
+- **Year at a glance** shows each portion's twelve months of a year as a grid (paid, paid short, unpaid, not due yet, vacant), with what was received and what was due. Tap a month to open it.
+- **Agreements and hikes** lists agreements that have ended or end soon, and portions whose rent goes up soon.
+
+**How overdue is worked out.** Rent for a month is due on the 1st and counts as overdue from the 6th, 5 days later. Only a portion's current tenant counts, from the first month of their latest unbroken run of payments, and each month is judged by the same card the month screen shows: an unpaid month owes the suggested rent, and a month paid for less than the rent owes the part that is missing. Vacant months, months paid ahead, the advance (the deposit) and an extra amount paid in another month never count. A tenant who has left keeps showing as owing until you record the move-out on the tenant page; the months after it then stop counting.
+
+**Alerts.** An agreement is listed from 60 days before its end date, and stays listed after it has ended until you change the date or the tenant moves out. The Sheet has no hike date, so a hike is worked out from the payment count and the portion's cycle length in Portion settings: it is listed from 2 months before the payment that carries it. There is none for a portion whose count never resets, whose hike is 0%, or that is vacant. Agreement ends come from the `Tenants` tab, so an agreement end that was never added is not listed.
+
+## The Tenancy Log
+
+RentBook keeps a history of the changes made to tenant details in its own `Tenancy Log` tab, and shows it on each tenant page as **History**, newest first: the newest 30 changes, with the older ones still in the tab.
+
+- **What it holds.** One row for each detail a save changed, in columns A to H, headed `Saved at`, `Tenancy ID`, `Portion`, `Action`, `Field`, `Old value`, `New value` and `Changed by`. Action is Added (details were added), Edited, Moved out, or Closed (a new tenant's start ended the tenancy). Field is the header of the `Tenants` column that changed, so a change of `Move-in date` is one row with the old and the new day.
+- **Append-only.** RentBook only adds rows, all the rows of a save in one go, and never edits or deletes one.
+- **Phone and Notes** are recorded only that they changed: both value cells stay blank, so no phone number or note is copied into this tab. No tenant's name is copied either; the History finds the name from the `Tenancy ID`.
+- **From now on.** The history starts when you deploy this version. Changes from before are not filled in, and changes you make straight in the Sheet are not recorded.
+- **Looking after the tab.** You may hide it, but do not rename it (to give it another name, set `TENANCY_LOG_TAB`) and do not move its columns. Keep columns A to H as they are; columns to the right of column H are yours. If a header is changed, the History says it cannot be shown and Set up asks you to put the header back. Saving changes keeps working.
+- **If an entry is missing.** When a change is saved but its history could not be added, RentBook tries once more by itself. If that fails too, a message says "The change was saved, but it couldn't be added to the History." The change is safe in the `Tenants` tab; only that entry is missing from the History.
+
+### Before you deploy
+
+Owner step. The first page view after you deploy this version adds an empty `Tenancy Log` tab to your Sheet, with its headers (Prepare my Sheet does the same). If your Sheet already has another tab named `Tenancy Log` that is not RentBook's, rename that tab before you deploy, or set `TENANCY_LOG_TAB` to a different name. RentBook never writes over what is in the first row of such a tab, so the History would say it cannot be shown, but it would still add the history rows of every save at the bottom of that tab, below what is already there. Try it on your test copy first (step 1).
 
 ## 7. Deploy to Vercel
 

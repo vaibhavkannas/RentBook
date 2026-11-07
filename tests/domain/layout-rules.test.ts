@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { BRAND } from "@/lib/brand";
 import { LAYOUT_RULES } from "@/lib/layout-rules";
 import { SETTINGS_RANGE } from "@/lib/sheets/settings-store";
+import { TENANCY_LOG_HEADERS } from "@/lib/sheets/tenancy-log-store";
 import { TENANT_HEADERS } from "@/lib/sheets/tenants-store";
 
 // What the owner's Sheet needs, in plain words, for the Set up page and SETUP.md. The rules are what is left of the audit
@@ -24,6 +25,7 @@ describe("LAYOUT_RULES", () => {
       "Settings tab",
       "Payments Log tab",
       "Tenants tab",
+      "Tenancy Log tab",
       "Naming a tab",
       "What the app never does",
     ]);
@@ -94,6 +96,18 @@ describe("LAYOUT_RULES", () => {
     const text = rule("Tenants tab");
     expect(text).toContain("15 headers");
     expect(text).toContain("columns A to O");
+  });
+
+  it("says the Tenancy Log has its eight headers in A to H, that the app only adds rows to it, and that it may be hidden but not renamed or reordered", () => {
+    expect(TENANCY_LOG_HEADERS).toHaveLength(8);
+    const text = rule("Tenancy Log tab");
+    expect(text).toContain("8 headers");
+    expect(text).toContain("columns A to H");
+    expect(text).toMatch(/only adds rows/);
+    expect(text).toMatch(/Phone and Notes/);
+    expect(text).toMatch(/hidden/);
+    expect(text).toMatch(/not renamed or reordered/);
+    expect(text).toMatch(/Columns to the right of H are yours/);
   });
 
   it("says to rename a tab in the Sheet first, then set the variable, and why", () => {

@@ -14,6 +14,10 @@ A phone-first web app for recording monthly rent receipts for a building with se
 - The month summary shows what was received against the rent due, and any extra or shortfall. A paid card says when the amount was more or less than the usual rent (the suggested amount, hike included).
 - A bar at the bottom switches between Month, Activity and More (the account, the owner's Portion settings, Set up and Diagnostics, and Sign out). Switching months does not add browser history, and the Month tab, the arrow back on the other screens and the system Back all return to the month that was showing, so Back leaves the month screen instead of stepping through every month. A tab or an arrow back loads the screen again, so it shows the Sheet as it is now, while the phone's own Back button shows the screen as it was kept: after using it, tap another tab at the bottom of the screen and come back (or pull down, in a browser tab) to see another person's latest entry. In an installed Android app, Back on the month screen first shows "Press back again to exit". It needs a tap on the screen first, and does nothing in an ordinary browser tab or in an iPhone or iPad home-screen app (Back cannot exit those). If Back is pressed again after the message has gone, without tapping anything in between, the app simply exits.
 - Tenant details for each portion (phone, move-in, agreement end, advance, move-out) kept in a `Tenants` tab of the same Sheet, shown on the card and on a tenant page with past tenants.
+- Overdue rent: who owes what, the most owed first, counted from the 6th of the month, with a "Needs attention" card on the month screen. It uses the same figures as the month cards.
+- Year at a glance: each portion's twelve months as a grid, with what was received against what was due.
+- Agreement and hike alerts: agreements that end within 60 days (or have ended) and rents that go up within two months.
+- Tenancy history: every change to a tenant's details (added, edited, moved out) is recorded in a `Tenancy Log` tab with who made it and when, and listed as History on the tenant page. Phone numbers and notes are recorded only as changed.
 
 ## Develop
 
@@ -29,7 +33,7 @@ npm run dev
 | `npm run typecheck` | TypeScript check |
 | `npm run lint` | ESLint |
 | `npm run recon` | Read-only check of your Google Sheet. Never writes |
-| `npm run verify:testcopy` | End-to-end log, edit, undo, Activity and tenant-details check against a test copy of the Sheet. Needs `TEST_SHEET_ID`; refuses to run on the real Sheet. The copy's Schedule must already have a row for 2040-04 with no payment for portion p5 (new month rows can only be added in order); the script checks this first and stops before writing if not. The "Verify Tenant" rows it adds to the Tenants tab (p5 only) stay in the test copy, already moved out |
+| `npm run verify:testcopy` | End-to-end log, edit, undo, Activity and tenant-details check against a test copy of the Sheet. Needs `TEST_SHEET_ID`; refuses to run on the real Sheet. The copy's Schedule must already have a row for 2040-04 with no payment for portion p5 (new month rows can only be added in order); the script checks this first and stops before writing if not. The "Verify Tenant" rows it adds to the Tenants tab (p5 only) stay in the test copy, already moved out, and so do their rows in the Tenancy Log, which the script checks |
 
 ## Setup and deployment
 

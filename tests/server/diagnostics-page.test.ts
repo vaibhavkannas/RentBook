@@ -6,6 +6,7 @@ import { configError } from "@/lib/errors";
 import { formatSavedAt } from "@/lib/format";
 import { NamedTabsGateway } from "@/lib/sheets/named-tabs";
 import { LOG_HEADERS, LOG_TAB, SETTINGS_TAB } from "@/lib/sheets/settings-store";
+import { TENANCY_LOG_HEADERS, TENANCY_LOG_TAB } from "@/lib/sheets/tenancy-log-store";
 import { TENANT_HEADERS, TENANTS_TAB } from "@/lib/sheets/tenants-store";
 import { captureLogs } from "../support/logs";
 import { FakeGateway } from "../support/fake-gateway";
@@ -67,7 +68,7 @@ const ENV: Record<string, string> = {
 };
 const SETTING_NAMES = [
   "AUTH_SECRET", "AUTH_GOOGLE_ID", "AUTH_GOOGLE_SECRET", "AUTH_URL", "ALLOWED_EMAILS", "ALLOWED_EMAIL", "SESSION_NOT_BEFORE", "CSP_REPORT_ONLY",
-  "GOOGLE_SERVICE_ACCOUNT_JSON", "SHEET_ID", "SCHEDULE_TAB", "TOTAL_HEADER", "SETTINGS_TAB", "LOG_TAB", "TENANTS_TAB",
+  "GOOGLE_SERVICE_ACCOUNT_JSON", "SHEET_ID", "SCHEDULE_TAB", "TOTAL_HEADER", "SETTINGS_TAB", "LOG_TAB", "TENANTS_TAB", "TENANCY_LOG_TAB",
 ];
 
 let saved: Record<string, string | undefined>;
@@ -81,12 +82,15 @@ const tenantRow = (updatedAt = "2026-09-20T08:00:00.000Z", moveOut = ""): unknow
 ];
 const logRow = (savedAt: string): unknown[] => [savedAt, "2026-09", "p1", "Asha", 5450, 3, "2026-09-05", "owner@example.com", "Logged"];
 
+const historyRow = (savedAt: string): unknown[] => [savedAt, "t-1", "p1", "Edited", "Agreement end", "2027-01-14", "2027-03-31", "owner@example.com"];
+
 const healthy = () =>
   new FakeGateway({
     Schedule: baseSchedule(),
     [SETTINGS_TAB]: settingsGrid(),
     [LOG_TAB]: [[...LOG_HEADERS], logRow("2026-08-05T04:30:00.000Z"), logRow("2026-09-07T06:15:00.000Z")],
     [TENANTS_TAB]: [[...TENANT_HEADERS], tenantRow(), tenantRow("2026-06-30T05:00:00.000Z", "2026-06-30")],
+    [TENANCY_LOG_TAB]: [[...TENANCY_LOG_HEADERS], historyRow("2026-09-01T05:00:00.000Z"), historyRow("2026-09-20T08:00:00.000Z")],
   });
 const serveSheet = (gateway: FakeGateway | NamedTabsGateway) =>
   mocks.getSheetsContext.mockReturnValue({ gateway, scheduleTab: "Schedule", totalHeader: "Total Rent" });
@@ -174,6 +178,7 @@ describe("the owner's Diagnostics", () => {
     expect(text).toContain("Settings: 5 portions on, 0 switched off");
     expect(text).toContain(`Payments Log: 2 entries, last saved ${formatSavedAt("2026-09-07T06:15:00.000Z")}`);
     expect(text).toContain("Tenants: 2 rows, 1 current");
+    expect(text).toContain(`Tenancy Log: 2 entries, last saved ${formatSavedAt("2026-09-20T08:00:00.000Z")}`);
   });
 
   it("says no problems were logged, and that each server counts on its own", async () => {
@@ -244,6 +249,14 @@ describe("Diagnostics when the Sheet is not as it should be", () => {
     expect(text).toContain("Settings: Not created yet");
     expect(text).toContain("Payments Log: Not created yet");
     expect(text).toContain("Tenants: Not created yet");
+    expect(text).toContain("Tenancy Log: Not created yet");
+  });
+
+  it("says the Tenancy Log can't be read, and to look at Set up, when its headers were changed", async () => {
+    const fake = healthy();
+    fake.tabs.get(TENANCY_LOG_TAB)![0][3] = "What happened";
+    serveSheet(fake);
+    expect(visibleText(await render())).toContain("Tenancy Log: can't be read (see Set up)");
   });
 
   it("shows the real title of a tab that has another name, and says to rename a named tab that is not there yet", async () => {
@@ -294,6 +307,7 @@ describe("what Diagnostics never shows", () => {
       [SETTINGS_TAB]: settingsGrid(),
       [LOG_TAB]: [[...LOG_HEADERS], ["2026-08-05T04:30:00.000Z", "2026-08", "p1", tenant, Number(amount), 2, "2026-08-05", owner, "Logged"]],
       [TENANTS_TAB]: [[...TENANT_HEADERS], row],
+      [TENANCY_LOG_TAB]: [[...TENANCY_LOG_HEADERS], ["2026-08-05T04:30:00.000Z", "t-1", "p1", "Edited", "Advance status", note, tenant, owner]],
     });
   }
 
@@ -323,6 +337,7 @@ describe("what Diagnostics never shows", () => {
     setEnv(env);
     const broken = loadedSheet();
     broken.tabs.get(TENANTS_TAB)![0][3] = "Mobile";
+    broken.tabs.get(TENANCY_LOG_TAB)![0][4] = "Value";
     broken.tabs.get(SETTINGS_TAB)![2][2] = "Tenant9";
     serveSheet(broken);
     for (const canary of [...CANARIES, "CANARY"]) expect(await render(), canary).not.toContain(canary);

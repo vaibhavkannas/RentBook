@@ -14,8 +14,11 @@
  *    three rows are added to the Payments Log;
  *  - the tenancy is edited, a save from a stale screen is refused, and the tenant moves out.
  *
+ * The app also records each tenancy change in the Tenancy Log tab (append-only): the rows for the new tenant, the edit and
+ * the move-out STAY there too, and the script checks that the edit's row is among the newest.
+ *
  * The rows it adds to the Tenants tab STAY in the test copy (the move-out date closes them, but they are not
- * deleted), and the first run creates the Tenants tab there. Logging a new tenant closes every current p5
+ * deleted), and the first run creates the Tenants and Tenancy Log tabs there. Logging a new tenant closes every current p5
  * tenancy, as the app does for any new tenant, so a current p5 tenancy that was already in the test copy gets
  * a move-out date too. A run that stopped part-way can leave an open "Verify Tenant" tenancy behind; the next
  * run moves it out first (and says so), so the script can be run again and again.
@@ -48,6 +51,7 @@ import {
 } from "@/lib/sheets/service";
 import { readSettings } from "@/lib/sheets/settings-store";
 import type { WriteStamp } from "@/lib/sheets/tenancy-writes";
+import { parseTenancyLog, TENANCY_LOG_RANGE, TENANCY_LOG_TAB } from "@/lib/sheets/tenancy-log-store";
 import { getPortionTenants, moveOutTenancy, saveTenancy } from "@/lib/sheets/tenancy-service";
 import { readTenancies } from "@/lib/sheets/tenants-store";
 
@@ -173,6 +177,11 @@ async function main() {
     throw new Error(`A current "${TENANT}" tenancy for ${PORTION} is still there after 10 tries. Fix the Tenants tab by hand.`);
   }
 
+  /** The Tenancy Log, read straight from the Sheet (never from the cache). */
+  async function readTenancyLog() {
+    return parseTenancyLog(await gateway.getValues(TENANCY_LOG_TAB, TENANCY_LOG_RANGE, "UNFORMATTED_VALUE"));
+  }
+
   /** Edit, a stale save and move-out of the tenancy that logging the payment created. */
   async function checkTenancyLifecycle(created: TenancySummary): Promise<void> {
     const before = await storedTenancy(created.id);
@@ -190,13 +199,12 @@ async function main() {
         before.updatedBy === WHO,
     );
 
-    const edited = (
-      await saveTenancy(
-        ctx,
-        { portionId: PORTION, tenant: TENANT, id: created.id, expectedUpdatedAt: created.updatedAt, fields: { ...TENANCY, notes: EDITED_NOTES } },
-        stampAfter(created.updatedAt),
-      )
-    ).tenancy;
+    const saved = await saveTenancy(
+      ctx,
+      { portionId: PORTION, tenant: TENANT, id: created.id, expectedUpdatedAt: created.updatedAt, fields: { ...TENANCY, notes: EDITED_NOTES } },
+      stampAfter(created.updatedAt),
+    );
+    const edited = saved.tenancy;
     const afterEdit = await storedTenancy(created.id);
     check(
       "editing the tenancy changes its notes and its updated-at",
@@ -204,6 +212,22 @@ async function main() {
         afterEdit.updatedAt === edited.updatedAt &&
         afterEdit.updatedAt !== created.updatedAt,
       `${created.updatedAt} then ${afterEdit.updatedAt}`,
+    );
+    // The edit changed only the notes, so its history is one Edited row for Notes, which says that they changed and not what they are.
+    const log = await readTenancyLog();
+    const mine = log.items.slice(-5).filter((row) => row.tenancyId === created.id && row.action === "Edited");
+    check(
+      "the edit is in the Tenancy Log: one Edited row for Notes, at the moment of the save, by the checker, with no value copied",
+      saved.historyWritten &&
+        log.problem === undefined &&
+        mine.length === 1 &&
+        mine[0].portionId === PORTION &&
+        mine[0].field === "Notes" &&
+        mine[0].savedAt === edited.updatedAt &&
+        mine[0].changedBy === WHO &&
+        mine[0].oldValue === "" &&
+        mine[0].newValue === "",
+      log.problem ?? `${mine.length} Edited row(s) among the newest 5, historyWritten: ${String(saved.historyWritten)}`,
     );
     check(
       "the edit left the other columns as they were",

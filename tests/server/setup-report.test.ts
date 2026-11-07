@@ -79,7 +79,7 @@ describe("setupReport", () => {
     });
     expect(facts).toBeNull();
     expect(appTabNames).toBeNull();
-    expect(checks.filter((check) => check.status === "skip")).toHaveLength(10);
+    expect(checks.filter((check) => check.status === "skip")).toHaveLength(11);
     for (const check of checks.filter((entry) => entry.status === "skip")) expect(check.detail).toBe(FIX_SETTINGS_FIRST);
     expect(checks.find((check) => check.id === "sheet-id")).toMatchObject({ status: "fail", detail: "Not set." });
     expect(logs.error).not.toHaveBeenCalled();

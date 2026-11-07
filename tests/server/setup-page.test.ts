@@ -6,6 +6,7 @@ import { LAYOUT_RULES } from "@/lib/layout-rules";
 import { configError } from "@/lib/errors";
 import { NamedTabsGateway } from "@/lib/sheets/named-tabs";
 import { LOG_HEADERS, LOG_TAB, SETTINGS_TAB } from "@/lib/sheets/settings-store";
+import { TENANCY_LOG_HEADERS, TENANCY_LOG_TAB } from "@/lib/sheets/tenancy-log-store";
 import { TENANT_HEADERS, TENANTS_TAB } from "@/lib/sheets/tenants-store";
 import { captureLogs, type LogSpies } from "../support/logs";
 import { FakeGateway } from "../support/fake-gateway";
@@ -82,6 +83,7 @@ const SETTING_NAMES = [
   "SETTINGS_TAB",
   "LOG_TAB",
   "TENANTS_TAB",
+  "TENANCY_LOG_TAB",
 ];
 
 let saved: Record<string, string | undefined>;
@@ -101,6 +103,7 @@ const healthy = () =>
     [SETTINGS_TAB]: settingsGrid(),
     [LOG_TAB]: [[...LOG_HEADERS]],
     [TENANTS_TAB]: [[...TENANT_HEADERS], tenantRow()],
+    [TENANCY_LOG_TAB]: [[...TENANCY_LOG_HEADERS]],
   });
 const fresh = () => new FakeGateway({ Schedule: baseSchedule() });
 
@@ -299,7 +302,7 @@ describe("a Sheet that is not set up yet", () => {
     const html = await render();
     const text = visibleText(html);
     expect(text).toContain(
-      "Adds the missing tabs (Settings, Payments Log and Tenants) with their headers. Nothing already in your Sheet is changed: it only adds tabs and fills in tabs and header cells that are empty.",
+      "Adds the missing tabs (Settings, Payments Log, Tenants and Tenancy Log) with their headers. Nothing already in your Sheet is changed: it only adds tabs and fills in tabs and header cells that are empty.",
     );
     expect(text).toContain(
       "Settings starts with 5 portions from your Schedule header, each with 11 payments per cycle and a 5% hike. Check them in Portion settings before the first payment.",
@@ -308,10 +311,11 @@ describe("a Sheet that is not set up yet", () => {
     expect(html).toContain('<div role="status"></div>');
   });
 
-  it("shows the three tabs and the reminder as to do, and no link to the portion settings yet", async () => {
+  it("shows the four tabs and the reminder as to do, and no link to the portion settings yet", async () => {
     const html = await render();
     const step5 = html.slice(html.indexOf('id="step-5"'), html.indexOf('id="step-6"'));
-    expect(step5.match(/>To do</g)).toHaveLength(4);
+    expect(step5.match(/>To do</g)).toHaveLength(5);
+    expect(visibleText(step5)).toContain("Tenancy Log tab To do Not created yet. It's added the next time the app opens your Sheet, or by Prepare my Sheet.");
     const step6 = html.slice(html.indexOf('id="step-6"'));
     expect(step6).not.toContain('href="/settings"');
     expect(visibleText(step6)).toContain("the app cannot change a payment count later.");
@@ -351,14 +355,14 @@ describe("a Sheet that is not set up yet", () => {
     const html = await render();
     expect(html).not.toContain("Prepare my Sheet</button>");
     expect(visibleText(html)).toContain("Share the Sheet with the service account as an Editor.");
-    expect(html.match(/Waiting for the checks above\./g)).toHaveLength(9);
+    expect(html.match(/Waiting for the checks above\./g)).toHaveLength(10);
   });
 
   it("says to rename a tab first when the owner has named one that is not in the Sheet", async () => {
     setEnv({ ...ENV, SETTINGS_TAB: "My Settings" });
     serveSheet(new NamedTabsGateway(fresh(), { schedule: "Schedule", settings: "My Settings", log: LOG_TAB, tenants: TENANTS_TAB, "tenancy-log": "Tenancy Log" }));
     const text = visibleText(await render());
-    expect(text).toContain("Adds the missing tabs (My Settings, Payments Log and Tenants)");
+    expect(text).toContain("Adds the missing tabs (My Settings, Payments Log, Tenants and Tenancy Log)");
     expect(text).toContain(
       "SETTINGS_TAB names a tab that is not in your Sheet yet. If you already have it under another name, rename it in your Sheet first, then use Check again",
     );
@@ -375,7 +379,7 @@ describe("settings that are wrong", () => {
     const html = await render();
     expect(visibleText(html)).toContain("SHEET_ID Fix Not set.");
     expect(visibleText(html)).toContain("To fix: Copy the ID from the Sheet's address (SETUP.md step 1).");
-    expect(html.match(/Fix the settings above first\./g)).toHaveLength(10);
+    expect(html.match(/Fix the settings above first\./g)).toHaveLength(11);
     expect(html).toMatch(/>1 thing to fix\.<\/p>/);
     expect(html).not.toContain("Prepare my Sheet</button>");
     expect(logs.error).not.toHaveBeenCalled();
@@ -395,7 +399,7 @@ describe("settings that are wrong", () => {
     });
     const html = await render();
     expect(html).not.toContain("CANARY");
-    expect(html.match(/Fix the settings above first\./g)).toHaveLength(10);
+    expect(html.match(/Fix the settings above first\./g)).toHaveLength(11);
     expect(logs.error).toHaveBeenCalledOnce();
   });
 
@@ -460,6 +464,7 @@ describe("what the page never shows", () => {
       [SETTINGS_TAB]: settingsGrid(),
       [LOG_TAB]: [[...LOG_HEADERS], ["2026-08-05T04:30:00.000Z", "2026-08", "p1", tenant, Number(amount), 2, "2026-08-05", owner, "Logged"]],
       [TENANTS_TAB]: [[...TENANT_HEADERS], row],
+      [TENANCY_LOG_TAB]: [[...TENANCY_LOG_HEADERS], ["2026-08-05T04:30:00.000Z", "t-1", "p1", "Edited", "Advance status", note, tenant, owner]],
     });
   }
 
@@ -502,6 +507,7 @@ describe("what the page never shows", () => {
     setEnv(env);
     const broken = loadedSheet();
     broken.tabs.get(TENANTS_TAB)![0][3] = "Mobile";
+    broken.tabs.get(TENANCY_LOG_TAB)![0][4] = "Value";
     broken.tabs.get(SETTINGS_TAB)![2][2] = "Tenant9";
     serveSheet(broken);
     const second = await render();

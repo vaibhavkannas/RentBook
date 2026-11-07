@@ -4,11 +4,12 @@ import { listWords } from "@/lib/setup-checks";
 import { namesTabs } from "./gateway";
 import { invalidateCaches, type SheetsContext } from "./service";
 import { ensureTabs, LOG_TAB, resetBootstrap, SETTINGS_TAB } from "./settings-store";
+import { TENANCY_LOG_TAB } from "./tenancy-log-store";
 import { TENANTS_TAB } from "./tenants-store";
 import { withWriteLock } from "./write-lock";
 
 /** The tabs the app keeps beside the owner's Schedule, by the names the app calls them. */
-const APP_TABS = [SETTINGS_TAB, LOG_TAB, TENANTS_TAB];
+const APP_TABS = [SETTINGS_TAB, LOG_TAB, TENANTS_TAB, TENANCY_LOG_TAB];
 
 /** What Prepare my Sheet did, by the names the owner gave the tabs: the tabs it made, and the tabs that were there but empty (or had blank header cells) that it filled in. */
 export type PrepareResult = { created: string[]; filled: string[] };
@@ -20,7 +21,9 @@ export type PrepareResult = { created: string[]; filled: string[] };
  * existing tabs (a Settings tab missing beside the others is refused), never writes into a cell that holds anything
  * (a header row of only spaces is left alone) and never deletes anything. This looks at the Sheet fresh (it forgets that
  * the tabs were checked, and never reads a page cache), takes its turn among the writes, lists the tabs again to see that
- * they are there, and throws the page caches away whatever happens. `created` and `filled` say what was done.
+ * they are there, and throws the page caches away whatever happens. `created` and `filled` say what was done. The Tenancy Log
+ * is the one tab the app's own check lets pass when it cannot be added (the history is a convenience); here it was asked for,
+ * so a Tenancy Log that is still not there is told.
  */
 export async function prepareSheet(ctx: SheetsContext): Promise<PrepareResult> {
   return withWriteLock(async () => {
