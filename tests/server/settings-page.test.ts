@@ -53,7 +53,7 @@ describe("the portion settings page", () => {
 
   it("is titled Portion settings, with an arrow back to More", async () => {
     const html = await render();
-    expect(html).toContain('<h1 class="text-lg font-semibold">Portion settings</h1>');
+    expect(html).toContain('<h1 class="min-w-0 break-words text-lg font-semibold">Portion settings</h1>');
     expect(html).toMatch(/<a [^>]*href="\/more"[^>]*>‹<\/a>/);
     expect(html).toContain('aria-label="Back to More"');
     expect(html).not.toContain("Back to month");

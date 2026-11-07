@@ -171,7 +171,7 @@ export default async function TenantsPage({
           {TENANCY_CONFLICT_MESSAGE}
         </Notice>
       )}
-      <p className="mt-1 text-sm text-muted">
+      <p className="mt-1 break-words text-sm text-muted">
         {scheduleTenant === null ? "No tenant recorded yet." : `Tenant in the Schedule: ${scheduleTenant}`}
       </p>
 
@@ -190,7 +190,7 @@ export default async function TenantsPage({
 
         {current ? (
           <>
-            <p className="mt-1 font-medium">{current.tenant}</p>
+            <p className="mt-1 break-words font-medium">{current.tenant}</p>
             <dl className="mt-2 divide-y divide-line">
               <Detail label="Phone">
                 {phoneLink ? (
@@ -231,8 +231,8 @@ export default async function TenantsPage({
         ) : (
           <>
             <h3 className="mt-2 text-sm font-medium">Add details</h3>
-            <p className="mt-1 text-sm text-muted">{addDetailsHint(scheduleTenant)}</p>
-            {note && <p className="mt-1 text-sm text-muted">{note}</p>}
+            <p className="mt-1 break-words text-sm text-muted">{addDetailsHint(scheduleTenant)}</p>
+            {note && <p className="mt-1 break-words text-sm text-muted">{note}</p>}
             <TenancyForm
               key={`create-${scheduleTenant}`}
               target={{ mode: "create", portionId: portion.id, tenant: scheduleTenant }}
@@ -249,7 +249,7 @@ export default async function TenantsPage({
           <h2 id="move-out-heading" className="font-medium">
             Move out
           </h2>
-          <p className="mt-1 text-sm text-muted">{moveOutHint(current.tenant, portion.name)}</p>
+          <p className="mt-1 break-words text-sm text-muted">{moveOutHint(current.tenant, portion.name)}</p>
           <MoveOutForm
             key={`move-out-${current.id}`}
             tenant={current.tenant}
@@ -273,7 +273,7 @@ export default async function TenantsPage({
           <h2 id="move-out-heading" className="font-medium">
             Move out
           </h2>
-          <p className="mt-1 text-sm text-muted">{recordMoveOutHint(scheduleTenant)}</p>
+          <p className="mt-1 break-words text-sm text-muted">{recordMoveOutHint(scheduleTenant)}</p>
           <MoveOutForm
             key={`record-move-out-${scheduleTenant}`}
             tenant={scheduleTenant}
@@ -299,7 +299,7 @@ export default async function TenantsPage({
               const outcome = advanceOutcome(tenancy);
               return (
                 <Card as="li" key={tenancy.rowNumber}>
-                  <p className="font-medium">{tenancy.tenant}</p>
+                  <p className="break-words font-medium">{tenancy.tenant}</p>
                   <p className="mt-1 text-sm text-muted">{tenancyPeriod(tenancy.moveIn, tenancy.moveOut)}</p>
                   {outcome && <p className="mt-1 text-sm">{outcome}</p>}
                 </Card>

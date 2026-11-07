@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ancestry, classesOf, decode, describe as describeElement, descendants, isAriaHidden, parseHtml, textOf } from "./html";
+import { ancestry, classesOf, decode, describe as describeElement, descendants, isAriaHidden, pageText, parseHtml, textOf } from "./html";
 
 const first = (html: string, tag: string) => descendants(parseHtml(html)).find((element) => element.tag === tag)!;
 
@@ -33,6 +33,10 @@ describe("parseHtml", () => {
     const root = parseHtml("<main><script>if (a < b) { x(); }</script><p>after</p></main>");
     expect(descendants(root).map((element) => element.tag)).toEqual(["main", "script", "p"]);
     expect(textOf(descendants(root)[0])).toBe("after");
+  });
+
+  it("reads a whole render as the text a person reads", () => {
+    expect(pageText("<main><h1>Asha&#x27;s flat</h1><p>Pay <b>₹&nbsp;5,450</b></p><script>x()</script></main>")).toBe("Asha's flat Pay ₹ 5,450");
   });
 
   it("skips comments", () => {

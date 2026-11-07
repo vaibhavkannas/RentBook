@@ -45,6 +45,15 @@ describe("wrapProblems", () => {
     expect(wrapProblems(page(`<div class="flex"><p class="overflow-hidden break-words">${NAME}</p></div>`), [NAME])).toEqual([]);
   });
 
+  it("leaves a name alone in a box that scrolls sideways, such as a row of chips", () => {
+    expect(wrapProblems(page(`<div class="flex overflow-x-auto"><a class="shrink-0 whitespace-nowrap">${NAME}</a></div>`), [NAME])).toEqual([]);
+    expect(wrapProblems(page(`<div class="flex overflow-y-auto"><a class="shrink-0 whitespace-nowrap">${NAME}</a></div>`), [NAME])).not.toEqual([]);
+  });
+
+  it("leaves a name alone that only a screen reader reads, as it takes no room", () => {
+    expect(wrapProblems(page(`<legend class="sr-only">Settings for ${NAME}</legend>`), [NAME])).toEqual([]);
+  });
+
   it("looks only up to the page's main area, not at what is above it", () => {
     expect(wrapProblems(`<div class="flex whitespace-nowrap truncate"><main><p class="break-words">${NAME}</p></main></div>`, [NAME])).toEqual([]);
   });

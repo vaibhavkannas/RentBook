@@ -12,7 +12,7 @@ type Props = {
 /** The title of a screen, with an arrow back to where the person came from, in the month that was showing. */
 export function PageHeader({ title, back }: Props) {
   const heading =
-    title === null ? <Skeleton className="h-6 w-40" /> : <h1 className="text-lg font-semibold">{title}</h1>;
+    title === null ? <Skeleton className="h-6 w-40" /> : <h1 className="min-w-0 break-words text-lg font-semibold">{title}</h1>;
   if (!back) return <header className="flex min-h-11 items-center gap-2">{heading}</header>;
   return (
     <header className="flex min-h-11 items-center gap-2">

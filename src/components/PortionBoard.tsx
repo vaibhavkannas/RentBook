@@ -68,18 +68,18 @@ export default function PortionBoard({ monthKey, monthLabel, cards, defaultDate 
             <li key={card.portionId}>
               <Card as="article">
                 <div className="flex items-start justify-between gap-3">
-                  <h2 className="font-medium">{card.name}</h2>
+                  <h2 className="min-w-0 break-words font-medium">{card.name}</h2>
                   <Pill tone={PILL_TONE[card.status]}>{PILL_LABEL[card.status]}</Pill>
                 </div>
 
                 {card.status === "vacant" && card.vacancy ? (
-                  <p className="mt-1 text-sm text-muted">
+                  <p className="mt-1 break-words text-sm text-muted">
                     {`Vacant since ${formatDay(card.vacancy.since)}. ${card.vacancy.previousTenant} moved out.`}
                   </p>
                 ) : noTenant ? (
                   <p className="mt-1 text-sm text-muted">No tenant recorded yet.</p>
                 ) : (
-                  <p className="mt-1 text-sm text-muted">
+                  <p className="mt-1 break-words text-sm text-muted">
                     {tenant} · Payment {count}
                     {card.cycleLength !== null ? ` of ${card.cycleLength}` : ""}
                   </p>

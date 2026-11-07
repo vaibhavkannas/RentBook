@@ -56,7 +56,7 @@ describe("the Activity loading screen", () => {
   const out = html(createElement(ActivityLoading));
 
   it("has the header Activity, with no arrow back, because Activity is a tab", () => {
-    expect(out).toContain('<h1 class="text-lg font-semibold">Activity</h1>');
+    expect(out).toContain('<h1 class="min-w-0 break-words text-lg font-semibold">Activity</h1>');
     expect(out).not.toContain("<a");
   });
 
@@ -100,7 +100,7 @@ describe("the settings loading screen", () => {
   const out = html(createElement(SettingsLoading));
 
   it("has the header Portion settings, with an arrow back to More", () => {
-    expect(out).toContain('<h1 class="text-lg font-semibold">Portion settings</h1>');
+    expect(out).toContain('<h1 class="min-w-0 break-words text-lg font-semibold">Portion settings</h1>');
     expect(out).toMatch(/<a [^>]*href="\/more"[^>]*>‹<\/a>/);
     expect(out).toContain('aria-label="Back to More"');
   });
@@ -149,7 +149,7 @@ describe("the Overdue loading screen", () => {
   const out = html(createElement(OverdueLoading));
 
   it("has the header Overdue rent, with an arrow back to the month, as the page has", () => {
-    expect(out).toContain('<h1 class="text-lg font-semibold">Overdue rent</h1>');
+    expect(out).toContain('<h1 class="min-w-0 break-words text-lg font-semibold">Overdue rent</h1>');
     expect(out).toMatch(/<a [^>]*href="\/"[^>]*>‹<\/a>/);
     expect(out).toContain('aria-label="Back to month"');
   });
@@ -180,7 +180,7 @@ describe("the Year loading screen", () => {
   const out = html(createElement(YearLoading));
 
   it("has the header Year at a glance, with an arrow back to the month, as the page has", () => {
-    expect(out).toContain('<h1 class="text-lg font-semibold">Year at a glance</h1>');
+    expect(out).toContain('<h1 class="min-w-0 break-words text-lg font-semibold">Year at a glance</h1>');
     expect(out).toMatch(/<a [^>]*href="\/"[^>]*>‹<\/a>/);
     expect(out).toContain('aria-label="Back to month"');
   });
@@ -214,7 +214,7 @@ describe("the Agreements and hikes loading screen", () => {
   const out = html(createElement(AlertsLoading));
 
   it("has the header Agreements and hikes, with an arrow back to the month, as the page has", () => {
-    expect(out).toContain('<h1 class="text-lg font-semibold">Agreements and hikes</h1>');
+    expect(out).toContain('<h1 class="min-w-0 break-words text-lg font-semibold">Agreements and hikes</h1>');
     expect(out).toMatch(/<a [^>]*href="\/"[^>]*>‹<\/a>/);
     expect(out).toContain('aria-label="Back to month"');
   });
@@ -243,7 +243,7 @@ describe("the Set up loading screen", () => {
   const out = html(createElement(SetupLoading));
 
   it("has the header Set up, with an arrow back to More, as the page has", () => {
-    expect(out).toContain('<h1 class="text-lg font-semibold">Set up</h1>');
+    expect(out).toContain('<h1 class="min-w-0 break-words text-lg font-semibold">Set up</h1>');
     expect(out).toMatch(/<a [^>]*href="\/more"[^>]*>‹<\/a>/);
     expect(out).toContain('aria-label="Back to More"');
   });
@@ -271,7 +271,7 @@ describe("the Diagnostics loading screen", () => {
   const out = html(createElement(DiagnosticsLoading));
 
   it("has the header Diagnostics, with an arrow back to More, as the page has", () => {
-    expect(out).toContain('<h1 class="text-lg font-semibold">Diagnostics</h1>');
+    expect(out).toContain('<h1 class="min-w-0 break-words text-lg font-semibold">Diagnostics</h1>');
     expect(out).toMatch(/<a [^>]*href="\/more"[^>]*>‹<\/a>/);
     expect(out).toContain('aria-label="Back to More"');
   });

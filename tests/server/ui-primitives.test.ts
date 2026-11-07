@@ -372,7 +372,7 @@ describe("PageHeader", () => {
 
   it("shows the title, and a back link at least 44 px square that names where it goes", () => {
     const out = html(createElement(PageHeader, { title: "Activity", back }));
-    expect(out).toContain('<h1 class="text-lg font-semibold">Activity</h1>');
+    expect(out).toContain('<h1 class="min-w-0 break-words text-lg font-semibold">Activity</h1>');
     expect(out).toMatch(/<a [^>]*href="\/"[^>]*>‹<\/a>/);
     expect(out).toContain('aria-label="Back to month"');
     expect(out).toContain(`class="${iconButtonClasses()}"`);
@@ -400,7 +400,7 @@ describe("PageHeader", () => {
 
   it("is only the title when there is nowhere to go back to", () => {
     const out = html(createElement(PageHeader, { title: "More" }));
-    expect(out).toContain('<h1 class="text-lg font-semibold">More</h1>');
+    expect(out).toContain('<h1 class="min-w-0 break-words text-lg font-semibold">More</h1>');
     expect(out).not.toContain("<a");
   });
 

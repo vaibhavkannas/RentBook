@@ -127,7 +127,7 @@ describe("who sees Diagnostics", () => {
   it("tells a member it is for the owner, and shows nothing of the app or the Sheet", async () => {
     asMember();
     const html = await render();
-    expect(html).toContain('<h1 class="text-lg font-semibold">Diagnostics</h1>');
+    expect(html).toContain('<h1 class="min-w-0 break-words text-lg font-semibold">Diagnostics</h1>');
     expect(visibleText(html)).toContain("Diagnostics are for the owner.");
     expect(html).toMatch(/<a [^>]*href="\/more"[^>]*>‹<\/a>/);
     expect(mocks.getSheetsContext).not.toHaveBeenCalled();
@@ -144,7 +144,7 @@ describe("the owner's Diagnostics", () => {
   it("is titled Diagnostics, with an arrow back to More that keeps the month, and room for the tab bar", async () => {
     nav.search = "month=2026-10";
     const html = await render({ month: "2026-10" });
-    expect(html).toContain('<h1 class="text-lg font-semibold">Diagnostics</h1>');
+    expect(html).toContain('<h1 class="min-w-0 break-words text-lg font-semibold">Diagnostics</h1>');
     expect(html).toMatch(/<a [^>]*href="\/more\?month=2026-10"[^>]*>‹<\/a>/);
     expect(html).toContain('aria-label="Back to More"');
     expect(html).toMatch(/^<main class="[^"]*\bpb-tabbar\b/);

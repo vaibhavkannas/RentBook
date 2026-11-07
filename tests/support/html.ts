@@ -105,3 +105,6 @@ export function describe(node: HtmlElement): string {
   const tag = `<${[node.tag, ...attrs].join(" ")}>`;
   return tag.length > 120 ? `${tag.slice(0, 117)}...` : tag;
 }
+
+/** What a person reads on a whole render, with spaces collapsed (see `textOf`). */
+export const pageText = (html: string): string => textOf(parseHtml(html));

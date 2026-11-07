@@ -98,7 +98,7 @@ describe("the Activity page", () => {
 
   it("has the title Activity as its one h1, and no arrow back, because Activity is a tab", async () => {
     const html = await render();
-    expect(html).toContain('<h1 class="text-lg font-semibold">Activity</h1>');
+    expect(html).toContain('<h1 class="min-w-0 break-words text-lg font-semibold">Activity</h1>');
     expect(html.match(/<h1\b/g)).toHaveLength(1);
     expect(html).not.toContain("Back to");
   });

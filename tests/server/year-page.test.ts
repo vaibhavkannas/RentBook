@@ -107,7 +107,7 @@ describe("the Year page", () => {
   it("is titled Year at a glance, with an arrow back to the month that was showing", async () => {
     nav.search = "month=2026-08";
     const html = await render({ month: "2026-08" });
-    expect(html).toContain('<h1 class="text-lg font-semibold">Year at a glance</h1>');
+    expect(html).toContain('<h1 class="min-w-0 break-words text-lg font-semibold">Year at a glance</h1>');
     expect(html).toMatch(/<a [^>]*aria-label="Back to month"[^>]*href="\/\?month=2026-08"[^>]*>‹<\/a>/);
     expect(html.match(/<h1/g)).toHaveLength(1);
   });
