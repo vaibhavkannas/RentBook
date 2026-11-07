@@ -189,27 +189,28 @@ export function closedByRequest(tenancies: Tenancy[], portionId: string, request
  * of the amount since), newest first: the rows each of them closed are opened. Nothing is opened while the portion has an
  * open tenancy (a New tenant with details added one), and nothing that a Move out closed. `tenancies` is a fresh read. The
  * rows are read back after the write; the answer says how many were opened and how many did not show the change, for the
- * caller to log.
+ * caller to log, and `opened`: the tenancies whose read back showed the change, as they were when closed (so the caller can
+ * record in the Tenancy Log the Move-out date each one lost).
  */
 export async function reopenClosedByRequest(
   gateway: SheetsGateway,
   tenancies: Tenancy[],
   input: { portionId: string; requests: ClosingRequest[] },
   stamp: WriteStamp,
-): Promise<{ reopened: number; notConfirmed: number }> {
-  if (currentTenancy(tenancies, input.portionId) !== null) return { reopened: 0, notConfirmed: 0 };
+): Promise<{ reopened: number; notConfirmed: number; opened: Tenancy[] }> {
+  if (currentTenancy(tenancies, input.portionId) !== null) return { reopened: 0, notConfirmed: 0, opened: [] };
   const closed = new Map<number, Tenancy>();
   for (const request of input.requests) {
     for (const t of closedByRequest(tenancies, input.portionId, request)) closed.set(t.rowNumber, t);
   }
-  if (closed.size === 0) return { reopened: 0, notConfirmed: 0 };
+  if (closed.size === 0) return { reopened: 0, notConfirmed: 0, opened: [] };
   for (const t of closed.values()) {
     await reopenTenancyRow(gateway, t.rowNumber, { updatedBy: stamp.updatedBy, updatedAt: stamp.now.toISOString() });
   }
   const fresh = await readTenancies(gateway);
-  const notConfirmed = [...closed.values()].filter((t) => {
+  const opened = [...closed.values()].filter((t) => {
     const now = fresh.find((candidate) => candidate.rowNumber === t.rowNumber && candidate.id === t.id);
-    return now === undefined || now.moveOut !== "";
-  }).length;
-  return { reopened: closed.size - notConfirmed, notConfirmed };
+    return now !== undefined && now.moveOut === "";
+  });
+  return { reopened: opened.length, notConfirmed: closed.size - opened.length, opened };
 }

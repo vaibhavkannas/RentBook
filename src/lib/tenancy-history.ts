@@ -104,6 +104,10 @@ function moveOutDay(rows: readonly TenancyLogItem[]): { row: TenancyLogItem; day
   return row === undefined ? null : { row, day: row.newValue as string };
 }
 
+/** A row that takes the Move-out date away from a tenancy that had one: it is open again. */
+const openedAgain = (row: TenancyLogItem) =>
+  row.field === "Move-out date" && row.oldValue !== "" && row.newValue === "";
+
 function toEntry(rows: readonly TenancyLogItem[], names: ReadonlyMap<string, string>, viewerEmail: string | null | undefined): HistoryEntry {
   const [first] = rows;
   const when = indiaDayKey(first.savedAt) === null ? "Time not recorded" : formatSavedAt(first.savedAt);
@@ -120,7 +124,9 @@ function toEntry(rows: readonly TenancyLogItem[], names: ReadonlyMap<string, str
       title = `Details added for ${tenant}.`;
       break;
     case "Edited":
-      title = `Details changed for ${tenant}.`;
+      // The Move-out date taken away is what an undo of a New tenant's first payment does to the tenancy it had closed. The line
+      // under the title says which day it was.
+      title = rows.some(openedAgain) ? sentence(`${tenant}'s tenancy was opened again.`) : `Details changed for ${tenant}.`;
       break;
     case "Moved out":
       title = sentence(moved ? `${tenant} moved out on ${formatDay(moved.day)}.` : `${tenant} moved out.`);

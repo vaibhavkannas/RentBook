@@ -2,7 +2,7 @@ import { parseYmKey } from "@/lib/domain/year-month";
 import { requireUser } from "@/lib/server/auth-guard";
 import { getSheetsContext } from "@/lib/server/context";
 import { handle, parseBody, readJsonBody } from "@/lib/server/http";
-import { withRetryToken } from "@/lib/server/retry-token";
+import { withHistoryToken, withRetryToken } from "@/lib/server/retry-token";
 import { undoBody } from "@/lib/server/schemas";
 import { runWrite } from "@/lib/server/writes";
 import { undoPayment } from "@/lib/sheets/service";
@@ -23,7 +23,8 @@ export async function POST(request: Request) {
         { now: new Date(), loggedBy: viewer.email },
       ),
     );
-    // The raw Payments Log row stays here: the browser gets a signed retry token when the entry did not save.
-    return withRetryToken(result, viewer.email);
+    // The raw Payments Log row stays here: the browser gets a signed retry token when the entry did not save. The Tenancy Log rows
+    // of a tenancy the undo opened again stay too, and a token takes their place when they did not save.
+    return withHistoryToken(withRetryToken(result, viewer.email), viewer.email);
   }, request);
 }

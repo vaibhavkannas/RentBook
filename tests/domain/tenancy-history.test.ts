@@ -105,6 +105,27 @@ describe("the words of an entry", () => {
     expect(entry.lines).toEqual(["Refund changed."]);
   });
 
+  it("Edited with the Move-out date taken away (an undo opened the tenancy again): says the tenancy was opened again, and what the day was", () => {
+    const [entry] = one([item({ field: "Move-out date", oldValue: "2026-10-05", newValue: "" })]);
+    expect(entry.title).toBe("Asha's tenancy was opened again.");
+    expect(entry.lines).toEqual(["Move-out date removed (was 5 Oct 2026)."]);
+  });
+
+  it("keeps the other lines of such an entry, and the plain title when a Move-out date is only changed or set", () => {
+    const [opened] = one([item({ field: "Move-out date", oldValue: "2026-10-05", newValue: "" }), item({ field: "Refund", oldValue: "", newValue: 500 })]);
+    expect(opened.title).toBe("Asha's tenancy was opened again.");
+    expect(opened.lines).toEqual(["Move-out date removed (was 5 Oct 2026).", "Refund set to ₹\u00a0500."]);
+    for (const [oldValue, newValue] of [["2026-10-05", "2026-10-09"], ["", "2026-10-09"], ["", ""]] as const) {
+      const [other] = one([item({ field: "Move-out date", oldValue, newValue })]);
+      expect(other.title, `${oldValue} to ${newValue}`).toBe("Details changed for Asha.");
+    }
+  });
+
+  it("calls a tenancy it has no name for a past tenant, with a capital, when it was opened again", () => {
+    const entries = historyEntries([item({ tenancyId: "t-gone", field: "Move-out date", oldValue: "2026-10-05", newValue: "" })], NAMES, null).entries;
+    expect(entries[0].title).toBe("A past tenant's tenancy was opened again.");
+  });
+
   it("Moved out: names the day in the title, and keeps a line for each other field", () => {
     const [entry] = one([
       item({ action: "Moved out", field: "Advance status", oldValue: "Held", newValue: "Refunded" }),
