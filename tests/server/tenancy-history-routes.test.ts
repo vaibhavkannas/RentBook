@@ -15,6 +15,7 @@ vi.mock("@/lib/server/freshness", () => ({ markWritten: vi.fn(async () => undefi
 import { POST as postHistoryRetry } from "@/app/api/tenancies/history-retry/route";
 import { POST as postMoveOut } from "@/app/api/tenancies/move-out/route";
 import { POST as postPayment } from "@/app/api/payments/route";
+import { POST as postUndo } from "@/app/api/payments/undo/route";
 import { POST as postTenancy } from "@/app/api/tenancies/route";
 import { getSettings, type SheetsContext } from "@/lib/sheets/service";
 import { HISTORY_LIMIT_MS, TENANCY_LOG_HEADERS, TENANCY_LOG_TAB } from "@/lib/sheets/tenancy-log-store";
@@ -227,5 +228,69 @@ describe("a tenancy saved while Google is too slow for the Tenancy Log", () => {
     expect(history()).toEqual([[expect.any(String), body.tenancy.id, "p1", "Added", "", "", "", "member@example.com"]]);
     const all = [logs.info, logs.warn, logs.error].flatMap((spy) => spy.mock.calls.flat()).join("\n");
     expect(all).not.toMatch(/CANARY|Asha/);
+  });
+});
+
+describe("an undo that opens a tenancy again", () => {
+  const NEW_TENANT = { month: "2026-10", portionId: "p1", amount: 6000, dateReceived: "2026-10-05", newTenantName: "Hari" };
+  const UNDO = { month: "2026-10", portionId: "p1", expected: { tenant: "Hari", count: 1, amount: 6000 } };
+
+  /** Asha has details, then a New tenant "Hari" closes them. */
+  async function closedByHari() {
+    const created = await (await postTenancy(post("/api/tenancies", CREATE))).json();
+    const paid = await postPayment(post("/api/payments", NEW_TENANT));
+    expect(paid.status).toBe(200);
+    expect(history().map((row) => row[3])).toEqual(["Added", "Closed"]);
+    return created.tenancy.id as string;
+  }
+  const tenancyOf = (id: string) => fake.tabs.get(TENANTS_TAB)!.slice(1).find((row) => row[0] === id)!;
+
+  it("writes the Edited row for the Move-out date, and answers with historyWritten and no rows", async () => {
+    const id = await closedByHari();
+    const res = await postUndo(post("/api/payments/undo", UNDO));
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body).toMatchObject({ ok: true, removed: { tenant: "Hari" }, logWritten: true, historyWritten: true });
+    expect(body).not.toHaveProperty("historyRows");
+    expect(body).not.toHaveProperty("logRow");
+    expect(body).not.toHaveProperty("historyRetryToken");
+    expect(tenancyOf(id)[12]).toBe("");
+    expect(history().slice(2)).toEqual([[expect.any(String), id, "p1", "Edited", "Move-out date", "2026-10-05", "", "member@example.com"]]);
+  });
+
+  it("still undoes when the Tenancy Log cannot be written, gives a token and no rows, and the retry adds the row once however often it is sent", async () => {
+    const id = await closedByHari();
+    failHistory();
+    const res = await postUndo(post("/api/payments/undo", UNDO));
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body).toMatchObject({ ok: true, removed: { tenant: "Hari" }, logWritten: true, historyWritten: false });
+    expect(body).not.toHaveProperty("historyRows");
+    expect(typeof body.historyRetryToken).toBe("string");
+    expect(tenancyOf(id)[12]).toBe(""); // the tenancy is open again
+    expect(history()).toHaveLength(2); // and the log has nothing for it yet
+    // the token holds no tenant name
+    expect(Buffer.from(body.historyRetryToken.split(".")[0], "base64url").toString()).not.toMatch(/Asha|Hari|CANARY/);
+
+    stopFailing();
+    for (let again = 0; again < 3; again++) {
+      const retry = await postHistoryRetry(post("/api/tenancies/history-retry", { token: body.historyRetryToken }));
+      expect(await retry.json()).toEqual({ ok: true, historyWritten: true });
+    }
+    expect(history().slice(2)).toEqual([[expect.any(String), id, "p1", "Edited", "Move-out date", "2026-10-05", "", "member@example.com"]]);
+    const all = [logs.info, logs.warn, logs.error].flatMap((spy) => spy.mock.calls.flat()).join("\n");
+    expect(all).toContain("tenancy-log-append-failed");
+    expect(all).not.toMatch(/Asha|Hari|CANARY/);
+  });
+
+  it("answers an ordinary undo as it did: no history fields, nothing added to the Tenancy Log", async () => {
+    await postTenancy(post("/api/tenancies", CREATE));
+    await postPayment(post("/api/payments", { month: "2026-10", portionId: "p1", amount: 5450, dateReceived: "2026-10-05" }));
+    const before = history().length;
+    const body = await (await postUndo(post("/api/payments/undo", { month: "2026-10", portionId: "p1", expected: { tenant: "Asha", count: 4, amount: 5450 } }))).json();
+    expect(body).toMatchObject({ ok: true, logWritten: true });
+    expect(body).not.toHaveProperty("historyWritten");
+    expect(body).not.toHaveProperty("historyRetryToken");
+    expect(history()).toHaveLength(before);
   });
 });

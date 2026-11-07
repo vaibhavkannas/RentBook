@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { withoutComments } from "../support/source-scan";
 
 /**
- * The three screens that save tenancy details look at what became of the history after the save: the save's toast shows at once,
+ * The three screens that save tenancy details, and the undo sheet (an undo can open a tenancy again), look at what became of the history after the save: the save's toast shows at once,
  * as it always did, and then settleHistory gets the history in with one automatic retry, and a toast says so only when it
  * cannot. This reads their source: it cannot tap Save, but it finds a screen that forgot to ask.
  */
@@ -11,7 +11,7 @@ import { withoutComments } from "../support/source-scan";
 const read = (name: string) => withoutComments(readFileSync(new URL(`../../src/components/${name}`, import.meta.url), "utf8"));
 const SETTLE = /void settleHistory\(\s*(\w+(?:\.\w+)*)\s*\)\s*\.then\(\s*\(ok\)\s*=>\s*ok\s*\|\|\s*toast\.show\(HISTORY_NOT_SAVED\)\s*\)/;
 
-describe.each(["TenancyForm.tsx", "MoveOutForm.tsx", "PaymentSheet.tsx"])("%s", (name) => {
+describe.each(["TenancyForm.tsx", "MoveOutForm.tsx", "PaymentSheet.tsx", "UndoSheet.tsx"])("%s", (name) => {
   const code = read(name);
 
   it("imports settleHistory and the words that say the History is missing the change", () => {
@@ -59,6 +59,23 @@ describe("where each screen asks", () => {
     expect(saved).toBeGreaterThan(-1);
     expect(code.search(SETTLE)).toBeGreaterThan(saved);
     expect(code.search(SETTLE)).toBeLessThan(code.indexOf("const failure = body.error;"));
+  });
+});
+
+describe("UndoSheet", () => {
+  it("asks after the undo was saved, and before the Payments Log retry notice may take over", () => {
+    const code = read("UndoSheet.tsx");
+    const saved = code.indexOf("if (body.ok) {");
+    expect(saved).toBeGreaterThan(-1);
+    expect(code.search(SETTLE)).toBeGreaterThan(saved);
+    expect(code.search(SETTLE)).toBeLessThan(code.indexOf("if (body.logWritten === false)"));
+    expect(code.search(SETTLE)).toBeLessThan(code.indexOf('body.error?.code === "conflict"'));
+  });
+
+  it("types the two history fields of the answer", () => {
+    const code = read("UndoSheet.tsx");
+    expect(code).toMatch(/historyWritten\?: boolean/);
+    expect(code).toMatch(/historyRetryToken\?: string/);
   });
 });
 

@@ -17,7 +17,7 @@ A phone-first web app for recording monthly rent receipts for a building with se
 - Overdue rent: who owes what, the most owed first, counted from the 6th of the month, with a "Needs attention" card on the month screen. It uses the same figures as the month cards.
 - Year at a glance: each portion's twelve months as a grid, with what was received against what was due.
 - Agreement and hike alerts: agreements that end within 60 days (or have ended) and rents that go up within two months.
-- Tenancy history: every change to a tenant's details (added, edited, moved out) is recorded in a `Tenancy Log` tab with who made it and when, and listed as History on the tenant page. Phone numbers and notes are recorded only as changed.
+- Tenancy history: every change made in the app to a tenant's details (added, edited, moved out, closed by a new tenant, opened again by an undo) is recorded in a `Tenancy Log` tab with who made it and when, and listed as History on the tenant page. Phone numbers and notes are recorded only as changed. Changes made straight in the Sheet are not.
 
 ## Develop
 

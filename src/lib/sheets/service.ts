@@ -40,7 +40,7 @@ import {
 } from "./settings-store";
 import { createSnapshotCache, type SnapshotCache } from "./snapshot-cache";
 import { loadTenancyLog, type TenancyLogRead } from "./tenancy-log-read";
-import { recordTenancyHistory } from "./tenancy-log-store";
+import { recordTenancyHistory, type HistoryOutcome } from "./tenancy-log-store";
 import { checkNewTenancy, recordNewTenant, reopenClosedByRequest, type ClosingRequest } from "./tenancy-writes";
 import { parseTenancies, readTenancies, TENANTS_RANGE, TENANTS_TAB } from "./tenants-store";
 import { withWriteLock } from "./write-lock";
@@ -585,7 +585,7 @@ export type UndoPaymentResult = {
   removed: PortionEntry;
   logWritten: boolean;
   logRow: LogRow;
-};
+} & Partial<HistoryOutcome>;
 
 /**
  * Clears one portion's tenant, count and amount for a month. Only the portion's
@@ -666,8 +666,9 @@ async function undoPaymentUnchecked(
   ];
   const logWritten = await appendLogRow(ctx.gateway, logRow, options.retryDelayMs ?? 400);
   // After the Undone row, like the tenancy work of a payment: a slow Google cannot cost the row and its retry token.
-  await reopenAfterUndo(ctx, loaded, portion, input.month, existing, options);
-  return { removed: existing, logWritten, logRow };
+  const history = await reopenAfterUndo(ctx, loaded, portion, input.month, existing, options);
+  // An undo that opened no tenancy has no history: its answer has no history fields, as a plain payment's has none.
+  return { removed: existing, logWritten, logRow, ...history };
 }
 
 /**
@@ -708,6 +709,11 @@ async function loggedRequestsOf(
  * that may have made this entry (see closedByRequest) and opened again. It runs after the Undone row of the Payments Log is
  * added, and the Schedule is already undone, so a failure here is logged and the undo still stands, as a failed tenancy write
  * after a payment does.
+ *
+ * The Tenancy Log recorded each closing, so each tenancy that is opened again is recorded too: an Edited row for its Move-out
+ * date (the day it had, then nothing), by the person who undid, all in one append after the write to the Tenants tab. It is
+ * bounded and never fails or undoes the undo (see recordTenancyHistory). The answer is the history's outcome, or nothing
+ * when no tenancy was opened.
  */
 async function reopenAfterUndo(
   ctx: SheetsContext,
@@ -716,11 +722,11 @@ async function reopenAfterUndo(
   month: YearMonth,
   removed: PortionEntry,
   options: LogPaymentOptions,
-): Promise<void> {
-  if (removed.count !== 1 || !loaded.tenancies.some((t) => t.portionId === portion.id && t.moveOut !== "")) return;
+): Promise<HistoryOutcome | null> {
+  if (removed.count !== 1 || !loaded.tenancies.some((t) => t.portionId === portion.id && t.moveOut !== "")) return null;
   try {
     const requests = await loggedRequestsOf(ctx, portion, month, removed);
-    if (requests.length === 0) return;
+    if (requests.length === 0) return null;
     // Read the Tenants tab again right before writing to it: the rows to open are found where they are now.
     const tenancies = await readTenancies(ctx.gateway);
     const result = await reopenClosedByRequest(
@@ -734,8 +740,16 @@ async function reopenAfterUndo(
         message: `The payment was undone and ${result.notConfirmed} tenancy row(s) were written to be opened again, but a read back did not show it`,
       });
     }
+    if (result.opened.length === 0) return null;
+    const stamp = { now: options.now, changedBy: options.loggedBy };
+    return await recordTenancyHistory(
+      ctx.gateway,
+      () => result.opened.flatMap((tenancy) => tenancyLogRows({ kind: "edited", before: tenancy, after: { ...tenancy, moveOut: "" } }, stamp)),
+      options.retryDelayMs ?? 400,
+    );
   } catch (error) {
     logEvent("error", "tenancy-reopen-failed", errorLogFields(error, "The payment was undone, but the tenancy it closed was not opened again"));
+    return null;
   }
 }
 

@@ -121,6 +121,10 @@ describe("SETUP.md: the Tenancy Log", () => {
     expect(log).toMatch(/bottom of that tab|below what is already there/);
   });
 
+  it("says an undo that opens a tenancy again is recorded as an Edited row for the Move-out date", () => {
+    expect(log).toMatch(/Undo[^.]*opens a tenancy again[^.]*Edited[^.]*Move-out date/);
+  });
+
   it("says what a missing history entry means: the change is saved, and a message says the entry could not be added", () => {
     expect(log).toContain("The change was saved, but it couldn't be added to the History.");
   });
@@ -160,6 +164,13 @@ describe("README.md: the wave 4 features", () => {
     expect(features).toMatch(/History/);
   });
 
+  it("says what the history records, including a tenancy a New tenant closes and one an undo opens again", () => {
+    const bullet = features.split("\n").find((line) => line.startsWith("- Tenancy history:"))!;
+    expect(bullet).toMatch(/closed by a new tenant/);
+    expect(bullet).toMatch(/opened again by an undo/);
+    expect(bullet).toMatch(/made in the app/);
+  });
+
   it("mentions the Tenancy Log in the verify:testcopy row, since the script now checks it", () => {
     const row = readme.split("\n").find((line) => line.startsWith("| `npm run verify:testcopy`"))!;
     expect(row).toContain("Tenancy Log");
@@ -192,5 +203,12 @@ describe("the threat model", () => {
     const limits = threat.slice(threat.indexOf("## Limits that remain"), threat.indexOf("## Before a commercial launch"));
     expect(limits).toMatch(/Tenancy Log/);
     expect(limits).toMatch(/twice|duplicate/);
+  });
+
+  it("says in the limits that an undo which opens a tenancy again is recorded as an edit, and what is not recorded", () => {
+    const limits = threat.slice(threat.indexOf("## Limits that remain"), threat.indexOf("## Before a commercial launch"));
+    const bullet = limits.split("\n").find((line) => line.startsWith("- The Tenancy Log is a convenience"))!;
+    expect(bullet).toMatch(/undo that opens a tenancy again is recorded as an Edited row for its Move-out date/);
+    expect(bullet).toMatch(/straight in the Sheet/);
   });
 });

@@ -8,6 +8,7 @@ import { Sheet } from "@/components/ui/Sheet";
 import { SlowHint } from "@/components/ui/SlowHint";
 import { useToast } from "@/components/ui/Toast";
 import type { PortionCard } from "@/lib/domain/types";
+import { HISTORY_NOT_SAVED, settleHistory } from "@/lib/history-retry";
 import { LOG_RETRY_UNCONFIRMED_MESSAGE, type LogRetryResponse } from "@/lib/payment-request";
 import { sendJson } from "@/lib/post-json";
 import { apiErrorMessage, sendFailureMessage, UNDO_NO_CONFIRMATION } from "@/lib/request-copy";
@@ -31,6 +32,10 @@ type ApiBody = LogRetryResponse & {
   error?: { code: string; message: string };
   /** Present when the log entry did not save: the signed token to send back to retry it. */
   retryToken?: string;
+  /** False when the undo opened a tenancy again and its Tenancy Log row did not save; absent when it opened none. */
+  historyWritten?: boolean;
+  /** Present with `historyWritten: false`: the signed token that retries the Tenancy Log row. */
+  historyRetryToken?: string;
 };
 
 export default function UndoSheet({ monthKey, monthLabel, card, onClose }: Props) {
@@ -75,6 +80,9 @@ export default function UndoSheet({ monthKey, monthLabel, card, onClose }: Props
     const body = sent.body;
     if (body.ok) {
       router.refresh();
+      // A tenancy the undo opened again has its history settled in the background, one automatic retry at most, as the screens
+      // that save tenancy details do: the person is told only when it still cannot be added.
+      void settleHistory(body).then((ok) => ok || toast.show(HISTORY_NOT_SAVED));
       if (body.logWritten === false) return setPendingToken(body.retryToken ?? "");
       return done("saved");
     }
