@@ -1,9 +1,20 @@
 import "server-only";
-import { GoogleSheetsGateway } from "@/lib/sheets/google-gateway";
 import type { SheetsGateway } from "@/lib/sheets/gateway";
 import { NamedTabsGateway } from "@/lib/sheets/named-tabs";
 import { withSnapshotCache, type SheetsContext } from "@/lib/sheets/service";
 import { readEnv, type AppEnv } from "./env";
+import { createGateway } from "./gateway-source";
+
+/** `gateway` under the app's own tab names: the app keeps calling its tabs by one fixed name each while the Sheet may spell them differently (see named-tabs.ts). */
+function withTabNames(env: AppEnv, gateway: SheetsGateway): SheetsGateway {
+  return new NamedTabsGateway(gateway, {
+    schedule: env.scheduleTab,
+    settings: env.settingsTab,
+    log: env.logTab,
+    tenants: env.tenantsTab,
+    "tenancy-log": env.tenancyLogTab,
+  });
+}
 
 /**
  * The gateway to the owner's Sheet for an environment: the Google gateway, wrapped so that the app keeps calling its
@@ -12,12 +23,19 @@ import { readEnv, type AppEnv } from "./env";
  * to, when it is not the one in `env` (a test copy).
  */
 export function sheetsGatewayFor(env: AppEnv, sheetId: string = env.sheetId): SheetsGateway {
-  return new NamedTabsGateway(GoogleSheetsGateway.fromServiceAccount(env.serviceAccountJson, sheetId), {
-    schedule: env.scheduleTab,
-    settings: env.settingsTab,
-    log: env.logTab,
-    tenants: env.tenantsTab,
-    "tenancy-log": env.tenancyLogTab,
+  return withTabNames(env, createGateway({ ...env, sheetId }));
+}
+
+/**
+ * The Sheets context for an environment and the gateway to its Sheet (what `createGateway` makes): the gateway under the
+ * app's tab names, with the page-view caches, the total header and the tab names of the environment. Every context is its own;
+ * `getSheetsContext` keeps the one the server uses.
+ */
+export function buildSheetsContext(env: AppEnv, gateway: SheetsGateway): SheetsContext {
+  return withSnapshotCache({
+    gateway: withTabNames(env, gateway),
+    scheduleTab: env.scheduleTab,
+    totalHeader: env.totalHeader,
   });
 }
 
@@ -27,11 +45,7 @@ let cached: SheetsContext | undefined;
 export function getSheetsContext(): SheetsContext {
   if (!cached) {
     const env = readEnv(process.env);
-    cached = withSnapshotCache({
-      gateway: sheetsGatewayFor(env),
-      scheduleTab: env.scheduleTab,
-      totalHeader: env.totalHeader,
-    });
+    cached = buildSheetsContext(env, createGateway(env));
   }
   return cached;
 }
