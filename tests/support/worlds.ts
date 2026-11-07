@@ -5,6 +5,7 @@ import type { SheetsGateway } from "@/lib/sheets/gateway";
 import { LOG_HEADERS, SETTINGS_HEADERS } from "@/lib/sheets/settings-store";
 import { TENANCY_LOG_HEADERS } from "@/lib/sheets/tenancy-log-store";
 import { TENANT_HEADERS } from "@/lib/sheets/tenants-store";
+import { CONFIG_FAULT_MESSAGE, LONG_PORTION, LONG_TENANT } from "./names";
 import { type Entry, monthCell, PORTIONS, scheduleRow, SCHEDULE_HEADERS, seededSettingsGrid } from "./fixtures";
 
 /**
@@ -30,12 +31,12 @@ import { type Entry, monthCell, PORTIONS, scheduleRow, SCHEDULE_HEADERS, seededS
 export type WorldName = "main" | "empty" | "fresh" | "long";
 export type Tabs = Record<string, unknown[][]>;
 
+export { CONFIG_FAULT_MESSAGE, LONG_PORTION, LONG_TENANT };
+
 export const OWNER_EMAIL = "owner@example.com";
 export const MEMBER_EMAIL = "member@example.com";
 
 /** The longest name the app takes, in one piece: it has no space to wrap at. */
-export const LONG_TENANT = "Anantharamakrishnanvenkateswaranmuthukrishnansubramaniamiyer";
-export const LONG_PORTION = "Firstfloorsinglebedroomwiththesouthfacingbalconyandwatertank";
 
 if (LONG_TENANT.length !== MAX_NAME_LENGTH || LONG_PORTION.length !== MAX_NAME_LENGTH) {
   throw new Error("The long names of the long world must be as long as the app allows.");
@@ -180,7 +181,7 @@ export const faults = (initial: Faults = {}): Faults => ({ ...initial });
 const FAILURES: Record<Fault, () => Error> = {
   unavailable,
   "rate-limited": rateLimited,
-  config: () => configError("Google could not find that Sheet. Check SHEET_ID."),
+  config: () => configError(CONFIG_FAULT_MESSAGE),
   error: () => new Error("The gateway failed on purpose."),
 };
 

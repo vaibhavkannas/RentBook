@@ -14,7 +14,7 @@ import { faults as noFaults, withFaults, world, type Fault, type Faults } from "
  * fault on and off while the server runs: `{ "fail": { "getValues": "unavailable" } }` (see `Fault` in tests/support/worlds.ts).
  */
 
-/** Where the one gateway is kept. Each route of a build has its own copy of this module, but they share globalThis. */
+/** Where the one Sheet is kept. Each route of a build has its own copy of this module, but they share globalThis. */
 export const E2E_GATEWAY_KEY = "__rentbookE2eGateway";
 
 const KINDS: readonly Fault[] = ["unavailable", "rate-limited", "config", "error"];
@@ -36,20 +36,27 @@ function readFaults(file: string): Faults {
   return faults;
 }
 
+/** This copy of the module's gateway: the shared Sheet under this copy's faults. */
+let mine: { sheet: FakeGateway; control: string; gateway: SheetsGateway } | undefined;
+
 /**
  * The gateway to the Sheet, in the shape of the real `createGateway(env)`: one `main` world as it stands today, made once per
- * server and kept on globalThis, with the faults of the control file. It refuses at once when E2E_CONTROL is not set.
+ * server and kept on globalThis, so that every route reads and writes the same Sheet, under the faults of the control file. It
+ * refuses at once when E2E_CONTROL is not set.
+ *
+ * Only the Sheet is shared. The faults are thrown by this copy of the module, with this copy's `AppError`: a route checks what
+ * it catches with `instanceof AppError`, and an error made by another route's copy of the class would not pass, so a save that
+ * ought to say "Google isn't responding" would say "Something went wrong". (Found by the end-to-end run itself.)
  */
 export function createGateway(env: AppEnv): SheetsGateway {
   void env;
   const control = process.env.E2E_CONTROL?.trim();
   if (!control) throw new Error("E2E_CONTROL is not set. This Sheet is for the end-to-end run only (npm run e2e).");
   const shared = globalThis as Record<string, unknown>;
-  const kept = shared[E2E_GATEWAY_KEY] as SheetsGateway | undefined;
-  if (kept) return kept;
+  const sheet = (shared[E2E_GATEWAY_KEY] ??= new FakeGateway(world("main", new Date()).tabs)) as FakeGateway;
+  if (mine?.sheet === sheet && mine.control === control) return mine.gateway;
   // withFaults looks the method up in the faults on every call: a proxy that reads the file makes each call see the file as it is.
   const live = new Proxy(noFaults(), { get: (_target, method) => readFaults(control)[method as keyof SheetsGateway] }) as Faults;
-  const gateway = withFaults(new FakeGateway(world("main", new Date()).tabs), live);
-  shared[E2E_GATEWAY_KEY] = gateway;
-  return gateway;
+  mine = { sheet, control, gateway: withFaults(sheet, live) };
+  return mine.gateway;
 }

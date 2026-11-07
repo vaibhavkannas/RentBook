@@ -8,6 +8,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { assertAuthConfig, readEnv } from "@/lib/server/env";
 import { isSessionCurrent } from "@/lib/server/session-policy";
 import { envChecks } from "@/lib/server/setup-env";
+import { CHECKS } from "../../scripts/e2e/checks";
 import {
   APP_VARIABLES,
   COPY_LIST,
@@ -428,6 +429,49 @@ describe("consoleProblem", () => {
     expect(consoleProblem(line, false)).toBe(true);
     expect(consoleProblem(line, true)).toBe(false);
     expect(consoleProblem({ type: "error", text: "Uncaught TypeError" }, true)).toBe(true);
+  });
+});
+
+describe("CHECKS", () => {
+  const names = CHECKS.map((check) => check.name);
+
+  it("are the sweep and the plan's fifteen journeys in the order they run, then the check of the longest names", () => {
+    expect(names).toEqual([
+      "load-error",
+      "sweep",
+      "signin",
+      "tab-bar",
+      "back-keeps-month",
+      "reports",
+      "save-error",
+      "log-existing",
+      "undo",
+      "duplicate-replace",
+      "new-tenant",
+      "vacant",
+      "edit-tenancy",
+      "move-out",
+      "activity-filters",
+      "settings",
+      "long-names",
+    ]);
+  });
+
+  it("start with the one that needs every cache empty, and name each check once", () => {
+    expect(names[0]).toBe("load-error");
+    expect(new Set(names).size).toBe(names.length);
+  });
+
+  it("need only checks that run before them, so `--only` can bring them in", () => {
+    CHECKS.forEach((check, at) => {
+      for (const need of check.needs ?? []) expect(names.indexOf(need), `${check.name} needs ${need}`).toBeLessThan(at);
+      expect(names.indexOf(check.name)).toBe(at);
+    });
+    expect(selectChecks(CHECKS, ["undo"])).toEqual({ ok: true, names: ["log-existing", "undo"] });
+    expect(selectChecks(CHECKS, ["activity-filters"])).toMatchObject({
+      ok: true,
+      names: ["log-existing", "undo", "duplicate-replace", "new-tenant", "activity-filters"],
+    });
   });
 });
 

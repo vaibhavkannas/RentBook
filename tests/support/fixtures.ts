@@ -3,15 +3,16 @@ import type { PortionConfig, ScheduleRow } from "@/lib/domain/types";
 import { serialFromYm } from "@/lib/domain/year-month";
 import { parseSchedule } from "@/lib/sheets/schedule";
 import { SETTINGS_HEADERS } from "@/lib/sheets/settings-store";
+import { PORTION_NAMES } from "./names";
 
 export const TOTAL_HEADER = "Total Rent";
 
 export const PORTIONS: PortionConfig[] = [
-  ["p1", "First floor, single bedroom", ""],
-  ["p2", "First floor, double bedroom", "2"],
-  ["p3", "Second floor, single bedroom", "3"],
-  ["p4", "Second floor, double bedroom", "4"],
-  ["p5", "Third floor, hall and kitchen", "5"],
+  ["p1", PORTION_NAMES[0], ""],
+  ["p2", PORTION_NAMES[1], "2"],
+  ["p3", PORTION_NAMES[2], "3"],
+  ["p4", PORTION_NAMES[3], "4"],
+  ["p5", PORTION_NAMES[4], "5"],
 ].map(([id, name, suffix]) => ({
   id,
   name,

@@ -52,17 +52,26 @@ describe("createGateway", () => {
     expect(() => createGateway(env)).toThrow(/E2E_CONTROL/);
   });
 
-  it("makes one gateway and keeps it on globalThis, so every server bundle reads and writes the same Sheet", async () => {
+  it("makes one gateway for the server, and keeps the Sheet on globalThis, so every route reads and writes the same Sheet", async () => {
     const first = createGateway(env);
     expect(createGateway(env)).toBe(first);
-    expect(shared[E2E_GATEWAY_KEY]).toBe(first);
-    // a second bundle has its own copy of the module: it finds the first one's gateway
+    expect(shared[E2E_GATEWAY_KEY]).toBeDefined();
+    // a second route's bundle has its own copy of the module: it finds the first one's Sheet
     vi.resetModules();
     const other = await import("../../scripts/e2e/sheet");
-    expect(other.createGateway(env)).toBe(first);
-    // ...and sees what the first one wrote
     await first.updateValues([{ tab: "Settings", a1: "B2", values: [["Changed by the first bundle"]] }]);
     expect((await other.createGateway(env).getValues("Settings", "B2", "UNFORMATTED_VALUE"))[0][0]).toBe("Changed by the first bundle");
+  });
+
+  it("throws its faults with the AppError of its own copy of the module, which is the class the route that catches them knows", async () => {
+    // A route says "Google isn't responding" only for an error that is an instance of its own AppError (src/lib/server/http.ts).
+    vi.resetModules();
+    const { AppError: ownClass } = await import("@/lib/errors");
+    const other = await import("../../scripts/e2e/sheet");
+    fail({ getValues: "unavailable" });
+    const failure = await other.createGateway(env).getValues("Settings", "A1", "FORMATTED_VALUE").catch((error: unknown) => error);
+    expect(failure).toBeInstanceOf(ownClass);
+    expect(failure).not.toBeInstanceOf(AppError);
   });
 
   it("holds the main world as it stands today: the five app tabs, and a row for this month", async () => {
