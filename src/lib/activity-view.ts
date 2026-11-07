@@ -91,7 +91,7 @@ const KINDS: Record<
 };
 
 /** "by you" for the signed-in person's own address (however its capitals are written), "by {address}", or who: not recorded. */
-function whoText(loggedBy: string, viewerEmail: string | null | undefined): string {
+export function whoText(loggedBy: string, viewerEmail: string | null | undefined): string {
   const who = clean(loggedBy);
   if (who === "") return "who: not recorded";
   const me = clean(viewerEmail ?? "");

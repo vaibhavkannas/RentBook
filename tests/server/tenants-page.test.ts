@@ -4,6 +4,8 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Tenancy } from "@/lib/domain/tenancy";
 import { AppError, sheetStructure, validation } from "@/lib/errors";
+import { formatSavedAt } from "@/lib/format";
+import type { TenancyLogItem } from "@/lib/sheets/tenancy-log-store";
 import type { PortionTenants } from "@/lib/sheets/tenancy-service";
 import { withoutComments } from "../support/source-scan";
 
@@ -15,6 +17,7 @@ const nav = vi.hoisted(() => ({ search: "" }));
 const mocks = vi.hoisted(() => ({
   getViewer: vi.fn(),
   getPortionTenants: vi.fn(),
+  readTenancyHistory: vi.fn(),
   redirect: vi.fn((to: string) => {
     throw new Error(`redirect:${to}`);
   }),
@@ -34,6 +37,7 @@ vi.mock("@/lib/server/auth-guard", () => ({ getViewer: mocks.getViewer }));
 vi.mock("@/lib/server/context", () => ({ getSheetsContext: () => ({}) }));
 vi.mock("@/lib/server/freshness", () => ({ readWrittenAt: async () => undefined }));
 vi.mock("@/lib/sheets/tenancy-service", () => ({ getPortionTenants: mocks.getPortionTenants }));
+vi.mock("@/lib/sheets/tenancy-log-read", () => ({ readTenancyHistory: mocks.readTenancyHistory }));
 
 import TenantsPage from "@/app/tenants/[portionId]/page";
 import MoveOutForm from "@/components/MoveOutForm";
@@ -102,6 +106,8 @@ beforeEach(() => {
   nav.search = "";
   mocks.getViewer.mockResolvedValue({ email: "member@example.com", isOwner: false });
   mocks.getPortionTenants.mockResolvedValue(data());
+  // The History is empty unless a test gives it rows (a deliberate addition to the mocks: the page now reads the Tenancy Log too).
+  mocks.readTenancyHistory.mockResolvedValue({ items: [] });
 });
 
 describe("the tenant details page for a portion that is switched off", () => {
@@ -545,5 +551,148 @@ describe("the tenant forms and the month", () => {
     expect(source).toMatch(/monthKey\??:\s*string \| null/);
     expect(source).toMatch(/pageAfterSave\([^)]*monthKey\)/);
     expect(source).toMatch(/pageAfterConflict\([^)]*monthKey\)/);
+  });
+});
+
+describe("the tenant details page: History", () => {
+  const SAVED = "2026-11-03T09:30:00.000Z";
+  const log = (overrides: Partial<TenancyLogItem> = {}): TenancyLogItem => ({
+    savedAt: SAVED,
+    tenancyId: "t-1",
+    portionId: "p1",
+    action: "Edited",
+    field: "",
+    oldValue: "",
+    newValue: "",
+    changedBy: "owner@example.com",
+    ...overrides,
+  });
+  /** Newest first, as readTenancyHistory gives them. */
+  const history = (...items: TenancyLogItem[]) => mocks.readTenancyHistory.mockResolvedValue({ items });
+
+  it("reads the history of the portion in the address, no older than the person's own last write", async () => {
+    await render("p1");
+    expect(mocks.readTenancyHistory).toHaveBeenCalledWith(expect.anything(), "p1", { minFetchedAt: undefined });
+  });
+
+  it("has a History section after Past tenants", async () => {
+    const html = await render();
+    expect(html).toMatch(/<section aria-labelledby="history-heading"[^>]*><h2 id="history-heading" class="font-medium">History<\/h2>/);
+    expect(html.indexOf("Past tenants")).toBeLessThan(html.indexOf(">History<"));
+  });
+
+  it("says nothing has been recorded yet, and what is recorded from now on, when the log has no rows for the portion", async () => {
+    const html = await render();
+    expect(html).toContain("No changes recorded yet.");
+    expect(html).toContain(
+      "Changes saved in the app from now on are listed here, newest first. Changes made straight in the Sheet are not.",
+    );
+    expect(html).not.toContain("<ol");
+    expect(html).not.toContain("Showing the newest");
+    expect(html).not.toContain("The history can&#x27;t be shown");
+  });
+
+  it("lists the entries in an ordered list, newest first, with a title, a line for each field and who and when", async () => {
+    history(
+      log({ savedAt: "2026-11-05T05:00:00.000Z", action: "Moved out", field: "Move-out date", newValue: "2026-11-30" }),
+      log({ field: "Phone" }),
+      log({ field: "Agreement end", oldValue: "2027-01-14", newValue: "2027-03-31" }),
+      log({ savedAt: "2026-11-01T05:00:00.000Z", action: "Added", changedBy: "member@example.com" }),
+    );
+    const html = await render();
+    expect(html).toContain("<ol");
+    expect(html).toContain("Asha moved out on 30 Nov 2026.");
+    expect(html).toContain("Details changed for Asha.");
+    expect(html).toContain("Phone number changed.");
+    expect(html).toContain("Agreement end changed from 14 Jan 2027 to 31 Mar 2027.");
+    expect(html).toContain("Details added for Asha.");
+    const order = ["Asha moved out on", "Details changed for Asha.", "Details added for Asha."].map((text) => html.indexOf(text));
+    expect(order).toEqual([...order].sort((a, b) => a - b));
+    expect(order[0]).toBeGreaterThan(html.indexOf(">History<"));
+    // the Added row was written by the member who is looking
+    expect(html).toContain(`${formatSavedAt("2026-11-01T05:00:00.000Z")} · by you`);
+    expect(html).toContain(`${formatSavedAt(SAVED)} · by owner@example.com`);
+  });
+
+  it("draws the title as text-sm font-medium, the lines as text-sm and the meta as text-sm text-muted", async () => {
+    history(log({ field: "Phone" }));
+    const html = await render();
+    expect(html).toMatch(/<p class="text-sm font-medium">Details changed for Asha\.<\/p>/);
+    expect(html).toMatch(/<li class="text-sm">Phone number changed\.<\/li>/);
+    expect(html).toMatch(/<p class="mt-1 text-sm text-muted">[^<]* · by owner@example\.com<\/p>/);
+  });
+
+  it("names the tenant from the page's tenancies, the current one and the past ones", async () => {
+    mocks.getPortionTenants.mockResolvedValue(
+      data({ past: [tenancy({ rowNumber: 3, id: "t-0", tenant: "Esha", moveOut: "2026-10-01" })], mismatched: null }),
+    );
+    history(
+      log({ tenancyId: "t-0", action: "Closed", field: "Move-out date", newValue: "2026-10-01" }),
+      log({ tenancyId: "t-gone", action: "Added" }),
+    );
+    const html = await render();
+    expect(html).toContain("Esha&#x27;s tenancy was closed on 1 Oct 2026, when the next tenant was added.");
+    expect(html).toContain("Details added for a past tenant.");
+  });
+
+  it("names the tenant of details that do not match the Schedule", async () => {
+    mocks.getPortionTenants.mockResolvedValue(
+      data({ scheduleTenant: "Hari", current: null, mismatched: tenancy({ id: "t-1", tenant: "Asha" }) }),
+    );
+    history(log({ action: "Added" }));
+    expect(await render()).toContain("Details added for Asha.");
+  });
+
+  it("says that older changes are in the Tenancy Log tab, once the list is cut at 30", async () => {
+    history(...Array.from({ length: 31 }, (_, index) => log({ savedAt: new Date(Date.UTC(2026, 10, 1, 5, 31 - index)).toISOString(), field: "Phone" })));
+    const html = await render();
+    expect(html).toContain("Showing the newest 30 changes. Older ones are in the Tenancy Log tab of your Sheet.");
+    expect(html.match(/Details changed for Asha\./g)).toHaveLength(30);
+  });
+
+  it("does not say it for 30 entries or fewer", async () => {
+    history(...Array.from({ length: 30 }, (_, index) => log({ savedAt: new Date(Date.UTC(2026, 10, 1, 5, index)).toISOString(), field: "Phone" })));
+    expect(await render()).not.toContain("Showing the newest");
+  });
+
+  it("shows a warning in place of the list when the history cannot be shown, and the rest of the page works", async () => {
+    mocks.readTenancyHistory.mockResolvedValue({ items: [], problem: "Google isn't responding. Try again in a minute." });
+    const html = await render();
+    expect(html).toMatch(
+      /<p class="[^"]*bg-warn-bg[^"]*text-warn-ink[^"]*">The history can&#x27;t be shown right now\. Google isn&#x27;t responding\. Try again in a minute\.<\/p>/,
+    );
+    expect(html).not.toContain("No changes recorded yet.");
+    expect(html).toContain("Current tenancy");
+    expect(html).toContain("Past tenants");
+    expect(html).toContain("Move out");
+  });
+
+  it("shows a header problem of the Tenancy Log the same way, with its words", async () => {
+    mocks.readTenancyHistory.mockResolvedValue({
+      items: [],
+      problem: 'The Tenancy Log tab must have "Action" in column D (found "What"). Put the headers back to see the history; saving changes still works.',
+    });
+    const html = await render();
+    expect(html).toContain("The history can&#x27;t be shown right now. The Tenancy Log tab must have &quot;Action&quot; in column D");
+  });
+
+  it("never puts a phone number or a note in the page, whatever a row holds", async () => {
+    history(log({ field: "Phone", oldValue: "CANARY-PHONE-1", newValue: "CANARY-PHONE-2" }), log({ field: "Notes", oldValue: "CANARY-NOTE-1", newValue: "CANARY-NOTE-2" }));
+    expect(await render()).not.toContain("CANARY");
+  });
+
+  it("reads no history when the page has only a problem to show", async () => {
+    mocks.getPortionTenants.mockRejectedValue(sheetStructure("The Tenants tab must have the headers."));
+    await render();
+    mocks.getPortionTenants.mockResolvedValue(data({ current: null, tenantsProblem: "Put the header back." }));
+    await render();
+    expect(mocks.readTenancyHistory).not.toHaveBeenCalled();
+  });
+
+  it("is also there for a portion that is switched off, and for one with no tenant yet", async () => {
+    mocks.getPortionTenants.mockResolvedValue(data({ portion: { ...PORTION, inactive: true }, current: null }));
+    expect(await render()).toContain(">History<");
+    mocks.getPortionTenants.mockResolvedValue(data({ scheduleTenant: null, current: null }));
+    expect(await render()).toContain(">History<");
   });
 });

@@ -5,7 +5,8 @@ import { Skeleton } from "@/components/ui/Skeleton";
 
 /**
  * Shown straight away when Details is tapped, while the page reads the Sheet. The back link works at once;
- * the title and the two cards are placeholders for the portion name, the current tenancy and the move-out section.
+ * the title and the two cards are placeholders for the portion name, the current tenancy and the move-out section, and the lines
+ * below them for the History.
  */
 export default function Loading() {
   return (
@@ -26,6 +27,12 @@ export default function Loading() {
         <Skeleton className="h-4 w-3/4" />
         <Skeleton className="h-11 w-28" />
       </Card>
+
+      <div aria-hidden="true" className="mt-4 space-y-3">
+        <Skeleton className="h-5 w-20" />
+        <Skeleton className="h-4 w-full" />
+        <Skeleton className="h-4 w-2/3" />
+      </div>
     </Page>
   );
 }

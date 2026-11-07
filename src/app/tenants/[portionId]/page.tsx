@@ -15,8 +15,16 @@ import { getViewer } from "@/lib/server/auth-guard";
 import { getSheetsContext } from "@/lib/server/context";
 import { readWrittenAt } from "@/lib/server/freshness";
 import { problemMessage, setupHrefFor } from "@/lib/server/problem";
+import { readTenancyHistory } from "@/lib/sheets/tenancy-log-read";
 import { getPortionTenants, type PortionTenants } from "@/lib/sheets/tenancy-service";
 import { emptyMoveOutForm, emptyTenancyForm, tenancyFormText } from "@/lib/tenancy-input";
+import {
+  HISTORY_EMPTY_HINT,
+  HISTORY_EMPTY_TITLE,
+  historyEntries,
+  historyOverLimitNote,
+  historyProblemNotice,
+} from "@/lib/tenancy-history";
 import { showChangedNotice, tenantsPagePath, TENANCY_CONFLICT_MESSAGE } from "@/lib/tenancy-response";
 import {
   addDetailsHint,
@@ -85,8 +93,10 @@ export default async function TenantsPage({
   let problem: string | null = null;
   let setupHref: string | undefined;
   let unknownPortion = false;
+  // Data no older than this person's own last save, for the tenants and for the History.
+  const minFetchedAt = await readWrittenAt(viewer.email);
   try {
-    data = await getPortionTenants(getSheetsContext(), portionId, { minFetchedAt: await readWrittenAt(viewer.email) });
+    data = await getPortionTenants(getSheetsContext(), portionId, { minFetchedAt });
   } catch (error) {
     if (error instanceof AppError) {
       // getPortionTenants answers an id that is not one of the portions with a validation error; nothing else on this page does.
@@ -131,6 +141,11 @@ export default async function TenantsPage({
       </Page>
     );
   }
+  // The History reads the Tenancy Log on its own (one read, kept 15 seconds). It never fails the page: a problem is shown in its place.
+  const history = await readTenancyHistory(getSheetsContext(), portion.id, { minFetchedAt });
+  const names = new Map<string, string>();
+  for (const tenancy of [...past, mismatched, current]) if (tenancy) names.set(tenancy.id, tenancy.tenant);
+  const { entries: historyItems, older: olderChanges } = historyEntries(history.items, names, viewer.email);
   const today = todayIso(new Date());
   const phoneLink = current ? phoneHref(current.phone) : null;
   const advance = current ? advanceSummary(current) : null;
@@ -291,6 +306,45 @@ export default async function TenantsPage({
               );
             })}
           </ul>
+        )}
+      </section>
+
+      <section aria-labelledby="history-heading" className="mt-4">
+        <h2 id="history-heading" className="font-medium">
+          History
+        </h2>
+        {history.problem !== undefined ? (
+          <Notice tone="warn" className="mt-2">
+            {historyProblemNotice(history.problem)}
+          </Notice>
+        ) : historyItems.length === 0 ? (
+          <>
+            <p className="mt-2 text-sm">{HISTORY_EMPTY_TITLE}</p>
+            <p className="mt-1 text-sm text-muted">{HISTORY_EMPTY_HINT}</p>
+          </>
+        ) : (
+          <>
+            <Card className="mt-2">
+              <ol className="divide-y divide-line">
+                {historyItems.map((entry, index) => (
+                  <li key={index} className="min-w-0 break-words py-3 first:pt-0 last:pb-0">
+                    <p className="text-sm font-medium">{entry.title}</p>
+                    {entry.lines.length > 0 && (
+                      <ul className="mt-1 space-y-0.5">
+                        {entry.lines.map((line, lineIndex) => (
+                          <li key={lineIndex} className="text-sm">
+                            {line}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                    <p className="mt-1 text-sm text-muted">{entry.meta}</p>
+                  </li>
+                ))}
+              </ol>
+            </Card>
+            {olderChanges > 0 && <p className="mt-2 text-sm text-muted">{historyOverLimitNote()}</p>}
+          </>
         )}
       </section>
     </Page>

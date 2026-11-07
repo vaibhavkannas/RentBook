@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
   readActivity: vi.fn(),
   getSettings: vi.fn(),
   getPortionTenants: vi.fn(),
+  readTenancyHistory: vi.fn(),
 }));
 
 vi.mock("next/navigation", () => ({
@@ -42,6 +43,7 @@ vi.mock("@/lib/sheets/tenancy-service", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/sheets/tenancy-service")>()),
   getPortionTenants: mocks.getPortionTenants,
 }));
+vi.mock("@/lib/sheets/tenancy-log-read", () => ({ readTenancyHistory: mocks.readTenancyHistory }));
 
 import ActivityPage from "@/app/activity/page";
 import Home from "@/app/page";
@@ -95,5 +97,20 @@ describe("pages and the write-time cookie", () => {
     await render(TenantsPage({ params: Promise.resolve({ portionId: "p1" }), searchParams: Promise.resolve({}) }));
     expect(mocks.readWrittenAt).toHaveBeenCalledWith("member@example.com");
     expect(mocks.getPortionTenants).toHaveBeenCalledWith(expect.anything(), "p1", { minFetchedAt: 1_800_000_000_000 });
+  });
+
+  it("the tenant page's History asks for data no older than the person's own last write, too", async () => {
+    mocks.getViewer.mockResolvedValue({ email: "member@example.com", isOwner: false });
+    mocks.getPortionTenants.mockResolvedValue({
+      portion: { id: "p1", name: "Ground floor" },
+      scheduleTenant: null,
+      current: null,
+      mismatched: null,
+      past: [],
+      vacantSince: null,
+    });
+    mocks.readTenancyHistory.mockResolvedValue({ items: [] });
+    await render(TenantsPage({ params: Promise.resolve({ portionId: "p1" }), searchParams: Promise.resolve({}) }));
+    expect(mocks.readTenancyHistory).toHaveBeenCalledWith(expect.anything(), "p1", { minFetchedAt: 1_800_000_000_000 });
   });
 });

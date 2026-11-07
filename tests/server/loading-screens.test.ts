@@ -139,6 +139,10 @@ describe("the tenant details loading screen", () => {
     expect(out).toContain('aria-label="Back to month"');
     expect(out.match(new RegExp(`class="${CARD}`, "g"))).toHaveLength(2);
   });
+
+  it("holds a place for the History below them, hidden from a screen reader like the cards", () => {
+    expect(out).toMatch(/<div aria-hidden="true" class="mt-4 space-y-3"><div [^>]*animate-pulse[^>]*><\/div>/);
+  });
 });
 
 describe("the Overdue loading screen", () => {

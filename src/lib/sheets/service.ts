@@ -39,6 +39,7 @@ import {
   type SettingsUpdate,
 } from "./settings-store";
 import { createSnapshotCache, type SnapshotCache } from "./snapshot-cache";
+import { loadTenancyLog, type TenancyLogRead } from "./tenancy-log-read";
 import { recordTenancyHistory } from "./tenancy-log-store";
 import { checkNewTenancy, recordNewTenant, reopenClosedByRequest, type ClosingRequest } from "./tenancy-writes";
 import { parseTenancies, readTenancies, TENANTS_RANGE, TENANTS_TAB } from "./tenants-store";
@@ -69,6 +70,8 @@ export type SheetsContext = {
   activityCache?: SnapshotCache<ActivityItem[]>;
   /** Short-lived copy of the Settings tab, for the Settings page. */
   settingsCache?: SnapshotCache<PortionConfig[]>;
+  /** Short-lived copy of the Tenancy Log, for the History on the tenant page. */
+  tenancyLogCache?: SnapshotCache<TenancyLogRead>;
 };
 
 /**
@@ -107,11 +110,12 @@ export async function loadSnapshot(ctx: SheetsContext): Promise<Snapshot> {
 
 export const SNAPSHOT_TTL_MS = 15_000;
 
-/** Adds the page-view caches to a context: the month views and tenants, the Activity page and the Settings page. */
+/** Adds the page-view caches to a context: the month views and tenants, the Activity page, the Settings page and the tenant page's History. */
 export function withSnapshotCache(ctx: SheetsContext, ttlMs = SNAPSHOT_TTL_MS): SheetsContext {
   ctx.cache = createSnapshotCache(() => loadSnapshot(ctx), ttlMs);
   ctx.activityCache = createSnapshotCache(() => loadActivity(ctx), ttlMs);
   ctx.settingsCache = createSnapshotCache(() => loadSettings(ctx), ttlMs);
+  ctx.tenancyLogCache = createSnapshotCache(() => loadTenancyLog(ctx), ttlMs);
   return ctx;
 }
 
@@ -120,6 +124,7 @@ export function invalidateCaches(ctx: SheetsContext): void {
   ctx.cache?.invalidate();
   ctx.activityCache?.invalidate();
   ctx.settingsCache?.invalidate();
+  ctx.tenancyLogCache?.invalidate();
 }
 
 /**
