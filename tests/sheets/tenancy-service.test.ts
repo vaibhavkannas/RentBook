@@ -96,6 +96,9 @@ async function expectCode(promise: Promise<unknown>, code: string) {
 
 const snapshotOf = (fake: FakeGateway) => structuredClone([...fake.tabs.entries()]);
 
+/** The rows of the Tenancy Log, without its header, as they were saved. */
+const historyOf = (fake: FakeGateway) => fake.tabs.get(TENANCY_LOG_TAB)!.slice(1);
+
 /**
  * Types a tenant name into the portion's latest Schedule row (Sep-26, sheet row 5), as if someone
  * had edited the Sheet by hand. The portion must already have an entry there.
@@ -209,6 +212,8 @@ describe("saveTenancy: create", () => {
       },
     ]);
     expect(tenancy).toMatchObject({ rowNumber: 2, tenant: "Asha", updatedAt: "2026-10-05T04:30:00.000Z" });
+    // and the Tenancy Log gained exactly the Added row, in the same moment and by the same person
+    expect(historyOf(fake)).toEqual([["2026-10-05T04:30:00.000Z", tenancy.id, "p1", "Added", "", "", "", "owner@example.com"]]);
   });
 
   it("creates the Tenants tab on first use", async () => {
@@ -285,6 +290,13 @@ describe("saveTenancy: create", () => {
       notes: "Paid by cheque",
     });
     expect(current).toMatchObject({ id: second.tenancy.id, tenant: "Hari", moveOut: "", rowNumber: 3 });
+    // The Tenancy Log gained exactly the Added row of the new tenancy and the Closed row of the one it ended (after the first Added row).
+    const stamp = "2026-10-06T09:00:00.000Z";
+    expect(historyOf(fake)).toEqual([
+      ["2026-10-05T04:30:00.000Z", first.tenancy.id, "p1", "Added", "", "", "", "owner@example.com"],
+      [stamp, second.tenancy.id, "p1", "Added", "", "", "", "member@example.com"],
+      [stamp, first.tenancy.id, "p1", "Closed", "Move-out date", "", "2026-10-01", "member@example.com"],
+    ]);
   });
 
   it("closes the previous tenancy no earlier than its own move-in date", async () => {
@@ -472,6 +484,18 @@ describe("saveTenancy: update", () => {
 
     // One write to the Tenants tab, then the history's own append to the Tenancy Log.
     expect(fake.calls.filter((call) => call !== "getValues" && call !== "getManyValues")).toEqual(["updateValues", "appendRows"]);
+    // The Tenancy Log gained exactly one row for each field that changed (after the Added row), the phone and notes without values.
+    const at = "2026-10-06T09:00:00.000Z";
+    const by = "member@example.com";
+    expect(historyOf(fake)).toEqual([
+      ["2026-10-05T04:30:00.000Z", tenancy.id, "p1", "Added", "", "", "", "owner@example.com"],
+      [at, tenancy.id, "p1", "Edited", "Phone", "", "", by],
+      [at, tenancy.id, "p1", "Edited", "Move-in date", "2026-01-15", "2026-01-20", by],
+      [at, tenancy.id, "p1", "Edited", "Agreement end", "2027-01-14", "2027-02-01", by],
+      [at, tenancy.id, "p1", "Edited", "Advance", 20000, 25000, by],
+      [at, tenancy.id, "p1", "Edited", "Advance date", "2026-01-10", "2026-01-18", by],
+      [at, tenancy.id, "p1", "Edited", "Notes", "", "", by],
+    ]);
     expect(await tenancies(ctx)).toEqual([
       {
         rowNumber: 2,
@@ -933,6 +957,16 @@ describe("moveOutTenancy", () => {
 
     // One write to the Tenants tab, then the history's own append to the Tenancy Log.
     expect(fake.calls.filter((call) => call !== "getValues" && call !== "getManyValues")).toEqual(["updateValues", "appendRows"]);
+    // The Tenancy Log gained exactly the move-out's rows (after the Added row), in the order of the Tenants columns.
+    const at = "2026-10-06T09:00:00.000Z";
+    const by = "member@example.com";
+    expect(historyOf(fake)).toEqual([
+      ["2026-10-05T04:30:00.000Z", tenancy.id, "p1", "Added", "", "", "", "owner@example.com"],
+      [at, tenancy.id, "p1", "Moved out", "Advance status", "Held", "Adjusted", by],
+      [at, tenancy.id, "p1", "Moved out", "Refund", "", 15000, by],
+      [at, tenancy.id, "p1", "Moved out", "Deductions", "", 5000, by],
+      [at, tenancy.id, "p1", "Moved out", "Move-out date", "", "2026-09-30", by],
+    ]);
     expect(await tenancies(ctx)).toEqual([
       {
         rowNumber: 2,
@@ -1797,9 +1831,11 @@ describe("moveOutWithoutDetails", () => {
     const { fake, ctx } = await ready();
     const others = ([tab]: [string, unknown]) => tab !== TENANTS_TAB && tab !== TENANCY_LOG_TAB;
     const before = snapshotOf(fake).filter(others);
-    await record(ctx);
+    const { tenancy } = await record(ctx);
     expect(snapshotOf(fake).filter(others)).toEqual(before);
-    expect(fake.tabs.get(TENANCY_LOG_TAB)).toHaveLength(2); // its header and the one row for the move-out
+    // The Tenancy Log gained exactly the one row for the move-out (the day only: the tenant had no details).
+    expect(fake.tabs.get(TENANCY_LOG_TAB)).toHaveLength(2); // its header and the one row
+    expect(historyOf(fake)).toEqual([["2026-10-06T09:00:00.000Z", tenancy.id, "p1", "Moved out", "Move-out date", "", "2026-09-30", "member@example.com"]]);
   });
 
   it("leaves the portion vacant from the first month on or after the move-out, and then refuses a plain log", async () => {

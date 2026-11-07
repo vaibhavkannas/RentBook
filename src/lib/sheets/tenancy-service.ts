@@ -495,22 +495,25 @@ export async function getPortionTenants(
   };
 }
 
-/** How many of the newest Tenancy Log rows a retry looks through for the rows it is about to add. */
-const HISTORY_LOOKBACK_ROWS = 30;
-
 /**
  * The same entry of the Tenancy Log: saved at, tenancy ID, action and field match. Whoever saved it, and the values, do not
- * matter. All the rows of one save go in with one append, so one of them being there means all of them are.
+ * matter. All the rows of one save go in with one append, so one of them being there means all of them are. Saved at is the
+ * save's own moment to the millisecond, so no other save of the same tenancy and field can share it.
  */
 const sameHistoryEntry = (stored: unknown[], row: TenancyLogRow) =>
   text(stored[0]) === row[0] && text(stored[1]) === row[1] && text(stored[3]) === row[3] && text(stored[4]) === row[4];
 
 /**
- * Second chance for the Tenancy Log rows of a save whose history did not reach the Tenancy Log. Safe to repeat: when the newest
- * 30 rows of the tab already hold the first row's entry (an earlier try landed although it said it failed, or the same retry
- * arrived twice) it returns true and adds nothing. When the tab cannot be read it cannot tell, so it adds nothing and returns
- * false. The rows are added in one append, like the first time (see appendTenancyHistory). It takes its turn among the writes,
- * so two retries that arrive together cannot both find the rows missing, and the page caches are thrown away after it.
+ * Second chance for the Tenancy Log rows of a save whose history did not reach the Tenancy Log. Safe to repeat: when any row of
+ * the tab already holds the first row's entry (an earlier try landed although it said it failed, an append that timed out
+ * landed late, or the same retry arrived twice) it returns true and adds nothing, however many rows came after it. When the tab
+ * cannot be read it cannot tell, so it adds nothing and returns false. The rows are added in one append, like the first time (see
+ * appendTenancyHistory). It takes its turn among the writes, so two retries that arrive together cannot both find the rows
+ * missing, and the page caches are thrown away after it.
+ *
+ * It reads the whole tab (columns A to H) to look: the history grows by a few rows a save, so that is a small read for a
+ * request that is rare. An append that was given up on and lands in the instant after this look is not seen, and the rows would
+ * then be in twice: that tiny race is accepted (the Payments Log has it too).
  *
  * It lives here and not in tenancy-log-store.ts because it needs the write lock and `invalidateCaches`, which the store may not
  * import: service.ts imports the store, and a circular import would follow.
@@ -524,9 +527,9 @@ export async function retryTenancyHistory(
     try {
       await ensureTabs(ctx.gateway, ctx.scheduleTab);
       if (rows.length === 0) return true;
-      let recent: unknown[][];
+      let stored: unknown[][];
       try {
-        recent = (await ctx.gateway.getValues(TENANCY_LOG_TAB, TENANCY_LOG_RANGE, "UNFORMATTED_VALUE")).slice(-HISTORY_LOOKBACK_ROWS);
+        stored = await ctx.gateway.getValues(TENANCY_LOG_TAB, TENANCY_LOG_RANGE, "UNFORMATTED_VALUE");
       } catch (error) {
         logEvent(
           "error",
@@ -535,7 +538,7 @@ export async function retryTenancyHistory(
         );
         return false;
       }
-      if (recent.some((stored) => sameHistoryEntry(stored, rows[0]))) return true;
+      if (stored.some((row) => sameHistoryEntry(row, rows[0]))) return true;
       return await appendTenancyHistory(ctx.gateway, rows, retryDelayMs);
     } finally {
       invalidateCaches(ctx);

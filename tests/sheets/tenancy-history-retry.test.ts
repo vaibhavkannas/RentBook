@@ -11,7 +11,7 @@ import { baseSchedule, TOTAL_HEADER } from "../support/fixtures";
 import { captureLogs, loggedLines, type LogSpies } from "../support/logs";
 
 // The second chance for the rows of a save that did not reach the Tenancy Log. A retry can arrive twice, or after the first
-// try landed although it said it failed, so it adds the rows only when the newest rows of the tab do not hold them already.
+// try landed although it said it failed, so it adds the rows only when no row of the tab holds them already.
 
 const SAVED_AT = "2026-11-03T09:30:00.000Z";
 const OWNER = "owner@example.com";
@@ -91,18 +91,35 @@ describe("retryTenancyHistory", () => {
     expect(appendsOf(fake)).toBe(0);
   });
 
-  it("looks only at the newest 30 rows of the tab", async () => {
+  it("finds the entry wherever it sits in the tab, however many newer rows there are", async () => {
     const { fake, ctx } = await ready();
-    const grid = fake.tabs.get(TENANCY_LOG_TAB)!;
-    grid.push(ROWS[0].slice());
-    for (let index = 0; index < 29; index++) grid.push(["2026-11-04T00:00:00.000Z", `t-${index}`, "p2", "Added", "", "", "", OWNER]);
-    // The entry is the 30th row from the end: still found.
-    expect(await retryTenancyHistory(ctx, ROWS, 0)).toBe(true);
-    expect(appendsOf(fake)).toBe(0);
-    // One more row pushes it out of the newest 30: the retry cannot know and adds the rows.
-    grid.push(["2026-11-04T00:00:00.000Z", "t-x", "p2", "Added", "", "", "", OWNER]);
     expect(await retryTenancyHistory(ctx, ROWS, 0)).toBe(true);
     expect(appendsOf(fake)).toBe(1);
+    // 40 more rows of other saves, more than the 30 the retry once looked at, are added after the entry.
+    const grid = fake.tabs.get(TENANCY_LOG_TAB)!;
+    for (let index = 0; index < 40; index++) grid.push(["2026-11-04T00:00:00.000Z", `t-${index}`, "p2", "Added", "", "", "", OWNER]);
+    fake.calls = [];
+    expect(await retryTenancyHistory(ctx, ROWS, 0)).toBe(true);
+    expect(appendsOf(fake)).toBe(0);
+    expect(logged(fake)).toHaveLength(42);
+    // The same when the entry is the oldest row of a long tab, and when it is a row in the middle.
+    for (const place of [1, 20, 41]) {
+      const rows = [...logged(fake).filter((row) => row[0] !== SAVED_AT)];
+      rows.splice(place - 1, 0, ROWS[0].slice(), ROWS[1].slice());
+      fake.tabs.set(TENANCY_LOG_TAB, [[...TENANCY_LOG_HEADERS], ...rows]);
+      fake.calls = [];
+      expect(await retryTenancyHistory(ctx, ROWS, 0)).toBe(true);
+      expect(appendsOf(fake)).toBe(0);
+    }
+  });
+
+  it("still adds the rows when nothing in a long tab is the same entry", async () => {
+    const { fake, ctx } = await ready();
+    const grid = fake.tabs.get(TENANCY_LOG_TAB)!;
+    for (let index = 0; index < 60; index++) grid.push(["2026-11-04T00:00:00.000Z", `t-${index}`, "p2", "Added", "", "", "", OWNER]);
+    expect(await retryTenancyHistory(ctx, ROWS, 0)).toBe(true);
+    expect(appendsOf(fake)).toBe(1);
+    expect(logged(fake).slice(-2)).toEqual(ROWS);
   });
 
   it("adds nothing, and is false, when the Tenancy Log cannot be read, and says so in the log", async () => {

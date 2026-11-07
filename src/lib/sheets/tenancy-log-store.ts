@@ -125,6 +125,13 @@ export function parseTenancyLog(values: unknown[][]): { items: TenancyLogItem[];
 export const HISTORY_ATTEMPTS = 2;
 /** No new try starts when the tries so far, plus the wait before it, would pass this many milliseconds. */
 export const HISTORY_BUDGET_MS = 2_000;
+/**
+ * The whole of adding the history (every try and the wait between them) may take this many milliseconds; then the save goes on
+ * as for any other failed append. Google's own limit per call is 10 seconds, too long here: the append runs inside the write
+ * lock and inside a 15 second request, after the Tenants write has already been saved, so a slow Google could cut the request
+ * off with the change saved and the person told it failed, with every other write waiting behind it.
+ */
+export const HISTORY_LIMIT_MS = 3_000;
 /** The longest wait between two tries. */
 const HISTORY_MAX_WAIT_MS = 1_000;
 
@@ -133,6 +140,13 @@ const HISTORY_MAX_WAIT_MS = 1_000;
  * nothing to add or the rows are in; false when they are not known to be there. It tries a second time only after Google
  * refused for sending too many requests (see appendWithRetry), logs each failed try (`tenancy-log-append-failed`, how many rows,
  * never the rows) and NEVER throws: the history is a convenience and must not fail or undo the change it describes.
+ *
+ * It also never takes longer than HISTORY_LIMIT_MS: when Google has not answered by then it gives up and says false, exactly as
+ * for a failed append, and the caller hands the browser a token to retry once (see retryTenancyHistory). An append that was
+ * given up on may still land afterwards. The retry looks for the rows before it adds them, which settles the usual case; a retry
+ * that looks in the instant between the give-up and the late landing would add the rows a second time. That tiny race is
+ * accepted: the Payments Log has the same property, and a repeated row in an append-only history does no harm, where a save the
+ * owner was told had failed would.
  */
 export async function appendTenancyHistory(
   gateway: SheetsGateway,
@@ -141,8 +155,9 @@ export async function appendTenancyHistory(
 ): Promise<boolean> {
   if (rows.length === 0) return true;
   const count = `${rows.length} ${rows.length === 1 ? "row" : "rows"}`;
+  let timer: ReturnType<typeof setTimeout> | undefined;
   try {
-    return await appendWithRetry({
+    const appending = appendWithRetry({
       append: () => gateway.appendRows(TENANCY_LOG_TAB, rows.map((row) => [...row])),
       attempts: HISTORY_ATTEMPTS,
       retryDelayMs,
@@ -151,9 +166,22 @@ export async function appendTenancyHistory(
       event: "tenancy-log-append-failed",
       what: (attempt) => `Tenancy Log: try ${attempt} of ${HISTORY_ATTEMPTS} did not add ${count}`,
     });
+    const timedOut = new Promise<"timed-out">((resolve) => {
+      timer = setTimeout(() => resolve("timed-out"), HISTORY_LIMIT_MS);
+    });
+    const outcome = await Promise.race([appending, timedOut]);
+    if (outcome !== "timed-out") return outcome;
+    // The loop is left to finish on its own: it logs a failure of its own and never throws, and nothing waits for it.
+    appending.catch(() => undefined);
+    logEvent("error", "tenancy-log-append-failed", {
+      message: `Tenancy Log: ${count} not confirmed within ${HISTORY_LIMIT_MS / 1000} seconds, so treated as not added (the append may still land).`,
+    });
+    return false;
   } catch (error) {
     logEvent("error", "tenancy-log-append-failed", errorLogFields(error, `Tenancy Log: the ${count} could not be added`));
     return false;
+  } finally {
+    clearTimeout(timer);
   }
 }
 

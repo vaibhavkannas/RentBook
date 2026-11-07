@@ -17,7 +17,7 @@ import { POST as postMoveOut } from "@/app/api/tenancies/move-out/route";
 import { POST as postPayment } from "@/app/api/payments/route";
 import { POST as postTenancy } from "@/app/api/tenancies/route";
 import { getSettings, type SheetsContext } from "@/lib/sheets/service";
-import { TENANCY_LOG_HEADERS, TENANCY_LOG_TAB } from "@/lib/sheets/tenancy-log-store";
+import { HISTORY_LIMIT_MS, TENANCY_LOG_HEADERS, TENANCY_LOG_TAB } from "@/lib/sheets/tenancy-log-store";
 import { TENANTS_TAB } from "@/lib/sheets/tenants-store";
 import { FakeGateway } from "../support/fake-gateway";
 import { baseSchedule, TOTAL_HEADER } from "../support/fixtures";
@@ -42,6 +42,7 @@ beforeEach(async () => {
 });
 afterEach(() => {
   vi.restoreAllMocks();
+  vi.useRealTimers();
   vi.unstubAllEnvs();
   delete process.env.ALLOWED_EMAILS;
 });
@@ -93,6 +94,22 @@ describe("a tenancy saved while the Tenancy Log cannot be written", () => {
       expect(await (await postHistoryRetry(post("/api/tenancies/history-retry", { token: body.historyRetryToken }))).json()).toEqual({ ok: true, historyWritten: true });
     }
     expect(history()).toHaveLength(1);
+  });
+
+  it("adds nothing when the same token is sent again after more than 30 newer rows have been added", async () => {
+    failHistory();
+    const { historyRetryToken, tenancy } = await (await postTenancy(post("/api/tenancies", CREATE))).json();
+    stopFailing();
+    const first = await postHistoryRetry(post("/api/tenancies/history-retry", { token: historyRetryToken }));
+    expect(await first.json()).toEqual({ ok: true, historyWritten: true });
+    // Forty more rows come after it (other saves, as many as a busy afternoon makes).
+    for (let index = 0; index < 40; index++) {
+      fake.tabs.get(TENANCY_LOG_TAB)!.push(["2026-11-04T00:00:00.000Z", `t-${index}`, "p2", "Edited", "Phone", "", "", "owner@example.com"]);
+    }
+    const again = await postHistoryRetry(post("/api/tenancies/history-retry", { token: historyRetryToken }));
+    expect(await again.json()).toEqual({ ok: true, historyWritten: true });
+    expect(history()).toHaveLength(41);
+    expect(history().filter((row) => row[1] === tenancy.id)).toHaveLength(1);
   });
 
   it("is retried by the same person only: another person's retry is refused and adds nothing", async () => {
@@ -172,6 +189,43 @@ describe("a tenancy saved while the Tenancy Log cannot be written", () => {
     await postHistoryRetry(post("/api/tenancies/history-retry", { token: created.historyRetryToken }));
     const all = [logs.info, logs.warn, logs.error].flatMap((spy) => spy.mock.calls.flat()).join("\n");
     expect(all).toContain("tenancy-log-append-failed");
+    expect(all).not.toMatch(/CANARY|Asha/);
+  });
+});
+
+describe("a tenancy saved while Google is too slow for the Tenancy Log", () => {
+  it("answers 'saved' within the history's limit, with historyWritten false and a token the retry route accepts", async () => {
+    vi.useFakeTimers();
+    // The first append never answers (Google's own limit would be 10 seconds); the retry's append works.
+    const working = fake.appendRows.bind(fake);
+    let calls = 0;
+    fake.appendRows = (tab, rows) => (++calls === 1 ? new Promise<void>(() => {}) : working(tab, rows));
+
+    const answering = postTenancy(post("/api/tenancies", CREATE));
+    let answered = false;
+    void answering.then(() => (answered = true));
+    await vi.advanceTimersByTimeAsync(HISTORY_LIMIT_MS - 1);
+    expect(answered).toBe(false);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(answered).toBe(true);
+
+    const res = await answering;
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body).toMatchObject({ ok: true, historyWritten: false, tenancy: { tenant: "Asha" } });
+    expect(body).not.toHaveProperty("historyRows");
+    expect(typeof body.historyRetryToken).toBe("string");
+    expect(fake.tabs.get(TENANTS_TAB)!.slice(1).map((row) => row[2])).toEqual(["Asha"]);
+    expect(history()).toEqual([]);
+
+    // The write lock is free: the retry runs at once and adds the row.
+    const retrying = postHistoryRetry(post("/api/tenancies/history-retry", { token: body.historyRetryToken }));
+    await vi.advanceTimersByTimeAsync(0);
+    const retry = await retrying;
+    expect(retry.status).toBe(200);
+    expect(await retry.json()).toEqual({ ok: true, historyWritten: true });
+    expect(history()).toEqual([[expect.any(String), body.tenancy.id, "p1", "Added", "", "", "", "member@example.com"]]);
+    const all = [logs.info, logs.warn, logs.error].flatMap((spy) => spy.mock.calls.flat()).join("\n");
     expect(all).not.toMatch(/CANARY|Asha/);
   });
 });

@@ -3,8 +3,8 @@ import type { Tenancy } from "@/lib/domain/tenancy";
 import { AppError, rateLimited, unavailable } from "@/lib/errors";
 import { logPayment, type SheetsContext } from "@/lib/sheets/service";
 import { getSettings } from "@/lib/sheets/service";
-import { TENANCY_LOG_HEADERS, TENANCY_LOG_TAB } from "@/lib/sheets/tenancy-log-store";
-import { moveOutTenancy, moveOutWithoutDetails, saveTenancy } from "@/lib/sheets/tenancy-service";
+import { HISTORY_LIMIT_MS, TENANCY_LOG_HEADERS, TENANCY_LOG_TAB } from "@/lib/sheets/tenancy-log-store";
+import { moveOutTenancy, moveOutWithoutDetails, retryTenancyHistory, saveTenancy } from "@/lib/sheets/tenancy-service";
 import { appendTenancy, TENANTS_TAB } from "@/lib/sheets/tenants-store";
 import { FakeGateway } from "../support/fake-gateway";
 import { baseSchedule, TOTAL_HEADER } from "../support/fixtures";
@@ -23,14 +23,26 @@ const OCT = { year: 2026, month: 10 };
 
 type Row = Omit<Tenancy, "rowNumber">;
 
-/** A fake whose Tenancy Log appends can fail the ways Google's do: a refusal that did nothing, or an error after the rows landed. */
+/**
+ * A fake whose Tenancy Log appends can fail the ways Google's do: a refusal that did nothing, or an error after the rows landed.
+ * They can also be slow (`appendRowsDelayMs`, then the rows land) or never answer (`appendRowsHangs` appends, counted from the
+ * next one, never settle and never land).
+ */
 class HistoryGateway extends FakeGateway {
   appendRowsFailures: unknown[] = [];
   appendRowsLands = false;
   appendRowsCalls: unknown[][][] = [];
+  appendRowsDelayMs = 0;
+  appendRowsHangs = 0;
 
   async appendRows(tab: string, rows: unknown[][]) {
     this.appendRowsCalls.push(structuredClone(rows));
+    if (this.appendRowsHangs > 0) {
+      this.appendRowsHangs -= 1;
+      this.calls.push("appendRows");
+      return new Promise<void>(() => {});
+    }
+    if (this.appendRowsDelayMs > 0) await new Promise((resolve) => setTimeout(resolve, this.appendRowsDelayMs));
     const failure = this.appendRowsFailures.shift();
     if (failure === undefined) return super.appendRows(tab, rows);
     if (this.appendRowsLands) await super.appendRows(tab, rows);
@@ -543,5 +555,181 @@ describe("what the server log may hold", () => {
     const all = [logs.info, logs.warn, logs.error].flatMap((spy) => spy.mock.calls.flat()).join("\n");
     expect(all).toContain("tenancy-log-append-failed");
     expect(all).not.toMatch(/CANARY/);
+  });
+});
+
+describe("when Google is too slow for the history", () => {
+  /** Runs `work` and tells, without waiting for it, whether it has finished. */
+  function watch<T>(work: Promise<T>) {
+    const state = { done: false, value: undefined as T | undefined, error: undefined as unknown };
+    work.then(
+      (value) => {
+        state.done = true;
+        state.value = value;
+      },
+      (error: unknown) => {
+        state.done = true;
+        state.error = error;
+      },
+    );
+    return state;
+  }
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  it("gives the history up after HISTORY_LIMIT_MS, and returns the saved tenancy with historyWritten false and the rows for a retry", async () => {
+    const { fake, ctx } = await ready(new HistoryGateway({ Schedule: baseSchedule() }));
+    fake.appendRowsHangs = 1;
+    const saving = watch(create(ctx));
+    await vi.advanceTimersByTimeAsync(HISTORY_LIMIT_MS - 1);
+    expect(saving.done).toBe(false);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(saving.done).toBe(true);
+    expect(saving.error).toBeUndefined();
+    const result = saving.value!;
+    expect(result.historyWritten).toBe(false);
+    expect(result.tenancy.tenant).toBe("Asha");
+    expect(result.historyRows).toEqual([[SAVED_AT, result.tenancy.id, "p1", "Added", "", "", "", OWNER]]);
+    // The change itself is saved, and only one append was tried: a try that may be on its way is never repeated.
+    expect(fake.tabs.get(TENANTS_TAB)).toHaveLength(2);
+    expect(appendsOf(fake)).toBe(1);
+  });
+
+  it("is about three seconds", () => {
+    expect(HISTORY_LIMIT_MS).toBe(3_000);
+  });
+
+  it("counts the wait before the second try in the limit", async () => {
+    const { fake, ctx } = await ready(new HistoryGateway({ Schedule: baseSchedule() }));
+    // Google refuses the first try at once (the default 400 ms wait follows); the second never answers.
+    fake.appendRowsFailures = [rateLimited()];
+    const second = fake.appendRows.bind(fake);
+    fake.appendRows = async (tab, rows) => {
+      if (fake.appendRowsCalls.length >= 1) fake.appendRowsHangs = 1;
+      return second(tab, rows);
+    };
+    const saving = watch(create(ctx, {}, { ...STAMP, retryDelayMs: 400 }));
+    await vi.advanceTimersByTimeAsync(HISTORY_LIMIT_MS - 1);
+    expect(saving.done).toBe(false);
+    expect(fake.appendRowsCalls).toHaveLength(2);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(saving.done).toBe(true);
+    expect(saving.value!.historyWritten).toBe(false);
+  });
+
+  it("covers every kind of change: an edit, a move-out, a move-out without details and a new tenant's payment", async () => {
+    const { fake, ctx } = await ready(new HistoryGateway({ Schedule: baseSchedule() }));
+    const { tenancy } = await create(ctx);
+    fake.appendRowsHangs = 1;
+    const edit = watch(
+      saveTenancy(
+        ctx,
+        { portionId: "p1", tenant: "Asha", id: tenancy.id, expectedUpdatedAt: tenancy.updatedAt, fields: { ...FIELDS, phone: "91234 56789" } },
+        STAMP,
+      ),
+    );
+    await vi.advanceTimersByTimeAsync(HISTORY_LIMIT_MS);
+    expect(edit.done).toBe(true);
+    expect(edit.value).toMatchObject({ historyWritten: false });
+    expect(edit.value!.historyRows).toHaveLength(1);
+
+    fake.appendRowsHangs = 1;
+    const out = watch(moveOutTenancy(ctx, { id: tenancy.id, expectedUpdatedAt: edit.value!.tenancy.updatedAt, moveOut: "2026-11-30" }, STAMP));
+    await vi.advanceTimersByTimeAsync(HISTORY_LIMIT_MS);
+    expect(out.value).toMatchObject({ historyWritten: false });
+    expect(out.value!.tenancy.moveOut).toBe("2026-11-30");
+
+    fake.appendRowsHangs = 1;
+    const bare = watch(moveOutWithoutDetails(ctx, { portionId: "p2", tenant: "Bala", moveOut: "2026-10-31" }, STAMP));
+    await vi.advanceTimersByTimeAsync(HISTORY_LIMIT_MS);
+    expect(bare.value).toMatchObject({ historyWritten: false });
+    expect(bare.value!.tenancy.moveOut).toBe("2026-10-31");
+
+    fake.appendRowsHangs = 1;
+    const paying = watch(
+      logPayment(ctx, { month: OCT, portionId: "p4", amount: 8800, dateReceived: "2026-10-07", newTenantName: "Dev", tenancy: { moveIn: "2026-10-01" } }, PAY),
+    );
+    await vi.advanceTimersByTimeAsync(HISTORY_LIMIT_MS);
+    expect(paying.done).toBe(true);
+    expect(paying.value).toMatchObject({ logWritten: true, tenancyWritten: true, historyWritten: false });
+    expect(paying.value!.historyRows).toHaveLength(1);
+  });
+
+  it("lets the next write go ahead: the lock is released, and the next save's history is written", async () => {
+    const { fake, ctx } = await ready(new HistoryGateway({ Schedule: baseSchedule() }));
+    fake.appendRowsHangs = 1;
+    const first = watch(create(ctx));
+    const second = watch(saveTenancy(ctx, { portionId: "p2", tenant: "Bala", fields: { moveIn: "2026-02-01" } }, { ...STAMP, updatedBy: MEMBER }));
+    await vi.advanceTimersByTimeAsync(HISTORY_LIMIT_MS);
+    expect(first.value).toMatchObject({ historyWritten: false });
+    expect(second.done).toBe(true);
+    expect(second.value).toMatchObject({ historyWritten: true });
+    expect(logged(fake)).toEqual([[SAVED_AT, second.value!.tenancy.id, "p2", "Added", "", "", "", MEMBER]]);
+  });
+
+  it("clears the page caches after a history that timed out, as after any other save", async () => {
+    const { fake, ctx } = await ready(new HistoryGateway({ Schedule: baseSchedule() }));
+    const invalidate = vi.fn();
+    ctx.cache = { get: vi.fn(), invalidate } as never;
+    fake.appendRowsHangs = 1;
+    const saving = watch(create(ctx));
+    await vi.advanceTimersByTimeAsync(HISTORY_LIMIT_MS);
+    expect(saving.done).toBe(true);
+    expect(invalidate).toHaveBeenCalledTimes(1);
+  });
+
+  it("leaves no timer running once an append has finished in time", async () => {
+    const { fake, ctx } = await ready(new HistoryGateway({ Schedule: baseSchedule() }));
+    fake.appendRowsDelayMs = 100;
+    const saving = watch(create(ctx));
+    await vi.advanceTimersByTimeAsync(100);
+    expect(saving.value).toMatchObject({ historyWritten: true });
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("logs one tenancy-log-append-failed line that says how many rows and how long, and never a name, phone or note", async () => {
+    const fake = new HistoryGateway({ Schedule: baseSchedule() });
+    const { ctx } = await ready(fake);
+    fake.tabs.get("Schedule")![4][1] = "CANARY-TENANT";
+    fake.appendRowsHangs = 1;
+    const fields = { phone: "CANARY-PHONE-1", moveIn: "2026-01-15", agreementEnd: "2027-01-14", advance: 20000, advanceDate: "2026-01-10", notes: "CANARY-NOTE-1" };
+    const saving = watch(saveTenancy(ctx, { portionId: "p1", tenant: "CANARY-TENANT", fields }, STAMP));
+    await vi.advanceTimersByTimeAsync(HISTORY_LIMIT_MS);
+    expect(saving.done).toBe(true);
+    const lines = loggedLines(logs.error);
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toMatchObject({ level: "error", event: "tenancy-log-append-failed" });
+    expect(String(lines[0].message)).toMatch(/^Tenancy Log: 1 row not confirmed within 3 seconds/);
+    const all = [logs.info, logs.warn, logs.error].flatMap((spy) => spy.mock.calls.flat()).join("\n");
+    expect(all).not.toMatch(/CANARY/);
+  });
+
+  it("lets an append that was given up on land later without a second line or an unhandled error, and the retry then adds nothing", async () => {
+    const { fake, ctx } = await ready(new HistoryGateway({ Schedule: baseSchedule() }));
+    fake.appendRowsDelayMs = 5_000; // Google answers after 5 seconds, longer than the limit
+    const saving = watch(create(ctx));
+    await vi.advanceTimersByTimeAsync(HISTORY_LIMIT_MS);
+    const result = saving.value!;
+    expect(result.historyWritten).toBe(false);
+    expect(logged(fake)).toEqual([]);
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(logged(fake)).toEqual([[SAVED_AT, result.tenancy.id, "p1", "Added", "", "", "", OWNER]]);
+    expect(logs.error).toHaveBeenCalledTimes(1);
+    // The browser's retry finds the rows that landed late and adds nothing. (A retry that looks in the instant between the
+    // timeout and the late landing would add a second copy: that tiny race is accepted, as it is for the Payments Log.)
+    fake.appendRowsDelayMs = 0;
+    expect(await retryTenancyHistory(ctx, result.historyRows, 0)).toBe(true);
+    expect(logged(fake)).toHaveLength(1);
+  });
+
+  it("is bounded for the browser's retry as well", async () => {
+    const { fake, ctx } = await ready(new HistoryGateway({ Schedule: baseSchedule() }));
+    fake.appendRowsHangs = 1;
+    const retrying = watch(retryTenancyHistory(ctx, [[SAVED_AT, "t-x", "p1", "Added", "", "", "", OWNER]], 0));
+    await vi.advanceTimersByTimeAsync(HISTORY_LIMIT_MS);
+    expect(retrying.done).toBe(true);
+    expect(retrying.value).toBe(false);
   });
 });
