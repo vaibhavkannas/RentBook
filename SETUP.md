@@ -174,6 +174,7 @@ Do not set `NODE_TLS_REJECT_UNAUTHORIZED=0`. It turns off certificate checking f
 - "Error 401: invalid_client": the client ID or secret is wrong, or has stray spaces.
 - RentBook says "That Google account isn't on the list for RentBook": the account you used is not listed in `ALLOWED_EMAILS`. Add it there (in `.env.local`, and in Vercel followed by a redeploy).
 - RentBook says "Can't load your Sheet": read the message under it. It names the problem, for example that the Sheets API is not enabled or the Sheet is not shared with the service account.
+- For any other message, and for what to do about it, see [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md).
 
 ## Adding another person
 

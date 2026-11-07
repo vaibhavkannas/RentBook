@@ -11,7 +11,7 @@ import { SOMETHING_WENT_WRONG_MESSAGE } from "@/lib/request-copy";
  */
 
 const ROOT = fileURLToPath(new URL("../../", import.meta.url));
-const DOCS = ["README.md", "SETUP.md", "SECURITY.md", "docs/product/THREAT-MODEL.md"];
+const DOCS = ["README.md", "SETUP.md", "SECURITY.md", "docs/product/THREAT-MODEL.md", "docs/USER-GUIDE.md", "docs/TROUBLESHOOTING.md"];
 const read = (path: string) => readFileSync(`${ROOT}${path}`, "utf8");
 
 describe.each(DOCS)("%s", (doc) => {
