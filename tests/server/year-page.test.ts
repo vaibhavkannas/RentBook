@@ -72,7 +72,7 @@ const cellsOf = (card: string) => {
   return list.slice(list.indexOf(">") + 1).split("<li>").slice(1);
 };
 
-const headingsIn = (html: string) => [...html.matchAll(/<h2 class="font-medium">([^<]*)<\/h2>/g)].map((match) => match[1]);
+const headingsIn = (html: string) => [...html.matchAll(/<h2 class="break-words font-medium">([^<]*)<\/h2>/g)].map((match) => match[1]);
 
 /** A Schedule of 2025 and 2026: every portion is let in both years. */
 const twoYears = () =>

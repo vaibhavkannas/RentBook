@@ -155,7 +155,7 @@ describe("the Agreements section: one ended, one that ends today, one that ends 
 
   it("names the tenant, muted, and says what the agreement does, with its date", async () => {
     const [ended, today, soon] = cards(await agreements());
-    expect(ended).toContain('<p class="mt-0.5 text-sm text-muted">Asha</p>');
+    expect(ended).toContain('<p class="mt-0.5 break-words text-sm text-muted">Asha</p>');
     expect(visibleText(ended)).toContain("Agreement ended 12 days ago, on 5 Oct 2026.");
     expect(visibleText(today)).toContain("Agreement ends today.");
     expect(visibleText(soon)).toContain("Agreement ends in 30 days, on 16 Nov 2026.");
@@ -211,7 +211,7 @@ describe("the Rent hikes section: one due, one coming", () => {
 
   it("says who, when the rent goes up and from what to what", async () => {
     const [due, soon] = cards(await hikes());
-    expect(due).toContain('<p class="mt-0.5 text-sm text-muted">Bala</p>');
+    expect(due).toContain('<p class="mt-0.5 break-words text-sm text-muted">Bala</p>');
     expect(visibleText(due)).toContain(
       `Rent goes up 5% with the next payment (October 2026): ${formatRupees(12700)} to ${formatRupees(13335)}.`,
     );

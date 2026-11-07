@@ -108,3 +108,13 @@ export function describe(node: HtmlElement): string {
 
 /** What a person reads on a whole render, with spaces collapsed (see `textOf`). */
 export const pageText = (html: string): string => textOf(parseHtml(html));
+
+/** Every `tag` element under `element`, in document order. */
+export const inside = (element: HtmlElement, tag: string): HtmlElement[] => descendants(element).filter((found) => found.tag === tag);
+
+/** Every `tag` element of a whole render. */
+export const named = (html: string, tag: string): HtmlElement[] => inside(parseHtml(html), tag);
+
+/** The link whose text, or whose aria-label, is `label`. */
+export const link = (html: string, label: string): HtmlElement | undefined =>
+  named(html, "a").find((anchor) => textOf(anchor) === label || anchor.attrs["aria-label"] === label);

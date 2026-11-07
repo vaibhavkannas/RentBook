@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ancestry, classesOf, decode, describe as describeElement, descendants, isAriaHidden, pageText, parseHtml, textOf } from "./html";
+import { ancestry, classesOf, decode, describe as describeElement, descendants, inside, isAriaHidden, link, named, pageText, parseHtml, textOf } from "./html";
 
 const first = (html: string, tag: string) => descendants(parseHtml(html)).find((element) => element.tag === tag)!;
 
@@ -41,6 +41,22 @@ describe("parseHtml", () => {
 
   it("skips comments", () => {
     expect(textOf(first("<p>a<!-- b -->c</p>", "p"))).toBe("a c");
+  });
+});
+
+describe("finding elements", () => {
+  const html = '<main><section><a href="/a">One</a><a href="/b" aria-label="Two">2</a></section><a href="/c">Three</a></main>';
+
+  it("lists the elements of a tag in a render, or under one element", () => {
+    expect(named(html, "a").map((anchor) => anchor.attrs.href)).toEqual(["/a", "/b", "/c"]);
+    expect(inside(named(html, "section")[0], "a").map((anchor) => anchor.attrs.href)).toEqual(["/a", "/b"]);
+    expect(named(html, "h1")).toEqual([]);
+  });
+
+  it("finds a link by its text or its aria-label", () => {
+    expect(link(html, "One")?.attrs.href).toBe("/a");
+    expect(link(html, "Two")?.attrs.href).toBe("/b");
+    expect(link(html, "Four")).toBeUndefined();
   });
 });
 

@@ -3,7 +3,7 @@ import { assertAuthConfig, readEnv } from "@/lib/server/env";
 import { getMonthView } from "@/lib/sheets/service";
 import { landmarkProblems } from "./landmarks";
 import { captureLogs } from "./logs";
-import { CANARIES, FIXED_NOW, MEMBER, OWNER, renderScreen, screenContext, stubTestEnv, TEST_ENV } from "./screens";
+import { CANARIES, expectSound, FIXED_NOW, MEMBER, OWNER, renderScreen, screenContext, stubTestEnv, TEST_ENV } from "./screens";
 import { smallTargets } from "./tap-targets";
 import { faults, world } from "./worlds";
 
@@ -114,6 +114,22 @@ describe("screenContext", () => {
     await expect(getMonthView(ctx, { year: 2026, month: 10 })).rejects.toMatchObject({ code: "unavailable" });
     delete set.getManyValues;
     expect((await getMonthView(ctx, { year: 2026, month: 10 })).cards).toHaveLength(5);
+  });
+});
+
+describe("expectSound", () => {
+  const good = '<main class="min-h-11"><h1>Title</h1><a class="min-h-11" href="/x">Go</a></main>';
+
+  it("returns the markup of a sound render", () => {
+    expect(expectSound(good)).toBe(good);
+    expect(expectSound("<section><h2>Part</h2></section>", { main: false })).toBe("<section><h2>Part</h2></section>");
+  });
+
+  it("fails a render that breaks a landmark rule, has a small target, or shows a canary", () => {
+    expect(() => expectSound("<main><h1>Title</h1></main><main></main>")).toThrow();
+    expect(() => expectSound('<main><h1>Title</h1><a href="/x">Go</a></main>')).toThrow();
+    expect(() => expectSound(good.replace("</main>", `<p>${CANARIES[0]}</p></main>`))).toThrow();
+    expect(() => expectSound("<section><h2>Part</h2></section>")).toThrow();
   });
 });
 

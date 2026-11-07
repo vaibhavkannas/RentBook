@@ -1,11 +1,13 @@
 import { createElement, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { vi } from "vitest";
+import { expect, vi } from "vitest";
 import type { Viewer } from "@/lib/server/auth-guard";
 import { buildSheetsContext } from "@/lib/server/context";
 import { readEnv } from "@/lib/server/env";
 import type { SheetsContext } from "@/lib/sheets/service";
 import { FakeGateway } from "./fake-gateway";
+import { landmarkProblems } from "./landmarks";
+import { smallTargets } from "./tap-targets";
 import { faults as noFaults, MEMBER_EMAIL, OWNER_EMAIL, withFaults, world, type Faults, type Tabs, type WorldName } from "./worlds";
 
 /**
@@ -121,4 +123,15 @@ export function screenContext(
 /** The markup of what a server component returned (`renderScreen(await Page(props))`), the way the server sends it. */
 export function renderScreen(page: ReactNode): string {
   return renderToStaticMarkup(createElement(() => page));
+}
+
+/**
+ * What every render of every screen has to be: it passes the landmark rules (see landmarks.ts, `main: false` for a piece of a
+ * page), has no button or link under 44 px, and shows none of the CANARIES. Fails the test when it is not; returns the markup.
+ */
+export function expectSound(html: string, options: { main?: boolean } = {}): string {
+  expect(landmarkProblems(html, options)).toEqual([]);
+  expect(smallTargets(html)).toEqual([]);
+  for (const canary of CANARIES) expect(html).not.toContain(canary);
+  return html;
 }

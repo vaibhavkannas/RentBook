@@ -4,11 +4,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { summaryText } from "@/lib/month-summary";
 import { CONNECTION_NEEDS_ATTENTION } from "@/lib/errors";
 import { getMonthView } from "@/lib/sheets/service";
-import { descendants, pageText, parseHtml, textOf, type HtmlElement } from "../support/html";
-import { landmarkProblems } from "../support/landmarks";
+import { inside, link, named, pageText, textOf } from "../support/html";
 import { captureLogs, type LogSpies } from "../support/logs";
-import { CANARIES, FIXED_NOW, MEMBER, OWNER, renderScreen, screenContext } from "../support/screens";
-import { smallTargets } from "../support/tap-targets";
+import { expectSound as sound, FIXED_NOW, MEMBER, OWNER, renderScreen, screenContext } from "../support/screens";
 import { faults, LONG_PORTION, LONG_TENANT, world, type Faults, type Tabs } from "../support/worlds";
 import { wrapProblems } from "../support/wrapping";
 
@@ -85,14 +83,6 @@ function useSheet(source: Parameters<typeof screenContext>[0], options: { faults
   return sheet;
 }
 
-/** What every render has to be: sound for a screen reader and a thumb, and showing no secret. Returns the markup. */
-function sound(html: string): string {
-  expect(landmarkProblems(html)).toEqual([]);
-  expect(smallTargets(html)).toEqual([]);
-  for (const canary of CANARIES) expect(html).not.toContain(canary);
-  return html;
-}
-
 const month = async (search: { month?: string } = {}) => sound(renderScreen(await Home({ searchParams: Promise.resolve(search) })));
 const activity = async (search: Record<string, string | string[] | undefined> = {}) =>
   sound(renderScreen(await ActivityPage({ searchParams: Promise.resolve(search) })));
@@ -102,11 +92,6 @@ const settings = async (search: Record<string, string | string[] | undefined> = 
   sound(renderScreen(await SettingsPage({ searchParams: Promise.resolve(search) })));
 const tenant = async (portionId: string, search: Record<string, string | string[] | undefined> = {}) =>
   sound(renderScreen(await TenantPage({ params: Promise.resolve({ portionId }), searchParams: Promise.resolve(search) })));
-
-const named = (html: string, tag: string) => inside(parseHtml(html), tag);
-const inside = (element: HtmlElement, tag: string) => descendants(element).filter((found) => found.tag === tag);
-const link = (html: string, label: string): HtmlElement | undefined =>
-  named(html, "a").find((anchor) => textOf(anchor) === label || anchor.attrs["aria-label"] === label);
 
 /** The month screen's cards: each one's name and everything it says. */
 function cards(html: string) {

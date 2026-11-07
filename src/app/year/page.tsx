@@ -65,7 +65,7 @@ function Month({ cell, portionName, currentKey }: { cell: YearCell; portionName:
 function Portion({ row, year, currentKey }: { row: YearRow; year: number; currentKey: string }) {
   return (
     <Card as="li">
-      <h2 className="font-medium">{row.name}</h2>
+      <h2 className="break-words font-medium">{row.name}</h2>
       <p className="mt-0.5 text-sm text-muted">
         {formatRupees(row.received)} of {formatRupees(row.due)}
       </p>

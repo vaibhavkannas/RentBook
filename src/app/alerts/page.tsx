@@ -43,7 +43,7 @@ function Agreement({ alert, monthKey }: { alert: AgreementAlert; monthKey: strin
         <h3 className="min-w-0 break-words font-medium">{alert.name}</h3>
         <Pill tone={pill.tone}>{pill.label}</Pill>
       </div>
-      <p className="mt-0.5 text-sm text-muted">{alert.tenant}</p>
+      <p className="mt-0.5 break-words text-sm text-muted">{alert.tenant}</p>
       <p className="mt-1 text-sm">{agreementSentence(alert)}</p>
       {alert.state === "ended" && <p className="mt-1 text-sm text-muted">{AGREEMENT_HINT}</p>}
       <Link
@@ -66,7 +66,7 @@ function Hike({ alert, thisMonth }: { alert: HikeAlert; thisMonth: YearMonth }) 
         <h3 className="min-w-0 break-words font-medium">{alert.name}</h3>
         <Pill tone={pill.tone}>{pill.label}</Pill>
       </div>
-      <p className="mt-0.5 text-sm text-muted">{alert.tenant}</p>
+      <p className="mt-0.5 break-words text-sm text-muted">{alert.tenant}</p>
       <p className="mt-1 text-sm">{hikeSentence(alert)}</p>
       {alert.state === "due" && showMovedOutHint(alert.hikeMonth, thisMonth) && (
         <p className="mt-1 text-sm text-muted">{HIKE_MOVED_OUT_HINT}</p>
