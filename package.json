@@ -12,6 +12,7 @@
     "lint": "eslint",
     "test": "vitest run",
     "typecheck": "next typegen && tsc --noEmit",
+    "e2e": "tsx scripts/e2e/run.ts",
     "recon": "tsx --conditions=react-server --env-file=.env.local scripts/recon.ts",
     "verify:testcopy": "tsx --conditions=react-server --env-file=.env.local scripts/verify-testcopy.ts"
   },
