@@ -183,6 +183,8 @@ Reviews: every wave had a final whole-branch review with the earlier slices revi
 
 ## Rulings made on your behalf
 
+- Dependencies: after the final merge the CI `npm audit` step failed on advisories published since the work began (next 16.0.0 to 16.4.0 including a critical one, zod before 4.6.6, qs up to 6.16.0). `next` and `eslint-config-next` were moved from 16.3.8 to 16.4.5 and `zod` to 4.6.7 (the lock file also moves `qs` and some development tools by patch versions); nothing was added. The app uses two Server Actions (sign in and sign out) and no `use cache`; its request bodies are capped at 32 KB before `zod` sees them.
+
 - Wave 3: `/api/health` stays a plain liveness check; the Set up and Diagnostics pages report configuration. A portion's tenant leaving is detected by the tenant's name. Wave 4: rent is due on the 1st and overdue from the 6th; lists never disagree with the month cards; the Tenancy Log never blocks a tenancy change and is never read with the snapshot.
 - Wave 5: the guides are short and plain; there is no licence, release, limits page or marketing text. The end-to-end run is not part of CI (CI has no browser) and Playwright stays outside the project. A mistaken change is recorded in the Tenancy Log only for edits made in the app, not for edits made straight in the Sheet.
 - `/api/health` stays a plain liveness check (`{ ok, version }`); the wave 3 setup and diagnostics pages report configuration.
