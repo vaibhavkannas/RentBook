@@ -4,7 +4,7 @@ What RentBook says when something goes wrong, and what to do. Each message below
 
 ## Start here
 
-- The owner: open **More**, then **Set up**. It checks each part of the connection to your Sheet and, for anything wrong, says what to do. **Diagnostics**, also under **More**, shows whether the Sheet answers, how fast, and how many problems this server has logged.
+- The owner, when you can sign in: open **More**, then **Set up**. It checks each part of the connection to your Sheet and, for anything wrong, says what to do. **Diagnostics**, also under **More**, shows whether the Sheet answers, how fast, and how many problems this server has logged.
 - A member: the connection is the owner's to fix. Tell the owner what the screen said, word for word.
 - The server log: every line RentBook writes is one JSON line with a `code` and, for a failed request, a `requestId`. The same id is in the error the browser got. The lines are built from a few fixed fields and carry no secret and no request body, but they can name an address, so keep them private. On Vercel, open the project's Logs.
 - Is it up at all? Open `/api/health` on the app's address. It answers `{"ok":true,"version":"..."}` without reading your settings or the Sheet, so it can say "up" while sign-in or the Sheet is not set up.
@@ -17,7 +17,7 @@ The account is not in `ALLOWED_EMAILS`. The owner adds it there, in `.env.local`
 
 > "Sign-in isn't set up correctly. If you are the owner, check the sign-in settings in SETUP.md."
 
-A sign-in setting is missing or wrong: `AUTH_SECRET` (at least 32 characters), `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET`, or `AUTH_URL` (the app's own address with no path, or left out; an empty `AUTH_URL` counts as set, so delete the line instead). **Set up** lists which. A log line that mentions `UntrustedHost` means the app does not trust the address it was opened on: set `AUTH_URL` to it (SETUP, step 7). See "If sign-in fails" in [SETUP.md](SETUP.md).
+A sign-in setting is missing or wrong: `AUTH_SECRET` (at least 32 characters), `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET`, or `AUTH_URL` (the app's own address with no path, or left out; an empty `AUTH_URL` counts as set, so delete the line instead). While this shows, nobody can sign in, so **Set up** cannot be opened: it is for a signed-in owner. Look in the server log and in SETUP.md instead. The log has a `request-error` line whose message names each sign-in setting that is missing or too short, such as `AUTH_SECRET is missing.` (it never holds a value), and an `auth-error` line that names the kind of error Auth.js reported. SETUP.md, step 6, lists every setting. A log line that mentions `UntrustedHost` means the app does not trust the address it was opened on: set `AUTH_URL` to it (SETUP, step 7). See "If sign-in fails" in [SETUP.md](SETUP.md).
 
 > "Sign-in didn't work. Try again."
 
@@ -29,15 +29,11 @@ Google sent the person back with an error RentBook does not name. Try once more.
 
 A sign-in lasts seven days from the moment of signing in, and using the app does not extend it. Sign in again. If everyone is signed out at once, it is usually because the owner set `SESSION_NOT_BEFORE` or changed `AUTH_SECRET`.
 
-`SESSION_NOT_BEFORE` is the "sign everyone out" switch. Set it to a date and time in UTC in this form, then redeploy: `2026-10-16T10:00:00Z`. Everyone who signed in before that moment signs in again; you may leave it in place. A value that cannot be read as a date signs everyone out until it is fixed, and says so in two places:
+`SESSION_NOT_BEFORE` is the "sign everyone out" switch. Set it to the current date and time in UTC, in this form, then redeploy: `2026-10-16T10:00:00Z`. Everyone who signed in before that moment signs in again. It must be now or earlier. A time in the future refuses every sign-in made before it, new ones too, so everyone, the owner included, is signed out again right after signing in until that time comes. Leaving a value that is now or earlier in place is fine: it only affects sessions older than it. A value that cannot be read as a date also signs everyone out until it is fixed, and says so in the server log:
 
 > "SESSION_NOT_BEFORE is not a date and time (for example 2026-10-16T10:00:00Z), so every session is refused."
 
-That is the server log. **Set up** shows:
-
-> "Not a date and time, so everyone is signed out."
-
-Correct the value or delete it, and redeploy.
+Nobody can open **Set up** while everyone is signed out, so the log is where to look. Correct the value, set it to a time that has passed, or delete it, in Vercel (and `.env.local`), and redeploy.
 
 ## The Sheet
 
@@ -191,7 +187,7 @@ The change is in the Tenants tab. Its line in the Tenancy Log did not save, even
 
 > "{portion} is vacant in {month}: {name} moved out on {date}. Tap another tab at the bottom of the screen and come back, then add the new tenant with New tenant."
 
-A portion whose tenant has moved out has nobody to log rent for. Use **New tenant** on its card. If the move-out was a mistake, undo the New tenant that caused it, or add details for the same tenant again (SETUP, "If a portion shows Vacant and it should not").
+A portion whose tenant has moved out has nobody to log rent for. Use **New tenant** on its card. If the vacancy is a mistake, what helps depends on how it came about. A New tenant closes the previous tenant's open details, and undoing that New tenant's first payment opens them again. The app has no undo for a move-out recorded with **Move out** on the tenant page, and a closing left behind when a New tenant was corrected with Replace is not reopened either. For those, open the tenant page and tap **Add details** for the same tenant, which ends the vacancy, or clear the Move-out date of that tenant's row in the Tenants tab (SETUP, "If a portion shows Vacant and it should not").
 
 > "{portion} is switched off in Portion settings. Switch it back on to log rent for it."
 

@@ -29,6 +29,7 @@ import {
   TIMEOUT_MESSAGE,
   UNDO_NO_CONFIRMATION,
 } from "@/lib/request-copy";
+import { isSessionCurrent } from "@/lib/server/session-policy";
 import { translateGoogleError } from "@/lib/sheets/google-errors";
 import { TENANCY_CONFLICT_MESSAGE } from "@/lib/tenancy-response";
 import { UNDO_CONFLICT_MESSAGE } from "@/lib/undo-copy";
@@ -67,6 +68,16 @@ function section(doc: string, heading: string): string {
   expect(start, `a section "${heading}"`).toBeGreaterThan(-1);
   const next = doc.indexOf("\n## ", start + 4);
   return doc.slice(start + 1, next === -1 ? undefined : next);
+}
+
+/**
+ * Whether `label` is text of its own in the source, as a screen shows it: a whole string in quotes, or JSX text that begins and
+ * ends at a tag or an expression (`>Log payment<`, `>Round to {amount}`). A word inside a longer string or sentence is not one,
+ * so "Keep" or "Edit" cannot be found by chance in any text of src.
+ */
+function isScreenText(label: string): boolean {
+  const text = escapeRegExp(label);
+  return new RegExp(`(["'\`])${text}\\1|>\\s*${text}\\s*[<{]`).test(source);
 }
 
 /** The lines of a doc that quote a message: `> "text"`. */
@@ -160,12 +171,59 @@ describe("TROUBLESHOOTING.md: the messages it quotes", () => {
     });
   });
 
-  it("gives SESSION_NOT_BEFORE's form as the code and Set up give it", () => {
+  it("gives SESSION_NOT_BEFORE's form as the code gives it", () => {
     expect(trouble).toContain("`2026-10-16T10:00:00Z`");
     expect(Number.isNaN(Date.parse("2026-10-16T10:00:00Z"))).toBe(false);
     expect(source).toContain("2026-10-16T10:00:00Z");
-    expect(source).toContain("Not a date and time, so everyone is signed out.");
     expect(source).toContain("SESSION_NOT_BEFORE is not a date and time (for example 2026-10-16T10:00:00Z), so every session is refused.");
+  });
+
+  it("says SESSION_NOT_BEFORE must be now or earlier, because the code refuses a new sign-in made before a time in the future", () => {
+    const now = Date.parse("2026-11-07T10:00:00Z");
+    const future = "2026-11-07T11:00:00Z";
+    // a sign-in made now, against a cut-off an hour ahead: refused (the owner included)
+    expect(isSessionCurrent(now, future, now)).toBe(false);
+    // against a cut-off that is now or earlier: fine
+    expect(isSessionCurrent(now, "2026-11-07T10:00:00Z", now)).toBe(true);
+    expect(isSessionCurrent(now, "2026-11-07T09:00:00Z", now)).toBe(true);
+    const entry = trouble.slice(trouble.indexOf("`SESSION_NOT_BEFORE` is the"), trouble.indexOf("## The Sheet"));
+    expect(entry).toContain("It must be now or earlier.");
+    expect(entry).toMatch(/A time in the future refuses every sign-in made before it, new ones too, so everyone, the owner included/);
+    expect(entry).toContain("Leaving a value that is now or earlier in place is fine");
+    expect(entry).not.toMatch(/you may leave it in place/i);
+    expect(section(read("SETUP.md"), "Signing everyone out")).toContain("Do not set a time in the future");
+  });
+
+  it("does not send a person who cannot sign in to Set up, which they cannot open then", () => {
+    // while a sign-in setting is missing, getViewer throws before it reads a session, and a signed-out person is sent to /signin
+    expect(read("src/lib/server/auth-guard.ts")).toMatch(/assertAuthConfig\(process\.env\);\s*const session = await auth\(\)/);
+    expect(read("src/app/setup/page.tsx")).toMatch(/const viewer = await getViewer\(\);\s*if \(!viewer\) redirect\("\/signin"\)/);
+    // an unreadable SESSION_NOT_BEFORE refuses every session, so nobody is signed in to open Set up either
+    expect(isSessionCurrent(Date.now(), "not a date", Date.now())).toBe(false);
+    const entry = section(trouble, "Signing in");
+    const settingsEntry = entry.slice(entry.indexOf("> \"Sign-in isn't set up correctly."), entry.indexOf("> \"Sign-in didn't work."));
+    expect(settingsEntry).toContain("nobody can sign in, so **Set up** cannot be opened");
+    expect(settingsEntry).not.toMatch(/Set up\*\* lists which/);
+    expect(entry).toContain("Nobody can open **Set up** while everyone is signed out, so the log is where to look.");
+    expect(entry).not.toMatch(/\*\*Set up\*\* shows/);
+    // the log lines it names are the ones the code writes, and the messages it quotes name the setting and never its value
+    expect(read("src/instrumentation.ts")).toContain('"request-error"');
+    expect(read("src/lib/server/auth-log.ts")).toContain('"auth-error"');
+    expect(source).toContain("`${name} is missing.`");
+    expect(source).toContain("AUTH_SECRET is missing.");
+    expect(settingsEntry).toContain("`request-error`");
+    expect(settingsEntry).toContain("`auth-error`");
+  });
+
+  it("says what is true of undoing a vacancy: undoing a New tenant reopens, a Move out has no undo", () => {
+    const setup = read("SETUP.md");
+    expect(setup).toContain("It never reopens a move-out you recorded with Move out");
+    expect(setup).toContain("Undo of a New tenant's first payment reopens what that request closed");
+    const refusal = trouble.slice(trouble.indexOf("> \"{portion} is vacant in"), trouble.indexOf("> \"{portion} is switched off"));
+    expect(refusal).toContain("undoing that New tenant's first payment opens them again");
+    expect(refusal).toContain("The app has no undo for a move-out recorded with **Move out** on the tenant page");
+    expect(refusal).toContain("tap **Add details** for the same tenant");
+    expect(refusal).not.toMatch(/undo the New tenant that caused it/);
   });
 
   it("covers what the brief asks of it, in the sections it asks for", () => {
@@ -187,10 +245,20 @@ describe("the bold words of both guides are words on the screens", () => {
       expect(labels.length).toBeGreaterThan(10);
     });
 
-    it.each(labels.map((label) => [label]))(`${name}: **%s** is in src`, (label) => {
-      expect(source.includes(label), `"${label}" is not in src`).toBe(true);
+    it.each(labels.map((label) => [label]))(`${name}: **%s** is a screen's own text in src`, (label) => {
+      expect(isScreenText(label), `"${label}" is not a button, heading or label of its own in src`).toBe(true);
     });
   }
+
+  it("finds a whole label and not a part of a longer one", () => {
+    expect(isScreenText("Log payment")).toBe(true);
+    expect(isScreenText("Keep")).toBe(true);
+    expect(isScreenText("Round to")).toBe(true);
+    expect(isScreenText("Log paym")).toBe(false);
+    expect(isScreenText("Sign in with")).toBe(false);
+    expect(isScreenText("Replace amou")).toBe(false);
+    expect(isScreenText("Undo payment")).toBe(true);
+  });
 });
 
 describe("USER-GUIDE.md", () => {
@@ -262,7 +330,13 @@ describe("README.md", () => {
     expect(check.length).toBeGreaterThan(200);
     expect(check).toContain("npm run e2e");
     expect(check).toMatch(/in-memory Sheet/);
-    expect(check).toMatch(/never reaches Google/);
+    expect(check).toMatch(/never reaches the Google Sheets API or any Google account/);
+    expect(check).not.toMatch(/never reaches Google\b/);
+    expect(check).toMatch(/downloads the Geist font from Google Fonts/);
+    expect(check).toMatch(/signed in with cookies the run makes itself/);
+    expect(check).toContain("the sign-in page");
+    expect(check).not.toMatch(/journeys: signing in/);
+    expect(check).toMatch(/deleted when the run ends, Ctrl-C included, unless a check failed or you gave `--keep`/);
     expect(check).toMatch(/outside the project/);
     expect(check).toMatch(/not run in CI/);
     for (const flag of ["--keep", "--only", "--shots"]) expect(check, flag).toContain(flag);
@@ -275,6 +349,15 @@ describe("README.md", () => {
 });
 
 describe("SETUP.md", () => {
+  it("says Set up, Diagnostics and Prepare my Sheet are the owner's, as Portion settings are, and the code agrees", () => {
+    const setup = read("SETUP.md");
+    expect(setup).toContain("Only the first address in `ALLOWED_EMAILS` (the owner) can change Portion settings. Set up, Diagnostics and Prepare my Sheet are the owner's too.");
+    expect(read("src/app/setup/page.tsx")).toContain("if (!viewer.isOwner)");
+    expect(read("src/app/diagnostics/page.tsx")).toContain("if (!viewer.isOwner)");
+    expect(read("src/app/settings/page.tsx")).toContain("if (!viewer.isOwner) redirect");
+    expect(read("src/app/api/setup/prepare/route.ts")).toContain("requireOwner");
+  });
+
   it("sends a reader whose sign-in fails to the troubleshooting guide", () => {
     expect(section(read("SETUP.md"), "If sign-in fails")).toContain("(docs/TROUBLESHOOTING.md)");
   });
