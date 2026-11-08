@@ -4,16 +4,18 @@
  *   npm run e2e [-- --keep] [--only sweep,undo] [--shots <folder>]
  *
  * It makes a temporary copy of the app, puts an in-memory Sheet in the copy (scripts/e2e/sheet.ts), builds the copy and starts it
- * with made-up settings, signs two people in with cookies it makes itself, and drives Chromium at 390 by 844 through every page
- * and the main journeys (checks.ts); the two people are signed in with cookies the run makes itself, so Google's sign-in is never
- * used. The browser refuses every request that is not to the local server, so a run never reaches the Google Sheets API or any
+ * with made-up settings, and drives Chromium at 390 by 844 through every page and the main journeys (checks.ts). The two people
+ * are signed in with cookies the run makes itself, so Google's sign-in is never used. The browser refuses every request that is not to the local server, so a run never reaches the Google Sheets API or any
  * Google account, and the copy of the app talks only to the in-memory Sheet. (The build of the copy downloads the Geist font from
  * Google Fonts, with no credentials.) Playwright is not a dependency: it is installed outside this project (see findPlaywright
  * in helpers.ts). Not part of CI, which has no browser.
  *
- * Exit code: 0 all checks passed, 1 a check failed, 2 the run could not start (no Playwright, a failed build, a server that did not come up).
+ * Exit code: 0 all checks passed, 1 a check failed, 2 the run could not start (no Playwright, a failed build, a server that did not
+ * come up), 130 or 143 the run was stopped by Ctrl-C or by a request to end. However it ends, the server (and what it started) is
+ * stopped and the temporary copy is deleted, unless a check failed or --keep was given. The build and the server run under a small
+ * watchdog (WATCHDOG in helpers.ts), so that even a runner that is killed hard leaves no server behind.
  */
-import { spawn, spawnSync, type ChildProcess } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import fs from "node:fs";
 import http from "node:http";
@@ -27,17 +29,26 @@ import {
   dummyEnv,
   findPlaywright,
   isLocalRequest,
+  killTree,
   lastLines,
   leaked,
   linkTree,
+  once,
   parseArgs,
   PHONE,
   consoleProblem,
   report,
+  runCleanup,
   selectChecks,
   serverEnv,
+  SIGNALS,
   sessionCookie,
+  signalExitCode,
+  stopTree,
+  watched,
   type CheckResult,
+  type CleanupStep,
+  type Interrupt,
   type PwBrowser,
   type PwChromium,
 } from "./helpers";
@@ -86,25 +97,39 @@ function statusOf(port: number, pathname: string): Promise<number> {
 
 const pause = (milliseconds: number) => new Promise<void>((resolve) => setTimeout(resolve, milliseconds));
 
-/** The temporary copy of the app, with the in-memory Sheet in it. */
-function makeCopy(): string {
-  const copy = fs.mkdtempSync(path.join(os.tmpdir(), "rentbook-e2e-"));
-  try {
-    fillCopy(copy);
-  } catch (error) {
-    fs.rmSync(copy, { recursive: true, force: true });
-    throw error;
+/** Lets the event loop run, so a signal (and tsx, which ends a child that is slow to answer one) is handled in the middle of a long job. */
+const yieldToLoop = () => new Promise<void>((resolve) => setImmediate(resolve));
+
+/**
+ * Copies `from` to `to` as a real copy, a piece at a time: the folders down to `depth` are walked here with the event loop let
+ * run between pieces, and what is below is copied in one go. A real copy, not a link: the gateway module below is rewritten, which
+ * would change the project's own file through a hard link. The tests of the support files are not needed to build.
+ */
+async function copyInPieces(from: string, to: string, depth: number): Promise<void> {
+  if (depth > 0 && fs.statSync(from).isDirectory()) {
+    fs.mkdirSync(to, { recursive: true });
+    for (const name of fs.readdirSync(from)) await copyInPieces(path.join(from, name), path.join(to, name), depth - 1);
+    return;
   }
-  return copy;
+  fs.cpSync(from, to, { recursive: true, filter: (file) => !file.endsWith(".test.ts") });
+  await yieldToLoop();
 }
 
-function fillCopy(copy: string): void {
-  for (const entry of COPY_LIST) {
-    // A real copy, not a link: the gateway module below is rewritten, which would change the project's own file through a hard link.
-    // The tests of the support files are not needed to build.
-    fs.cpSync(path.join(ROOT, entry), path.join(copy, entry), { recursive: true, filter: (from) => !from.endsWith(".test.ts") });
+/** The same for the hard-link tree of node_modules (the biggest package, next, takes about a tenth of a second in one go). */
+async function linkInPieces(from: string, to: string, depth: number): Promise<void> {
+  if (depth > 0 && fs.lstatSync(from).isDirectory()) {
+    fs.mkdirSync(to, { recursive: true });
+    for (const name of fs.readdirSync(from)) await linkInPieces(path.join(from, name), path.join(to, name), depth - 1);
+    return;
   }
-  linkTree(path.join(ROOT, "node_modules"), path.join(copy, "node_modules"));
+  linkTree(from, to);
+  await yieldToLoop();
+}
+
+/** Fills the temporary copy of the app, with the in-memory Sheet in it. */
+async function fillCopy(copy: string): Promise<void> {
+  for (const entry of COPY_LIST) await copyInPieces(path.join(ROOT, entry), path.join(copy, entry), 3);
+  await linkInPieces(path.join(ROOT, "node_modules"), path.join(copy, "node_modules"), 3);
   const gateway = path.join(copy, "src", "lib", "server", "gateway-source.ts");
   if (fs.statSync(gateway).ino === fs.statSync(path.join(ROOT, "src", "lib", "server", "gateway-source.ts")).ino) {
     throw new SetupFailure("The copy shares a file with the project, so the Sheet was not swapped. Nothing was changed.");
@@ -113,31 +138,34 @@ function fillCopy(copy: string): void {
   if (fs.readFileSync(gateway, "utf8") !== GATEWAY_LINE) throw new SetupFailure("The in-memory Sheet did not go into the copy.");
 }
 
-/** Builds the copy with no sign-in settings, as a build is made before deployment. */
-function build(copy: string): void {
-  const result = spawnSync(process.execPath, [NEXT, "build"], {
-    cwd: copy,
-    env: { ...serverEnv(process.env, {}), NODE_ENV: "production", NEXT_TELEMETRY_DISABLED: "1" },
-    encoding: "utf8",
-    maxBuffer: 64 * 1024 * 1024,
-  });
-  if (result.status === 0) return;
-  const output = `${result.stdout}\n${result.stderr}`;
-  const hint = /certificate|self.signed|SSL/i.test(output)
-    ? "\nIf this is a certificate error while fetching Google Fonts, run it again with NODE_OPTIONS=--use-system-ca."
-    : "";
-  throw new SetupFailure(`The build of the copy failed. The last lines:\n${lastLines(output, 40)}${hint}`);
-}
+/** A process of the run (the build, the server) under the watchdog, in its own process group: how to read it and how to end all of it. */
+type Launched = { name: string; output: () => string; done: Promise<number | null>; hasExited: () => boolean; stop(): Promise<void> };
 
-type Server = { process: ChildProcess; output: () => string; stop(): Promise<void> };
+/** What the run has started, so that a signal and the end of the run can stop all of it and delete the copy. */
+const session: { browser: PwBrowser | null; launched: Launched[]; folder: string | null; keepFolder: boolean } = {
+  browser: null,
+  launched: [],
+  folder: null,
+  keepFolder: false,
+};
 
-/** Starts the built copy on `port` and waits until /api/health answers. */
-async function start(copy: string, port: number, env: NodeJS.ProcessEnv): Promise<Server> {
-  const child = spawn(process.execPath, [NEXT, "start", "-p", String(port), "-H", "127.0.0.1"], {
-    cwd: copy,
+/** The signal that stopped the run, if one did. */
+let interrupted: Interrupt | null = null;
+
+/**
+ * Starts `node args...` in `cwd` as the leader of its own process group, under the watchdog: if this runner is killed hard, the
+ * watchdog sees it is gone and ends the command and everything it started. A Ctrl-C at the terminal goes to this process alone,
+ * which then stops it (see `cleanup`).
+ */
+function launch(name: string, cwd: string, args: string[], env: NodeJS.ProcessEnv): Launched {
+  const child = spawn(process.execPath, watched(process.pid, [process.execPath, ...args]), {
+    cwd,
     env,
+    detached: true,
+    windowsHide: true,
     stdio: ["ignore", "pipe", "pipe"],
   });
+  const pid = child.pid!;
   let output = "";
   let exited = false;
   const collect = (chunk: Buffer) => {
@@ -146,36 +174,101 @@ async function start(copy: string, port: number, env: NodeJS.ProcessEnv): Promis
   };
   child.stdout?.on("data", collect);
   child.stderr?.on("data", collect);
-  child.once("exit", () => {
-    exited = true;
+  const done = new Promise<number | null>((resolve) => {
+    child.once("exit", (code) => {
+      exited = true;
+      resolve(code);
+    });
   });
-  const stop = async () => {
-    if (exited) return;
-    child.kill("SIGTERM");
-    for (let waited = 0; !exited && waited < 5000; waited += 100) await pause(100);
-    if (!exited) child.kill("SIGKILL");
+  const launched: Launched = {
+    name,
+    output: () => output,
+    done,
+    hasExited: () => exited,
+    // The watchdog may be gone while something it started is not (a server that forked), so the group is looked at, not the watchdog.
+    stop: async () => {
+      await stopTree({
+        terminate: () => void killTree(pid, "SIGTERM"),
+        force: () => void killTree(pid, "SIGKILL"),
+        gone: () => !killTree(pid, 0),
+        sleep: pause,
+        timeoutMs: 6000,
+      });
+      await Promise.race([done, pause(1000)]);
+    },
   };
-  for (let waited = 0; waited < 30_000; waited += 250) {
-    if (exited) throw new SetupFailure(`The server stopped before it answered. The last lines:\n${lastLines(output, 40)}`);
-    if ((await statusOf(port, "/api/health")) === 200) return { process: child, output: () => output, stop };
+  session.launched.push(launched);
+  // The last resort, for a run that ends without its cleanup (an exit nobody planned): nothing may outlive it.
+  process.once("exit", () => {
+    try {
+      killTree(pid, "SIGKILL");
+    } catch {
+      // gone, or not ours to signal
+    }
+  });
+  return launched;
+}
+
+/** Ends the browser, the build and the server, and deletes the temporary copy unless it is to be kept. Does it once, however often it is asked. */
+const cleanup = once(() => {
+  const steps: CleanupStep[] = [
+    { name: "the browser", run: () => session.browser?.close() },
+    ...[...session.launched].reverse().map((launched) => ({ name: `the ${launched.name}`, run: () => launched.stop() })),
+  ];
+  return runCleanup({
+    steps,
+    // Not rmSync: a long job that blocks the event loop is where tsx, which runs this, ends a child that is slow to answer a signal.
+    removeFolder: () => (session.folder === null ? undefined : fs.promises.rm(session.folder, { recursive: true, force: true })),
+    keepFolder: session.keepFolder || session.folder === null,
+  });
+});
+
+/** The run is stopped (Ctrl-C, a request to end, a closed terminal): stop what it started, delete the copy and leave with the shell's code for that signal. */
+for (const signal of SIGNALS) {
+  process.on(signal, () => {
+    if (interrupted !== null) return;
+    interrupted = signal;
+    say(`\n${signal}: stopping the server and removing the temporary copy...`);
+    void cleanup().then(({ problems }) => {
+      for (const problem of problems) say(`Could not stop ${problem}`);
+      process.exit(signalExitCode(signal));
+    });
+  });
+}
+
+/** Builds the copy with no sign-in settings, as a build is made before deployment. */
+async function build(copy: string): Promise<void> {
+  const env: NodeJS.ProcessEnv = { ...serverEnv(process.env, {}), NODE_ENV: "production", NEXT_TELEMETRY_DISABLED: "1" };
+  const launched = launch("build", copy, [NEXT, "build"], env);
+  const code = await launched.done;
+  if (interrupted !== null || code === 0) return;
+  const output = launched.output();
+  const hint = /certificate|self.signed|SSL/i.test(output)
+    ? "\nIf this is a certificate error while fetching Google Fonts, run it again with NODE_OPTIONS=--use-system-ca."
+    : "";
+  throw new SetupFailure(`The build of the copy failed. The last lines:\n${lastLines(output, 40)}${hint}`);
+}
+
+/** Starts the built copy on `port` and waits until /api/health answers. */
+async function start(copy: string, port: number, env: NodeJS.ProcessEnv): Promise<Launched> {
+  // The port was free a moment ago. If something answers on it now (a server a run left behind), its answer would be taken for ours.
+  if ((await statusOf(port, "/api/health")) !== 0) {
+    throw new SetupFailure(`Something already answers on port ${port}, so this run could not tell its own server from it. Run it again.`);
+  }
+  const server = launch("server", copy, [NEXT, "start", "-p", String(port), "-H", "127.0.0.1"], env);
+  for (let waited = 0; waited < 30_000 && interrupted === null; waited += 250) {
+    if (server.hasExited()) throw new SetupFailure(`The server stopped before it answered. The last lines:\n${lastLines(server.output(), 40)}`);
+    if ((await statusOf(port, "/api/health")) === 200) return server;
     await pause(250);
   }
-  await stop();
-  throw new SetupFailure(`The server did not answer /api/health within 30 seconds. The last lines:\n${lastLines(output, 40)}`);
+  if (interrupted === null) throw new SetupFailure(`The server did not answer /api/health within 30 seconds. The last lines:\n${lastLines(server.output(), 40)}`);
+  return server;
 }
 
 /** Tells the page's own listener where to report a Content-Security-Policy violation (exposed to the page as __rbCsp). */
 const CSP_LISTENER = `document.addEventListener("securitypolicyviolation", (event) => {
   try { window.__rbCsp(event.violatedDirective, event.blockedURI); } catch (error) {}
 });`;
-
-/** The server that is running, so a Ctrl-C can stop it. */
-let running: Server | null = null;
-for (const signal of ["SIGINT", "SIGTERM"] as const) {
-  process.once(signal, () => {
-    void (running?.stop() ?? Promise.resolve()).finally(() => process.exit(130));
-  });
-}
 
 async function main(): Promise<number> {
   const options = parseArgs(process.argv.slice(2));
@@ -188,14 +281,19 @@ async function main(): Promise<number> {
   const { chromium } = createRequire(path.join(ROOT, "package.json"))(found.dir) as { chromium: PwChromium };
 
   say("Making a temporary copy of the app with an in-memory Sheet...");
-  const copy = makeCopy();
-  const keepFolder = options.keep;
-  let server: Server | null = null;
-  let browser: PwBrowser | null = null;
-  let failed = true;
+  const copy = fs.mkdtempSync(path.join(os.tmpdir(), "rentbook-e2e-"));
+  // Known to the cleanup from the first moment, so a run stopped while the copy is made leaves no half a copy behind.
+  session.folder = copy;
+  session.keepFolder = options.keep;
+  let server: Launched | null = null;
+  let copied = false;
   try {
+    await fillCopy(copy);
+    copied = true;
+    if (interrupted !== null) return signalExitCode(interrupted);
     say("Building it (about half a minute)...");
-    build(copy);
+    await build(copy);
+    if (interrupted !== null) return signalExitCode(interrupted);
 
     const port = await freePort();
     const base = `http://localhost:${port}`;
@@ -203,14 +301,17 @@ async function main(): Promise<number> {
     const control = path.join(copy, "e2e-control.json");
     fs.writeFileSync(control, JSON.stringify({ fail: {} }));
     say(`Starting it on port ${port}...`);
-    server = running = await start(copy, port, { ...serverEnv(process.env, env), E2E_CONTROL: control, NODE_ENV: "production", NEXT_TELEMETRY_DISABLED: "1", PORT: String(port) });
+    server = await start(copy, port, { ...serverEnv(process.env, env), E2E_CONTROL: control, NODE_ENV: "production", NEXT_TELEMETRY_DISABLED: "1", PORT: String(port) });
+    if (interrupted !== null) return signalExitCode(interrupted);
 
     const shots = options.shots === null ? null : path.resolve(options.shots);
     if (shots !== null) fs.mkdirSync(shots, { recursive: true });
     const failureShots = shots ?? path.join(copy, "screenshots");
     fs.mkdirSync(failureShots, { recursive: true });
 
-    browser = await chromium.launch({ headless: true });
+    // Playwright would otherwise close the browser on Ctrl-C and then end the process itself, before the cleanup below has stopped the
+    // server and deleted the copy: the run handles those signals itself.
+    const browser = (session.browser = await chromium.launch({ headless: true, handleSIGINT: false, handleSIGTERM: false, handleSIGHUP: false }));
     const started = Date.now();
     const problems: string[] = [];
     let expectsHttpError = false;
@@ -227,7 +328,7 @@ async function main(): Promise<number> {
         const key = `${who}-${scheme}`;
         let actor = actors.get(key);
         if (!actor) {
-          const context = await browser!.newContext({ viewport: PHONE, isMobile: true, hasTouch: true, deviceScaleFactor: 2, colorScheme: scheme });
+          const context = await browser.newContext({ viewport: PHONE, isMobile: true, hasTouch: true, deviceScaleFactor: 2, colorScheme: scheme });
           context.setDefaultTimeout(8000);
           context.setDefaultNavigationTimeout(20_000);
           const label = `${who} ${scheme}`;
@@ -269,6 +370,7 @@ async function main(): Promise<number> {
 
     const results: CheckResult[] = [];
     for (const name of selected.names) {
+      if (interrupted !== null) return signalExitCode(interrupted);
       const check = CHECKS.find((candidate) => candidate.name === name)!;
       problems.length = 0;
       expectsHttpError = false;
@@ -281,6 +383,8 @@ async function main(): Promise<number> {
       } catch (error) {
         reason = error instanceof Error ? error.message : String(error);
       }
+      // A check that stopped because the run was stopped is not a failure to report.
+      if (interrupted !== null) return signalExitCode(interrupted);
       // What the browser noticed while the check ran fails it, with the check's own reason first.
       if (problems.length > 0) reason = [reason, ...problems.slice(0, 6), problems.length > 6 ? `and ${problems.length - 6} more` : null].filter(Boolean).join("; ");
       const result: CheckResult = { name, ok: reason === null, seconds: (Date.now() - began) / 1000 };
@@ -311,24 +415,28 @@ async function main(): Promise<number> {
 
     const { text, exitCode } = report(results);
     say(`\n${text}\nWall time ${((Date.now() - started) / 1000).toFixed(0)} s.`);
-    failed = exitCode !== 0;
+    // A run in which something failed keeps its copy, with the screenshots, to look at.
+    if (exitCode !== 0) session.keepFolder = true;
     return exitCode;
+  } catch (error) {
+    // A run that could not start keeps its copy too, to look at; one that was stopped, or whose copy could not be made, does not.
+    if (interrupted === null && copied) session.keepFolder = true;
+    throw error;
   } finally {
-    await browser?.close().catch(() => undefined);
-    await server?.stop();
-    if (failed || keepFolder) say(`The temporary copy is kept: ${copy}`);
-    else fs.rmSync(copy, { recursive: true, force: true });
+    const { problems } = await cleanup();
+    for (const problem of problems) say(`Could not stop ${problem}`);
+    if (session.keepFolder) say(`The temporary copy is kept: ${copy}`);
   }
 }
 
-main().then(
-  (code) => process.exit(code),
-  (error: unknown) => {
-    if (error instanceof SetupFailure) {
-      process.stderr.write(`${error.message}\n`);
-    } else {
-      process.stderr.write(`The run stopped: ${error instanceof Error ? (error.stack ?? error.message) : String(error)}\n`);
-    }
-    process.exit(2);
-  },
-);
+/** However the run ended, the exit code says how: the signal's, when a signal stopped it. */
+const leave = (code: number) => process.exit(interrupted !== null ? signalExitCode(interrupted) : code);
+
+main().then(leave, (error: unknown) => {
+  if (error instanceof SetupFailure) {
+    process.stderr.write(`${error.message}\n`);
+  } else if (interrupted === null) {
+    process.stderr.write(`The run stopped: ${error instanceof Error ? (error.stack ?? error.message) : String(error)}\n`);
+  }
+  leave(2);
+});

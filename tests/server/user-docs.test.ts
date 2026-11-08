@@ -337,6 +337,12 @@ describe("README.md", () => {
     expect(check).toContain("the sign-in page");
     expect(check).not.toMatch(/journeys: signing in/);
     expect(check).toMatch(/deleted when the run ends, Ctrl-C included, unless a check failed or you gave `--keep`/);
+    expect(check).toMatch(/The server never outlives the run: a small watchdog beside it ends it if the run is killed hard/);
+    // ... and the runner does what the paragraph says
+    const runner = read("scripts/e2e/run.ts");
+    expect(runner).toContain("SIGNALS");
+    expect(runner).toContain("watched(process.pid");
+    expect(runner).toContain("handleSIGINT: false");
     expect(check).toMatch(/outside the project/);
     expect(check).toMatch(/not run in CI/);
     for (const flag of ["--keep", "--only", "--shots"]) expect(check, flag).toContain(flag);

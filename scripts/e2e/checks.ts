@@ -18,7 +18,7 @@ import {
 } from "@/lib/toast-copy";
 import { undoConfirmationText, undoToastText } from "@/lib/undo-copy";
 import { CONFIG_FAULT_MESSAGE, LONG_PORTION, LONG_TENANT, PORTION_NAMES } from "../../tests/support/names";
-import { leaked, scriptsWithoutNonce, type PwContext, type PwLocator, type PwPage } from "./helpers";
+import { isPlainActivityAddress, leaked, scriptsWithoutNonce, type PwContext, type PwLocator, type PwPage } from "./helpers";
 
 /**
  * The checks of the end-to-end run, and what they are given: the sweep (every page, as the owner and as a member, light and
@@ -613,7 +613,7 @@ const activityFilters: Check = {
     await tap(group("Portion").getByRole("link", { name: P5, exact: true }), `the ${P5} chip`);
     await see(page.getByText("No entries match these filters"), "the empty result");
     await tap(page.getByRole("link", { name: "Show everything" }), "Show everything");
-    await arrive(page, "the plain Activity address", (url) => url.pathname === "/activity" && url.search === "" || url.search === `?month=${key}`);
+    await arrive(page, "the plain Activity address", (url) => isPlainActivityAddress(url, key));
     await until("every kind and portion chosen again", async () => (await group("Show").getByRole("link", { name: "All", exact: true }).getAttribute("aria-current")) === "true");
     if ((await group("Portion").getByRole("link", { name: "All portions", exact: true }).getAttribute("aria-current")) !== "true") throw new Error("All portions is not chosen again");
   },

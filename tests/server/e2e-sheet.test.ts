@@ -4,12 +4,11 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AppError } from "@/lib/errors";
-import { currentYm, ymKey } from "@/lib/domain/year-month";
 import { readEnv } from "@/lib/server/env";
 import { createGateway as realCreateGateway } from "@/lib/server/gateway-source";
 import type { SheetsGateway } from "@/lib/sheets/gateway";
 import { createGateway, E2E_GATEWAY_KEY } from "../../scripts/e2e/sheet";
-import { TEST_ENV } from "../support/screens";
+import { FIXED_NOW, TEST_ENV } from "../support/screens";
 import { withoutComments } from "../support/source-scan";
 
 // scripts/e2e/sheet.ts goes into the end-to-end run's temporary copy, where src/lib/server/gateway-source.ts becomes one line that
@@ -27,6 +26,9 @@ let control: string;
 const fail = (faults: Record<string, string>) => fs.writeFileSync(control, JSON.stringify({ fail: faults }));
 
 beforeEach(() => {
+  // The world is made for the day it is first asked for, so the day is fixed (the way the screen tests fix it: Date only, so
+  // promises and timers run as usual) and a test that runs over a month's end in India cannot find another month's world.
+  vi.useFakeTimers({ toFake: ["Date"], now: FIXED_NOW });
   dir = fs.mkdtempSync(path.join(os.tmpdir(), "rentbook-e2e-sheet-"));
   control = path.join(dir, "control.json");
   vi.stubEnv("E2E_CONTROL", control);
@@ -34,6 +36,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.unstubAllEnvs();
   delete shared[E2E_GATEWAY_KEY];
   fs.rmSync(dir, { recursive: true, force: true });
@@ -74,14 +77,19 @@ describe("createGateway", () => {
     expect(failure).not.toBeInstanceOf(AppError);
   });
 
-  it("holds the main world as it stands today: the five app tabs, and a row for this month", async () => {
+  it("holds the main world as it stands on the day it is made: the five app tabs, and a row for that month", async () => {
     const gateway = createGateway(env);
     expect((await gateway.listTabs()).sort()).toEqual(["Payments Log", "Schedule", "Settings", "Tenancy Log", "Tenants"]);
-    const month = ymKey(currentYm(new Date()));
     const months = (await gateway.getValues("Schedule", "A4:A", "FORMATTED_VALUE")).map((row) => String(row[0]));
-    const names = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-    const [year, number] = month.split("-").map(Number);
-    expect(months).toContain(`${names[number - 1]}-${String(year % 100).padStart(2, "0")}`);
+    // 17 October 2026: the month's row is the last, with the two before it
+    expect(months).toEqual(["Aug-26", "Sep-26", "Oct-26"]);
+  });
+
+  it("is made for the day in India time, whatever the day is in UTC", async () => {
+    // 20:00 UTC on 31 October is 01:30 on 1 November in India
+    vi.setSystemTime(new Date("2026-10-31T20:00:00Z"));
+    const months = (await createGateway(env).getValues("Schedule", "A4:A", "FORMATTED_VALUE")).map((row) => String(row[0]));
+    expect(months).toEqual(["Sep-26", "Oct-26", "Nov-26"]);
   });
 });
 

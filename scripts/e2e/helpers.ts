@@ -1,3 +1,4 @@
+import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { encode } from "next-auth/jwt";
@@ -236,6 +237,164 @@ export function selectChecks(
   return { ok: true, names: known.filter((name) => wanted.has(name)) };
 }
 
+// An address the checks wait for
+
+/**
+ * The Activity screen with no choice made: `/activity`, with no filter in the address, and with or without the month the person
+ * came from (`?month=KEY`). Any other screen, and any filter that is still set, is not.
+ */
+export function isPlainActivityAddress(url: URL, monthKey: string): boolean {
+  return url.pathname === "/activity" && (url.search === "" || url.search === `?month=${monthKey}`);
+}
+
+// Stopping the run: what is cleaned up, and how a server dies with the runner
+
+/** The signals the runner stops cleanly on: Ctrl-C, a request to end, and a closed terminal. */
+export const SIGNALS = ["SIGINT", "SIGTERM", "SIGHUP"] as const;
+export type Interrupt = (typeof SIGNALS)[number];
+
+/** The exit code of a run that a signal stopped: 128 plus the signal's number, as a shell reports it. */
+export function signalExitCode(signal: Interrupt): number {
+  return 128 + { SIGHUP: 1, SIGINT: 2, SIGTERM: 15 }[signal];
+}
+
+/** `work` runs the first time it is asked for, and every later ask (even while it runs) gets the same answer: a second signal does not clean up twice. */
+export function once<T>(work: () => Promise<T>): () => Promise<T> {
+  let started: Promise<T> | undefined;
+  return () => (started ??= work());
+}
+
+export type CleanupStep = { name: string; run: () => unknown };
+
+/**
+ * Cleans up after a run, whether it ended or was stopped: each step in turn (the browser, the build, the server), then the
+ * temporary copy, which goes last because the server may hold files in it, and only when `keepFolder` is false. A step that fails
+ * is named in `problems` and does not stop the others; this never throws.
+ */
+export async function runCleanup(options: {
+  steps: readonly CleanupStep[];
+  removeFolder: () => unknown;
+  keepFolder: boolean;
+}): Promise<{ removed: boolean; problems: string[] }> {
+  const problems: string[] = [];
+  const why = (error: unknown) => (error instanceof Error ? error.message : String(error));
+  for (const step of options.steps) {
+    try {
+      await step.run();
+    } catch (error) {
+      problems.push(`${step.name}: ${why(error)}`);
+    }
+  }
+  if (options.keepFolder) return { removed: false, problems };
+  try {
+    await options.removeFolder();
+    return { removed: true, problems };
+  } catch (error) {
+    problems.push(`the temporary copy: ${why(error)}`);
+    return { removed: false, problems };
+  }
+}
+
+/** What `killTree` needs of the system: which one it is, a signal to a process, and the Windows tool that ends a process and its children. */
+export type TreeIo = {
+  platform: NodeJS.Platform;
+  kill: (pid: number, signal: NodeJS.Signals | 0) => void;
+  taskkill: (pid: number) => void;
+};
+
+const systemIo: TreeIo = {
+  platform: process.platform,
+  kill: (pid, signal) => void process.kill(pid, signal),
+  taskkill: (pid) => void spawnSync("taskkill", ["/pid", String(pid), "/T", "/F"], { windowsHide: true }),
+};
+
+/**
+ * Signals a process and everything it started: the whole process group (a negative number) where there are groups, so the
+ * server's own children go too, and taskkill's tree on Windows. `signal` 0 only asks whether it is there. False when nothing is
+ * left to signal; any other failure is raised.
+ */
+export function killTree(pid: number, signal: NodeJS.Signals | 0, io: TreeIo = systemIo): boolean {
+  try {
+    if (io.platform === "win32") {
+      if (signal === 0) io.kill(pid, 0);
+      else io.taskkill(pid);
+    } else {
+      io.kill(-pid, signal);
+    }
+    return true;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ESRCH") return false;
+    throw error;
+  }
+}
+
+/**
+ * Ends a tree: `terminate` asks, and when `gone` says the tree has not ended after `timeoutMs`, `force` makes it. "stopped" when
+ * it ended by itself, "killed" when it had to be forced. `sleep` is how it waits, so a test need not.
+ */
+export async function stopTree(options: {
+  terminate: () => void;
+  force: () => void;
+  gone: () => boolean;
+  sleep: (milliseconds: number) => Promise<void>;
+  timeoutMs: number;
+}): Promise<"stopped" | "killed"> {
+  options.terminate();
+  for (let waited = 0; waited < options.timeoutMs; waited += 100) {
+    if (options.gone()) return "stopped";
+    await options.sleep(100);
+  }
+  if (options.gone()) return "stopped";
+  options.force();
+  return "killed";
+}
+
+/**
+ * A small program, run with `node -e`, that starts a command and stays beside it: it looks for the runner that started it every
+ * so often, and when the runner is gone (killed hard, so nothing of the runner's own cleanup ran) it ends the command and
+ * everything the command started, so no server is left behind. The runner starts it as the leader of its own process group, so
+ * one signal to the group reaches all of it. It ends with the command's exit code. Arguments: the runner's pid, how often to
+ * look in milliseconds, then the command and its arguments.
+ */
+export const WATCHDOG = `
+const { spawn, spawnSync } = require("node:child_process");
+const [parent, every, command, ...args] = process.argv.slice(1);
+const child = spawn(command, args, { stdio: "inherit" });
+const endAll = (signal) => {
+  try {
+    if (process.platform === "win32") spawnSync("taskkill", ["/pid", String(child.pid), "/T", "/F"], { windowsHide: true });
+    else process.kill(-process.pid, signal);
+  } catch (error) {}
+  try { child.kill(signal); } catch (error) {}
+};
+child.on("exit", (code) => process.exit(code === null ? 1 : code));
+child.on("error", () => process.exit(1));
+setInterval(() => {
+  try {
+    process.kill(Number(parent), 0);
+  } catch (error) {
+    if (error.code === "ESRCH") {
+      endAll("SIGKILL");
+      process.exit(1);
+    }
+  }
+}, Number(every));
+let asked = false;
+for (const signal of ["SIGTERM", "SIGINT", "SIGHUP"]) {
+  process.on(signal, () => {
+    try { child.kill(signal); } catch (error) {}
+    if (asked) return;
+    asked = true;
+    setTimeout(() => { endAll("SIGKILL"); process.exit(1); }, 4000);
+  });
+}
+`;
+
+/** The arguments to start `node` with, to run `command` under the WATCHDOG, watching the runner with this pid. */
+export function watched(runnerPid: number, command: readonly string[], everyMs = 500): string[] {
+  return ["-e", WATCHDOG, String(runnerPid), String(everyMs), ...command];
+}
+
 // What the browser and the server say
 
 /** Whether a request stays on the local server (its own port, on localhost or 127.0.0.1), or makes none (data:, blob: and about: addresses). */
@@ -378,7 +537,7 @@ export interface PwBrowser {
 }
 
 export interface PwChromium {
-  launch(options?: { headless?: boolean }): Promise<PwBrowser>;
+  launch(options?: { headless?: boolean; handleSIGINT?: boolean; handleSIGTERM?: boolean; handleSIGHUP?: boolean }): Promise<PwBrowser>;
 }
 
 /** The phone the run pretends to be: 390 by 844. */

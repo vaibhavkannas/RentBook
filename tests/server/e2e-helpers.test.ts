@@ -1,3 +1,4 @@
+import { spawn, spawnSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
@@ -17,17 +18,25 @@ import {
   findPlaywright,
   INSTALL_HINT,
   isLocalRequest,
+  isPlainActivityAddress,
+  killTree,
   KNOWN_PLAYWRIGHT,
   lastLines,
   leaked,
   linkTree,
+  once,
   parseArgs,
   scriptsWithoutNonce,
   report,
+  runCleanup,
   selectChecks,
   serverEnv,
   SESSION_COOKIE,
   sessionCookie,
+  signalExitCode,
+  stopTree,
+  watched,
+  WATCHDOG,
   type CheckResult,
 } from "../../scripts/e2e/helpers";
 
@@ -490,5 +499,298 @@ describe("random source", () => {
     const { env } = dummyEnv((bytes) => randomBytes(bytes));
     expect(env.AUTH_SECRET).toHaveLength(64);
     expect(dummyEnv((bytes) => randomBytes(bytes)).env.AUTH_SECRET).not.toBe(env.AUTH_SECRET);
+  });
+});
+
+describe("isPlainActivityAddress", () => {
+  const at = (address: string) => new URL(address, "http://localhost:4100");
+
+  it("is the Activity address with no choice made, with or without the month the person came from", () => {
+    expect(isPlainActivityAddress(at("/activity"), "2026-11")).toBe(true);
+    expect(isPlainActivityAddress(at("/activity?month=2026-11"), "2026-11")).toBe(true);
+  });
+
+  it("is not another screen, however its address ends, and not a choice that is still made", () => {
+    // the slip this replaces: `path === "/activity" && search === "" || search === "?month=..."` let any page with that month pass
+    expect(isPlainActivityAddress(at("/?month=2026-11"), "2026-11")).toBe(false);
+    expect(isPlainActivityAddress(at("/year?month=2026-11"), "2026-11")).toBe(false);
+    expect(isPlainActivityAddress(at("/activity?show=undone"), "2026-11")).toBe(false);
+    expect(isPlainActivityAddress(at("/activity?show=undone&month=2026-11"), "2026-11")).toBe(false);
+    expect(isPlainActivityAddress(at("/activity?portion=p2"), "2026-11")).toBe(false);
+    expect(isPlainActivityAddress(at("/activity?month=2026-10"), "2026-11")).toBe(false);
+  });
+});
+
+describe("signalExitCode", () => {
+  it("is 128 plus the signal's number, as a shell reports a process that a signal ended", () => {
+    expect(signalExitCode("SIGHUP")).toBe(129);
+    expect(signalExitCode("SIGINT")).toBe(130);
+    expect(signalExitCode("SIGTERM")).toBe(143);
+  });
+});
+
+describe("once", () => {
+  it("runs the function the first time and hands every later call the same answer, even one made while it is still running", async () => {
+    let calls = 0;
+    const slow = once(async () => {
+      calls += 1;
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      return calls;
+    });
+    const [first, second] = await Promise.all([slow(), slow()]);
+    expect([first, second, await slow()]).toEqual([1, 1, 1]);
+    expect(calls).toBe(1);
+  });
+});
+
+describe("runCleanup", () => {
+  /** Steps that write what they did to a list, so the order and the folder's fate can be read. */
+  const world = (failing: string[] = []) => {
+    const log: string[] = [];
+    const step = (name: string) => ({
+      name,
+      run: async () => {
+        log.push(name);
+        if (failing.includes(name)) throw new Error(`${name} would not stop`);
+      },
+    });
+    return { log, steps: [step("browser"), step("build"), step("server")], removeFolder: () => void log.push("folder removed") };
+  };
+
+  it("stops each part in its order, and only then deletes the temporary copy (the server may hold files in it)", async () => {
+    const { log, steps, removeFolder } = world();
+    const done = await runCleanup({ steps, removeFolder, keepFolder: false });
+    expect(log).toEqual(["browser", "build", "server", "folder removed"]);
+    expect(done).toEqual({ removed: true, problems: [] });
+  });
+
+  it("keeps the copy when a check failed or --keep was given, and says so", async () => {
+    const { log, steps, removeFolder } = world();
+    const done = await runCleanup({ steps, removeFolder, keepFolder: true });
+    expect(log).toEqual(["browser", "build", "server"]);
+    expect(done).toEqual({ removed: false, problems: [] });
+  });
+
+  it("goes on after a part that will not stop, names it, and still stops the rest and deletes the copy", async () => {
+    const { log, steps, removeFolder } = world(["build"]);
+    const done = await runCleanup({ steps, removeFolder, keepFolder: false });
+    expect(log).toEqual(["browser", "build", "server", "folder removed"]);
+    expect(done.removed).toBe(true);
+    expect(done.problems).toEqual(["build: build would not stop"]);
+  });
+
+  it("waits for a removal that takes time, and takes a refusal of it, in the future, as a problem", async () => {
+    const { log, steps } = world();
+    const slow = await runCleanup({
+      steps,
+      removeFolder: async () => {
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        log.push("folder removed");
+      },
+      keepFolder: false,
+    });
+    expect(log).toEqual(["browser", "build", "server", "folder removed"]);
+    expect(slow.removed).toBe(true);
+    const refused = await runCleanup({ steps: [], removeFolder: () => Promise.reject(new Error("in use")), keepFolder: false });
+    expect(refused).toEqual({ removed: false, problems: ["the temporary copy: in use"] });
+  });
+
+  it("never throws, not even when the copy cannot be deleted", async () => {
+    const { steps } = world();
+    const done = await runCleanup({
+      steps,
+      removeFolder: () => {
+        throw new Error("the folder is in use");
+      },
+      keepFolder: false,
+    });
+    expect(done.removed).toBe(false);
+    expect(done.problems).toEqual(["the temporary copy: the folder is in use"]);
+  });
+
+  it("does its work once, when it is asked again by a second signal or by the end of the run", async () => {
+    const { log, steps, removeFolder } = world();
+    const cleanup = once(() => runCleanup({ steps, removeFolder, keepFolder: false }));
+    await Promise.all([cleanup(), cleanup()]);
+    await cleanup();
+    expect(log).toEqual(["browser", "build", "server", "folder removed"]);
+  });
+});
+
+describe("killTree", () => {
+  const io = (platform: NodeJS.Platform, failWith?: string) => {
+    const calls: string[] = [];
+    return {
+      calls,
+      io: {
+        platform,
+        kill: (pid: number, signal: NodeJS.Signals | 0) => {
+          calls.push(`kill ${pid} ${signal}`);
+          if (failWith) throw Object.assign(new Error(failWith), { code: failWith });
+        },
+        taskkill: (pid: number) => void calls.push(`taskkill ${pid}`),
+      },
+    };
+  };
+
+  it("signals the whole process group where there are groups (a negative number), so the server's own children go too", () => {
+    const { calls, io: stubs } = io("linux");
+    expect(killTree(4242, "SIGTERM", stubs)).toBe(true);
+    expect(calls).toEqual(["kill -4242 SIGTERM"]);
+  });
+
+  it("asks taskkill for the process and its children on Windows, which has no groups", () => {
+    const { calls, io: stubs } = io("win32");
+    expect(killTree(4242, "SIGTERM", stubs)).toBe(true);
+    expect(calls).toEqual(["taskkill 4242"]);
+  });
+
+  it("says false when nothing is left to signal, and passes on any other failure", () => {
+    expect(killTree(4242, "SIGTERM", io("linux", "ESRCH").io)).toBe(false);
+    expect(() => killTree(4242, "SIGTERM", io("linux", "EPERM").io)).toThrow("EPERM");
+  });
+});
+
+describe("stopTree", () => {
+  /** A tree that is gone after `after` polls of `gone`, or never; it counts the signals it was sent. */
+  const tree = (after: number | null) => {
+    const sent: string[] = [];
+    let polls = 0;
+    let waited = 0;
+    return {
+      sent,
+      waited: () => waited,
+      options: {
+        terminate: () => void sent.push("term"),
+        force: () => void sent.push("kill"),
+        gone: () => {
+          polls += 1;
+          return after !== null && polls > after;
+        },
+        sleep: async (milliseconds: number) => {
+          waited += milliseconds;
+        },
+        timeoutMs: 5000,
+      },
+    };
+  };
+
+  it("asks politely and leaves it at that when the tree ends", async () => {
+    const t = tree(2);
+    expect(await stopTree(t.options)).toBe("stopped");
+    expect(t.sent).toEqual(["term"]);
+    expect(t.waited()).toBeLessThan(5000);
+  });
+
+  it("forces it after the time is up, once, when the tree does not end", async () => {
+    const t = tree(null);
+    expect(await stopTree(t.options)).toBe("killed");
+    expect(t.sent).toEqual(["term", "kill"]);
+    expect(t.waited()).toBeGreaterThanOrEqual(5000);
+  });
+
+  it("does nothing to a tree that is already gone", async () => {
+    const t = tree(0);
+    expect(await stopTree({ ...t.options, gone: () => true })).toBe("stopped");
+    expect(t.sent).toEqual(["term"]);
+  });
+});
+
+describe("watched", () => {
+  it("runs a command under the watchdog: the runner's pid, how often to look for it, then the command and its arguments", () => {
+    expect(watched(4242, ["/usr/bin/node", "next", "start", "-p", "3100"], 500)).toEqual([
+      "-e",
+      WATCHDOG,
+      "4242",
+      "500",
+      "/usr/bin/node",
+      "next",
+      "start",
+      "-p",
+      "3100",
+    ]);
+  });
+});
+
+// The watchdog is what makes a server die with a runner that was killed hard: no cleanup runs then, so something else has to notice.
+describe.skipIf(process.platform === "win32")("the watchdog", () => {
+  const alive = (pid: number) => {
+    try {
+      process.kill(pid, 0);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+  const until = async (what: string, test: () => boolean, ms = 8000) => {
+    for (let waited = 0; waited < ms; waited += 50) {
+      if (test()) return;
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+    throw new Error(`Waited for ${what}`);
+  };
+  const made: string[] = [];
+  const pids: number[] = [];
+  afterEach(() => {
+    // whatever a test that failed halfway left running: a watchdog's group, or a lone process that played the runner
+    for (const pid of pids.splice(0)) {
+      for (const target of [-pid, pid]) {
+        try {
+          process.kill(target, "SIGKILL");
+        } catch {
+          // already gone
+        }
+      }
+    }
+    for (const dir of made.splice(0)) fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  /** Starts `command` under the watchdog, as the runner starts the server: its own process group, watching `parentPid`. */
+  const start = (parentPid: number, command: string[]) => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "rentbook-watchdog-"));
+    made.push(dir);
+    const dog = spawn(process.execPath, watched(parentPid, [process.execPath, ...command], 100), { detached: true, stdio: "ignore" });
+    dog.unref();
+    pids.push(dog.pid!);
+    return { dir, dog: dog.pid! };
+  };
+
+  // a child that is itself a parent: it starts a grandchild and writes both its own pid and the grandchild's to a file
+  const FAMILY = (file: string) => [
+    "-e",
+    `const { spawn } = require("node:child_process"); const grandchild = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], { stdio: "ignore" }); require("node:fs").writeFileSync(${JSON.stringify(file)}, JSON.stringify([process.pid, grandchild.pid])); setInterval(() => {}, 1000);`,
+  ];
+
+  it("ends the command and the commands it started when the runner it watches is gone", async () => {
+    const parent = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], { stdio: "ignore" });
+    pids.push(parent.pid!);
+    const file = path.join(os.tmpdir(), `rentbook-watchdog-pids-${process.pid}-${Date.now()}.json`);
+    made.push(file);
+    const { dog } = start(parent.pid!, FAMILY(file));
+    await until("the command to start", () => fs.existsSync(file) && fs.readFileSync(file, "utf8") !== "");
+    const [child, grandchild] = JSON.parse(fs.readFileSync(file, "utf8")) as number[];
+    expect([alive(dog), alive(child), alive(grandchild)]).toEqual([true, true, true]);
+
+    process.kill(parent.pid!, "SIGKILL");
+    await until("the watchdog, the command and its child to end", () => !alive(dog) && !alive(child) && !alive(grandchild));
+  });
+
+  it("leaves the command alone while the runner it watches is there, and ends it all when asked to stop", async () => {
+    const file = path.join(os.tmpdir(), `rentbook-watchdog-pids-${process.pid}-${Date.now()}-b.json`);
+    made.push(file);
+    // the runner here is this very process, which stays
+    const { dog } = start(process.pid, FAMILY(file));
+    await until("the command to start", () => fs.existsSync(file) && fs.readFileSync(file, "utf8") !== "");
+    const [child, grandchild] = JSON.parse(fs.readFileSync(file, "utf8")) as number[];
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    expect([alive(dog), alive(child), alive(grandchild)]).toEqual([true, true, true]);
+
+    killTree(dog, "SIGTERM");
+    await until("everything to end", () => !alive(dog) && !alive(child) && !alive(grandchild));
+  });
+
+  it("ends with the exit code of the command, so a build that fails still fails", () => {
+    const run = spawnSync(process.execPath, watched(process.pid, [process.execPath, "-e", "process.exit(7)"], 100), { encoding: "utf8" });
+    expect(run.status).toBe(7);
   });
 });
