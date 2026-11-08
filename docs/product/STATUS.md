@@ -1,17 +1,18 @@
 # RentBook v1.0: build status
 
-Last updated: 2026-11-03, with wave 3 finished and wave 4 about two thirds done (tasks 4-1 to 4-10 of 13). Wave 5 is not started. This file is updated at the end of every wave and again at the end of the work.
+Last updated: 2026-11-08, at the end of the work: waves 1 to 5 are built, reviewed and pushed as branches. Nothing is merged to `main` or deployed; that step is yours (see "Owner steps").
 
 ## Where things are
 
-Every wave is a branch stacked on the one before it, so the newest branch contains all the earlier work. Nothing has been merged to `main` or deployed. `main` is still at 845a252 (the live hike-rounding fix). An attempt to fast-forward `main` was blocked by the permission layer as a production deploy, and it was not worked around. The merge is yours to make (see "Owner steps").
+Every wave is a branch stacked on the one before it, so the newest branch, `v1-wave-5`, contains all the work. Nothing has been merged to `main` or deployed. `main` is still at 845a252 (the live hike-rounding fix). An attempt to fast-forward `main` was blocked by the permission layer as a production deploy, and it was not worked around. The merge is yours to make (see "Owner steps").
 
 | Branch | What it holds | Tip | Tests at the tip |
 | --- | --- | --- | --- |
 | `v1-wave-1b` | Wave 1 in full: data layer (1A) and server and security (1B) | d6a2130 | 79 files, 1,782 tests |
 | `v1-wave-2` | Wave 1 plus wave 2 (app feel, items 8 to 13) | f02f900 | 117 files, 2,696 tests |
 | `v1-wave-3` | Wave 2 plus wave 3 (setup, vacant units, add, switch off and reorder units, looser Sheet rules) | 5b105bc | 143 files, 3,967 tests |
-| `v1-wave-4` | Wave 3 plus wave 4 so far (overdue, year view, alerts, Tenancy Log writes) | 15e443d | 161 files, 4,616 tests |
+| `v1-wave-4` | Wave 3 plus wave 4 (overdue, year view, alerts, change history) | 4e4e569 | 165 files, 4,763 tests |
+| `v1-wave-5` | Wave 4 plus wave 5 (screen tests, end-to-end run, guides): the whole product | cd34e7c, then this status update | 176 files, 5,260 tests |
 
 The baseline before this work was 1,420 tests. At every commit `npm test`, `npm run typecheck`, `npm run lint` and `npm run build` were green, and the build passes with no sign-in settings in the environment.
 
@@ -92,7 +93,7 @@ Plans: `docs/superpowers/plans/2026-10-14-v1-wave-1-trust.md` and `docs/superpow
 
 Plan: `docs/superpowers/plans/2026-10-17-v1-wave-3-product-setup.md`.
 
-### Wave 4: features (items 25 to 28), in progress
+### Wave 4: features (items 25 to 28)
 
 | Task | What | Commit |
 | --- | --- | --- |
@@ -104,12 +105,30 @@ Plan: `docs/superpowers/plans/2026-10-17-v1-wave-3-product-setup.md`.
 | 4-6 | The Year at a glance screen (`/year`) and its link from the month summary | 3fcd630 |
 | 4-7 | The Agreements and hikes screen (`/alerts`), the Needs attention card, More rows | 90edc2f |
 | 4-8 to 4-10 | The Tenancy Log tab: a history row per changed field after every tenancy change, never able to fail the change itself, with one signed retry from the browser | a482b1f, 3880df9, d9255c5, 3fdb631 |
-| Review fixes | Half-rupee shortfalls match the card; no hike alert for a month that is already vacant; moved-out hints; darker text in vacant year cells; a warning over the hikes when the Tenants tab cannot be read | ab5986d, 15e443d |
-| 4-11 to 4-13 | Not done yet: History on the tenant page, Set up and docs lines for the Tenancy Log, verify | |
+| 4-11 | History on the tenant page, from the Tenancy Log (cached 15 seconds, cleared by every write) | 9c6fa44 |
+| 4-12 | Set up check, Diagnostics line, Prepare my Sheet and the docs for the Tenancy Log | f12a46e |
+| 4-13 | Verification pass (nothing to change) | |
+| Review fixes | Half-rupee shortfalls match the card; no hike alert for a month already vacant; moved-out hints; darker text in vacant year cells; a warning over the hikes when the Tenants tab cannot be read; the history write bounded to 3 seconds; the retry checks every row; an undo that opens a tenancy again is recorded in the Tenancy Log | ab5986d, 15e443d, 0103829, 6051879, 4e4e569 |
 
 The wave 3 final fixes were merged into wave 4 by merge commit 7e56a06 (no rebase). Plan: `docs/superpowers/plans/2026-10-28-v1-wave-4-features.md`.
 
-Reviews so far: waves 1 to 3 had a final whole-wave review each. Wave 4's pure logic (tasks 4-1 to 4-4) and screens (4-5 to 4-7) were reviewed with no Critical or Important findings; the Tenancy Log writes (4-8 to 4-10) were being reviewed when this was written.
+### Wave 5: tests and short guides (items 30 and a short 31)
+
+| Task | What | Commit |
+| --- | --- | --- |
+| 5-1 | The Google gateway is made in one small module, so a test Sheet can replace it (no change in behaviour) | 69921f9 |
+| 5-2 | A shared in-memory test world, a page-landmark checker and a screen harness (test support only) | bdc732b |
+| 5-3 | Screen tests for the core screens, through the real data path; long names wrap | f844718 |
+| 5-4 | Screen tests for the wave 3 and 4 screens; long names wrap | b4bd7f9 |
+| 5-5 | `npm run e2e`: builds a temporary copy against an in-memory Sheet and sweeps every page in Chromium at 390 px, light and dark | a46d176 |
+| 5-6 | The same run drives the main journeys (log, undo, replace, new tenant, vacant, edit, move out, filters, settings, errors) | 7338bf0 |
+| 5-7 | `docs/USER-GUIDE.md`, `docs/TROUBLESHOOTING.md`, README touch-up | 60ac356 |
+| 5-8 | Verification: two consecutive end-to-end runs passed (18 checks, about 55 seconds each with the build); the run was repeated after the fixes (18 passed, 53 seconds) | |
+| Review fixes | Troubleshooting, README and SETUP corrections (the sign-in configuration error cannot be diagnosed from Set up; `SESSION_NOT_BEFORE` must be now or earlier), a stricter check that every bold label in the user guide is on a screen, and the end-to-end runner now cleans up its server and temporary copy on Ctrl-C and when killed | 8743f97, cd34e7c |
+
+The wave 4 final fix was merged into wave 5 by merge commit ea0c4c2 (no rebase). Plan: `docs/superpowers/plans/2026-11-03-v1-wave-5-tests-guides.md`.
+
+Reviews: every wave had a final whole-branch review with the earlier slices reviewed one by one; no Critical finding was left open at the end of any of them. Waves 3 and 4 were also compared against the code before them on the same fixture Sheets, and your existing numbers and Sheet were identical apart from the documented changes.
 
 ## Not verified (could not be, in the cloud)
 
@@ -119,13 +138,14 @@ Reviews so far: waves 1 to 3 had a final whole-wave review each. Wave 4's pure l
 - Vercel itself: the deployment, `x-vercel-id`, the wording of its Sensitive-variable menu, and whether GitHub private vulnerability reporting, Dependabot and secret scanning are switched on.
 - Real Google latency, and a Payments Log with hundreds of rows.
 - Wave 3: a real Sheet with a tab renamed by the owner, the header-matching rules on the owner's real headers, the Active column (column H), adding, switching off and reordering portions on a real Sheet, and whether Google's multi-row and single-range writes behave as the in-memory fake does.
+- Wave 5: the end-to-end run on your Windows laptop (hard links on NTFS, `npm root -g`, path quoting), WebKit and iOS Safari, and dark mode outside the page sweep. The run never touches Google by design, so it proves the app's screens and flows, not your Sheet.
 - Wave 4: the Tenancy Log tab on a real Sheet (creation on first page view, the many-row append being all or nothing, its latency), the overdue and alert figures on years of real data, and history behaviour of the system Back button between the month, Overdue and Year screens (checked in Chromium on a scratch copy only).
 
 ## Owner steps
 
-1. Run `npm run verify:testcopy` against your test copy, from `v1-wave-1b` at least.
+1. Run `npm run verify:testcopy` against your test copy, from `v1-wave-1b` at least, and again from `v1-wave-5` (the checks grew with waves 3 and 4).
 2. Before going live: your `AUTH_SECRET` must be at least 32 characters, or sign-in reports a configuration error. Set `AUTH_URL` in production. Switch on private vulnerability reporting in the GitHub repository settings (the link in `SECURITY.md` and `security.txt` needs it). Renew `Expires` in `public/.well-known/security.txt` by 2027-10-16.
-3. Merge to `main` as fast-forwards, in order: `v1-wave-1b`, then `v1-wave-2` (each branch contains the ones before it, so one fast-forward to the newest branch brings everything). For example `git push origin v1-wave-1b:main`, later `git push origin v1-wave-2:main`. Roll back by promoting the previous Vercel deployment.
+3. Merge to `main` as a fast-forward. Each branch contains the ones before it, so one push brings everything: `git push origin v1-wave-5:main`. To go step by step instead, push in this order: `v1-wave-1b` (waves 1A and 1B), `v1-wave-2`, `v1-wave-3`, `v1-wave-4`, `v1-wave-5`, each as `git push origin <branch>:main`. Roll back by promoting the previous Vercel deployment. I did not push to `main`: that was blocked as a production deploy and you decide it.
 4. After deploying, check Google sign-in, one real payment (log and undo), and the browser console on the live site for Content Security Policy messages. If the policy blocks something, set `CSP_REPORT_ONLY=1` and redeploy: it reports instead of blocking.
 5. Before first using the app after the wave 4 deploy: the first page view adds an empty "Tenancy Log" tab to your Sheet. If your Sheet already has an unrelated tab with that name, rename it first or set `TENANCY_LOG_TAB`. In the same way, if you use a custom tab name for any app tab, rename the tab in the Sheet first: Prepare my Sheet or the first page view would otherwise create new tabs with default cycle and hike values.
 6. Before using "Switch off" on a portion: clear any old closed Tenants rows left by a New tenant of the same name or one that was undone, make sure Settings cell H1 and column H are empty, and on the test copy try appending a column, a single-range reorder, clearing a Move-out cell with a raw empty value, a checkbox rule in column H, and case-insensitive tab titles. Then run `npm run verify:testcopy` again.
@@ -141,11 +161,15 @@ Reviews so far: waves 1 to 3 had a final whole-wave review each. Wave 4's pure l
 - Settings labels are now "Payments per cycle" and "Hike at each new cycle (%)".
 - Messages are plain English and name the field. When a screen is out of date they say "tap another tab at the bottom of the screen and come back".
 - Activity is grouped by the day an entry was saved, in India time, with filters; it searches the whole log and shows the newest 50 matches.
+- Wave 3: owner-only Set up and Diagnostics pages (reached from More, and from a failed page) say in plain words what is wrong with the settings or the Sheet; "Prepare my Sheet" adds missing app tabs. Sheet headers are matched more loosely, `TOTAL_HEADER` is optional, and the app's own tabs can have other names. A portion whose tenant moved out shows as Vacant, and Portion settings can add a portion, switch one off (history stays) and change the order.
+- Wave 4: a Needs attention card on the month screen, and three new screens under More: Overdue rent (who owes what and since when; rent is due on the 1st and counts as overdue from the 6th), Year at a glance (each portion's twelve months and totals) and Agreements and hikes (agreements ending within 60 days or ended, and rent hikes due within two months). The tenant page gains a History section, fed by a new "Tenancy Log" tab that the app adds to your Sheet and appends to after every tenancy change made in the app.
+- Wave 5: `docs/USER-GUIDE.md` and `docs/TROUBLESHOOTING.md`, and `npm run e2e` for a developer (Playwright installed outside the project).
 
 ## Known limits and deferred items
 
 - Wave 3: a New tenant corrected by a second New tenant of the old name with Replace leaves the old tenancy closed, so the portion shows Vacant with "Add tenant"; adding details for the same name ends the vacancy. A move-out recorded without details cannot be undone in the app. After a switch-off an old gap month keeps its pending card, so it stays in what is due until logged or the Schedule is edited. Typed (non-formula) totals go stale when `TOTAL_HEADER` is not set. On a switched-off card with no details the link reads "Tenant page".
-- Wave 4: a card measures a month against the payment before it, so an extra payment lifts the next month's reference rent and the next month can read "less than rent"; the overdue list and year view agree with the card (the card rule is unchanged). A blank tenant cell is a name of its own and ends a tenant's run. A portion whose tenant left without a recorded move-out shows long arrears, a hike and an ended agreement until the move-out is recorded (the screens say so). A hike alert is not hidden for a move-out recorded for a future day until that month is vacant. The year grid can show an unpaid month of an earlier tenant that the overdue list ignores. `/year?year=2099` shows a grid of "Not due yet" cells. Undoing a New tenant's first payment reopens the old tenancy with no Tenancy Log row; a New tenant that fails halfway writes no history; the page does not refresh after a successful browser retry of a history write.
+- Wave 4: a card measures a month against the payment before it, so an extra payment lifts the next month's reference rent and the next month can read "less than rent"; the overdue list and year view agree with the card (the card rule is unchanged). A blank tenant cell is a name of its own and ends a tenant's run. A portion whose tenant left without a recorded move-out shows long arrears, a hike and an ended agreement until the move-out is recorded (the screens say so). A hike alert is not hidden for a move-out recorded for a future day until that month is vacant. The year grid can show an unpaid month of an earlier tenant that the overdue list ignores. `/year?year=2099` shows a grid of "Not due yet" cells. A New tenant that fails halfway writes no history. The browser's one automatic retry of a history write is not awaited: a full page reload before it finishes loses that row without a message, and the page does not refresh after a successful retry. A History entry's time shows no year. A Sheet that has a "Tenancy Log" tab but no Settings tab is refused with "Settings tab is missing". A history write that gave up after 3 seconds can still land just before its retry looks, which would add the rows twice (accepted, as the Payments Log has the same property). A save that changes more than 12 history rows gets no retry token, and nothing checks a token against the retry route's 4,000-character body limit. A New tenant's payment now has up to 3 seconds more inside one lock and the 15-second request limit (the risk predates the wave).
+- Wave 5: a runner killed with SIGKILL cannot delete its temporary copy under `/tmp` (a watchdog ends its server and browser; remove the `rentbook-e2e-*` folder by hand). In a production build a sign-in configuration error reaches the server log as `code: "internal"`, not the configuration code, because the instrumentation hook and the pages load separate copies of the error class; the log line still names each missing setting and never a value. A Schedule that has only its header row shows "The Schedule tab has no month rows to copy the format from." (the troubleshooting guide says what to do). The tenant page's Phone row has its label and number slightly out of line.
 
 - Back and history: after Month, More, Settings, Month there is one extra history entry (More). Browsers without the Navigation API (Firefox) add one history entry per round trip. The phone's own Back button shows a screen as it was kept, so it can show an out-of-date screen; the tab bar and the back arrow refresh.
 - On Android, closing the keyboard with Back usually leaves the field focused, so the tab bar stays hidden until the next tap elsewhere (unchecked on a device).
@@ -159,8 +183,8 @@ Reviews so far: waves 1 to 3 had a final whole-wave review each. Wave 4's pure l
 ## Rulings made on your behalf
 
 - Wave 3: `/api/health` stays a plain liveness check; the Set up and Diagnostics pages report configuration. A portion's tenant leaving is detected by the tenant's name. Wave 4: rent is due on the 1st and overdue from the 6th; lists never disagree with the month cards; the Tenancy Log never blocks a tenancy change and is never read with the snapshot.
-
-- `/api/health` stays a plain liveness check (`{ ok, version }`); the wave 3 setup and diagnostics pages will report configuration.
+- Wave 5: the guides are short and plain; there is no licence, release, limits page or marketing text. The end-to-end run is not part of CI (CI has no browser) and Playwright stays outside the project. A mistaken change is recorded in the Tenancy Log only for edits made in the app, not for edits made straight in the Sheet.
+- `/api/health` stays a plain liveness check (`{ ok, version }`); the wave 3 setup and diagnostics pages report configuration.
 - Sessions without a recorded sign-in time keep working until they expire or are renewed once; renewing stamps them and the 7-day cap then applies.
 - The wave 2 recovery wording: one shared phrase everywhere instead of "refresh the page", because the installed app has no refresh gesture.
 - Re-reviews of two small doc and wording fix rounds were folded into the next whole-branch review.
