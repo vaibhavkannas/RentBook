@@ -33,6 +33,7 @@ export type NextPayment = {
   tenant: string;
   count: number;
   suggestedAmount: number;
+  /** The rent the suggestion is worked from: the portion's true rent, the first payment of the cycle the previous payment is in. */
   previousAmount: number;
   startsNewCycle: boolean;
 };
@@ -54,9 +55,9 @@ export type PortionCard = {
   entry: PortionEntry | null;
   next: NextPayment | null;
   /**
-   * The rent this month is measured against: the app's suggested amount (the previous amount, plus
-   * the hike on a new cycle). Null when there is nothing earlier to measure against: no earlier
-   * entry, or a paid card for a new tenant's first payment.
+   * The rent this month is measured against: the app's suggested amount (the true rent of the cycle, plus the hike on a new
+   * cycle), or, for a paid card that is the first payment of a new cycle, the amount itself: it is the rent of the cycle. Null
+   * when there is nothing earlier to measure against: no earlier entry, or a paid card for a new tenant's first payment.
    */
   rentReference: number | null;
   /**

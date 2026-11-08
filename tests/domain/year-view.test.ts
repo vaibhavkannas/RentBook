@@ -454,11 +454,12 @@ describe("deriveYearView: a month with any payment recorded is paid", () => {
     expect(states(deriveYearView(snapshot(ahead), 2026, TODAY), "p1").slice(7, 10)).toEqual(["paid", "paid", "paid"]);
   });
 
-  it("still shows a month with no payment beside it as unpaid, at the rent its card suggests", () => {
+  it("still shows a month with no payment beside it as unpaid, at the true rent its card suggests", () => {
     const rows = parsedRows([2026, 8, [["Asha", 2, 5450]]], [2026, 9, [["Asha", 3, 5000]]]);
     const view = deriveYearView(snapshot(rows), 2026, TODAY);
     expect(cellOf(view, "p1", 9)).toMatchObject({ state: "paid", received: 5000, due: 5450 });
-    expect(cellOf(view, "p1", 10)).toEqual({ month: OCT, state: "unpaid", received: 0, due: 5000 });
+    // the 5 000 was agreed for September: October's rent is still the cycle's first payment, 5 450
+    expect(cellOf(view, "p1", 10)).toEqual({ month: OCT, state: "unpaid", received: 0, due: 5450 });
   });
 
   it("keeps the cells adding up to the month screen's received and due, whatever was paid", () => {

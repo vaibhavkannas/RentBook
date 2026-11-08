@@ -196,7 +196,7 @@ describe("the Overdue page with rent owed", () => {
 
     it("does not list a month paid at another amount: only the month with no payment is there, at the card's rent", async () => {
       // September is paid 5,000 against the 5,450 rent, perhaps an amount agreed with the tenant; October has no payment, and
-      // its card suggests the 5,000 last paid
+      // its card suggests the true rent of 5,450, the cycle's first payment, not the 5,000 agreed for one month
       const lower = parsedRows(
         [2026, 8, [["Asha", 1, 5450], ["Bala", 3, 12700]]],
         [2026, 9, [["Asha", 2, 5000], ["Bala", 4, 12700]]],
@@ -205,10 +205,10 @@ describe("the Overdue page with rent owed", () => {
       mocks.loadPageSnapshot.mockResolvedValue(snapshot({ rows: lower }));
       const html = await render();
       const [card] = itemCards(html);
-      expect(monthLinks(card).map((link) => link.text)).toEqual([`October 2026 Unpaid: ${formatRupees(5000)} ›`]);
+      expect(monthLinks(card).map((link) => link.text)).toEqual([`October 2026 Unpaid: ${formatRupees(5450)} ›`]);
       expect(visibleText(card)).toContain("Asha · 1 unpaid month");
       expect(visibleText(card)).toContain("Oldest: October 2026");
-      expect(visibleText(html)).toContain(`${formatRupees(5000)} overdue`);
+      expect(visibleText(html)).toContain(`${formatRupees(5450)} overdue`);
       expect(visibleText(html)).not.toMatch(/short|Paid ₹/);
     });
 

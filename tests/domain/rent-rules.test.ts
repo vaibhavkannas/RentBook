@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import {
-  isHikeRounding,
   nextCount,
   roundedChoices,
   startsNewCycle,
@@ -98,21 +97,6 @@ describe("suggestAmount", () => {
       expect(result).toBeGreaterThanOrEqual(Math.floor(amount));
     }
     expect(suggestAmount(10_000_000, 100, true)).toBe(20_000_000);
-  });
-});
-
-describe("isHikeRounding", () => {
-  it("accepts an amount up to the allowance either side of the suggested hike", () => {
-    expect(isHikeRounding(6316, 6316)).toBe(true);
-    expect(isHikeRounding(6315, 6316)).toBe(true);
-    expect(isHikeRounding(6320, 6316)).toBe(true);
-    expect(isHikeRounding(6326, 6316)).toBe(true);
-    expect(isHikeRounding(6306, 6316)).toBe(true);
-  });
-  it("rejects an amount beyond the allowance", () => {
-    expect(isHikeRounding(6327, 6316)).toBe(false);
-    expect(isHikeRounding(6305, 6316)).toBe(false);
-    expect(isHikeRounding(5000, 6316)).toBe(false);
   });
 });
 

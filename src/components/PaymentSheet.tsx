@@ -9,7 +9,7 @@ import { LiveNotice, Notice } from "@/components/ui/Notice";
 import { Sheet } from "@/components/ui/Sheet";
 import { SlowHint } from "@/components/ui/SlowHint";
 import { useToast } from "@/components/ui/Toast";
-import { HIKE_ROUNDING_ALLOWANCE, roundedChoices } from "@/lib/domain/rent-rules";
+import { roundedChoices } from "@/lib/domain/rent-rules";
 import type { TenancyFields } from "@/lib/domain/tenancy";
 import type { PortionCard, PortionEntry } from "@/lib/domain/types";
 import {
@@ -375,8 +375,8 @@ export default function PaymentSheet({
               <Notice tone="success" as="div" className="space-y-2">
                 <p>
                   New cycle starts at payment 1. Amount is prefilled with the hike (was{" "}
-                  {formatRupees(card.next.previousAmount)}). Edit it if you agreed a different rent. A rent within{" "}
-                  {formatRupees(HIKE_ROUNDING_ALLOWANCE)} of the hike counts as rounded, not as extra or short.
+                  {formatRupees(card.next.previousAmount)}). Edit it if you agreed a different rent. Whatever you log here becomes the
+                  rent for this cycle, rounded or not.
                 </p>
                 {roundedChoices(card.next.suggestedAmount).length > 0 && (
                   <div className="flex gap-2">

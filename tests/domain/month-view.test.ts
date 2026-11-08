@@ -265,11 +265,13 @@ describe("rent due against received (October after the base schedule)", () => {
     expect(view.difference).toBe(0);
   });
 
-  it("measures a payment on a new cycle against the rent with the hike", () => {
+  it("takes the first payment of a new cycle as the rent of the cycle, whatever it is: nothing extra", () => {
+    // True rent, from 2026-11-08: the first payment of a cycle is the rent of the whole cycle (it used to be measured against
+    // the hike, and showed 30 more than rent here).
     const view = october([null, ["Bala", 1, 13365], null, null, null]);
-    expect(card(view, "p2")).toMatchObject({ rentReference: 13335, rentDifference: 30 });
-    expect(view.due).toBe(SUGGESTED_TOTAL);
-    expect(view.difference).toBe(30);
+    expect(card(view, "p2")).toMatchObject({ rentReference: 13365, rentDifference: 0 });
+    expect(view.due).toBe(SUGGESTED_TOTAL + 30);
+    expect(view.difference).toBe(0);
   });
 
   it("has no reference for a portion with no earlier entry: due is the amount entered", () => {
@@ -302,12 +304,13 @@ describe("rent due against received (October after the base schedule)", () => {
   });
 
   it("adds up extra and short across paid cards, and counts pending cards at the suggested rent", () => {
-    const view = october([["Asha", 4, 5480], ["Bala", 1, 13300], null, null, null]);
+    // Asha 30 over and Chitra 35 under their rents inside a cycle (Bala's payment 1 would be the rent of its cycle, not short)
+    const view = october([["Asha", 4, 5480], null, ["Chitra", 6, 8965], null, null]);
     expect(card(view, "p1").rentDifference).toBe(30);
-    expect(card(view, "p2").rentDifference).toBe(-35);
-    expect(card(view, "p3")).toMatchObject({ status: "pending", rentReference: 9000, rentDifference: null });
+    expect(card(view, "p3").rentDifference).toBe(-35);
+    expect(card(view, "p2")).toMatchObject({ status: "pending", rentReference: 13335, rentDifference: null });
     expect(card(view, "p5")).toMatchObject({ status: "pending", rentReference: 5100, rentDifference: null });
-    expect(view.received).toBe(5480 + 13300);
+    expect(view.received).toBe(5480 + 8965);
     // due uses the suggested rent for every portion that has one, paid or not
     expect(view.due).toBe(SUGGESTED_TOTAL);
     expect(view.difference).toBe(-5);
@@ -334,10 +337,10 @@ describe("rent due against received (October after the base schedule)", () => {
   });
 
   it("lets extra and short cancel in the total while each paid card still has its own difference", () => {
-    const view = october([["Asha", 4, 5451], ["Bala", 1, 13349], null, null, null]);
+    const view = october([["Asha", 4, 5451], null, ["Chitra", 6, 8986], null, null]);
     expect(card(view, "p1")).toMatchObject({ rentReference: 5450, rentDifference: 1 });
-    expect(card(view, "p2")).toMatchObject({ rentReference: 13335, rentDifference: 14 });
-    expect(view.difference).toBe(15);
+    expect(card(view, "p3")).toMatchObject({ rentReference: 9000, rentDifference: -14 });
+    expect(view.difference).toBe(-13);
   });
 
   describe("a rent rounded after the hike", () => {
@@ -356,11 +359,14 @@ describe("rent due against received (October after the base schedule)", () => {
       expect(view.difference).toBe(0);
     });
 
-    it("still flags an amount further than the allowance from the hike", () => {
+    it("is the rent itself whatever the amount: no allowance, a first payment of a cycle is the rent of the cycle", () => {
+      // it used to flag an amount more than 10 rupees from the hike as extra or short
       const view = october([null, ["Bala", 1, 13346], null, null, null]);
-      expect(card(view, "p2")).toMatchObject({ rentReference: 13335, rentDifference: 11 });
+      expect(card(view, "p2")).toMatchObject({ rentReference: 13346, rentDifference: 0 });
       const short = october([null, ["Bala", 1, 13324], null, null, null]);
-      expect(card(short, "p2")).toMatchObject({ rentReference: 13335, rentDifference: -11 });
+      expect(card(short, "p2")).toMatchObject({ rentReference: 13324, rentDifference: 0 });
+      const far = october([null, ["Bala", 1, 15000], null, null, null]);
+      expect(card(far, "p2")).toMatchObject({ rentReference: 15000, rentDifference: 0 });
     });
 
     it("does not apply inside a cycle: a rent that is not a new hike is exact", () => {
@@ -384,7 +390,8 @@ describe("rent due against received (October after the base schedule)", () => {
       ["Esha", 2, 5100],
     ]);
     expect(view.cards.every((c) => c.status === "paid")).toBe(true);
-    expect(view.difference).toBe(50 - 335);
+    // Asha is 50 over; Bala's 13 000 is the first payment of its cycle, so it is the rent, not 335 short
+    expect(view.difference).toBe(50);
     expect(view.received - view.due).toBe(view.difference);
   });
 });
@@ -480,14 +487,16 @@ describe("the owner's month views with no move-out in the Tenants tab (pinned)",
     undoBlocked: NO_UNDO,
     totals: [0, 32885, 0, 0],
   };
+  // Changed on purpose, 2026-11-08 (true rent): Asha's 5,480 in November is a one-off inside a cycle that began with 5,450, so after
+  // it the suggestion is still 5,450 (it was 5,480, following the last payment) and the rent due is 32,885, as before November.
   const LONGER_AFTER_NOV: Pin = {
     statuses: ALL_PENDING,
     entries: NONE,
-    next: ["Asha/6/5480/5480/false", "Bala/1/13335/12700/true", "Chitra/6/9000/9000/false", null, "Esha/3/5100/5100/false"],
-    reference: [5480, 13335, 9000, null, 5100],
+    next: ["Asha/6/5450/5450/false", "Bala/1/13335/12700/true", "Chitra/6/9000/9000/false", null, "Esha/3/5100/5100/false"],
+    reference: [5450, 13335, 9000, null, 5100],
     difference: NONE,
     undoBlocked: NO_UNDO,
-    totals: [0, 32915, 0, 0],
+    totals: [0, 32885, 0, 0],
   };
 
   const MONTHS: Array<[string, YearMonth]> = [

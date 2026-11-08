@@ -1,3 +1,4 @@
+import { findPriorWithAnchor } from "./month-view";
 import { startsNewCycle, suggestAmount } from "./rent-rules";
 import { currentTenancy, sameTenantName } from "./tenancy";
 import type { RentSnapshot, YearMonth } from "./types";
@@ -88,9 +89,10 @@ export type HikeAlert = {
 
 /**
  * Rent hikes that are due or within HIKE_NOTICE_MONTHS of `today` (YYYY-MM-DD, India time). The Sheet has no hike date: the
- * hike comes with the first payment of a new cycle, so it is worked out from the portion's latest entry (`hikeMonthFor`) and the
- * new rent is the one the card will suggest. No alert for a portion whose count never resets, whose hike changes nothing (0 %),
- * that is vacant this month or in the hike month, or that is switched off. Earliest hike first, then Settings order.
+ * hike comes with the first payment of a new cycle, so it is worked out from the portion's latest entry (`hikeMonthFor`). The
+ * current rent is the true rent of the cycle (its first payment) and the new rent is the one the card will suggest. No alert for
+ * a portion whose count never resets, whose hike changes nothing (0 %), that is vacant this month or in the hike month, or that
+ * is switched off. Earliest hike first, then Settings order.
  */
 export function hikeAlerts(snapshot: RentSnapshot, today: string): HikeAlert[] {
   const { rows, portions, tenancies } = snapshot;
@@ -99,14 +101,15 @@ export function hikeAlerts(snapshot: RentSnapshot, today: string): HikeAlert[] {
   const alerts: HikeAlert[] = [];
   for (const portion of portions) {
     if (portion.inactive) continue;
-    const latest = latestEntryRow(rows, portion.id);
+    const latest = findPriorWithAnchor(rows, portion);
     if (!latest) continue;
     const hike = hikeMonthFor(latest.month, latest.entry.count, portion.cycleLength);
     if (!hike || compareYm(hike.hikeMonth, horizon) > 0) continue;
     if (occupancyFor(rows, tenancies, portion.id, thisMonth).state === "vacant") continue;
     // A move-out recorded for a later day can leave the hike month vacant while the portion is still let today.
     if (compareYm(hike.hikeMonth, thisMonth) > 0 && occupancyFor(rows, tenancies, portion.id, hike.hikeMonth).state === "vacant") continue;
-    const currentRent = latest.entry.amount;
+    // The true rent of the cycle, not the latest payment: an amount agreed for one month does not change what the hike is worked from.
+    const currentRent = latest.anchor.amount;
     const newRent = suggestAmount(currentRent, portion.hikePercent, true);
     if (!(newRent > currentRent)) continue;
     alerts.push({

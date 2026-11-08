@@ -222,6 +222,19 @@ describe("PaymentSheet on Sheet", () => {
     expect(out).toContain(`class="${buttonClasses("outline", "md")} flex-1">Round to ₹ 10,500</button>`);
     expect(out).toContain(`class="${buttonClasses("outline", "md")} w-full">Keep ₹ 10,000</button>`);
   });
+
+  it("says that what is logged on a new cycle becomes the rent for the cycle, with no allowance of a few rupees", () => {
+    const hike = card({
+      status: "pending",
+      entry: null,
+      next: { tenant: "Asha", count: 1, suggestedAmount: 10503, previousAmount: 10000, startsNewCycle: true },
+    });
+    // text of the page, with the no-break spaces of the amounts as ordinary ones
+    const text = html(createElement(PaymentSheet, { ...props, cards: [hike], mode: "log" })).replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
+    expect(text).toContain("New cycle starts at payment 1. Amount is prefilled with the hike (was ₹ 10,000).");
+    expect(text).toContain("Whatever you log here becomes the rent for this cycle, rounded or not.");
+    expect(text).not.toMatch(/within|counts as rounded|extra or short/);
+  });
 });
 
 describe("UndoSheet on Sheet", () => {

@@ -3,11 +3,9 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { AGREEMENT_NOTICE_DAYS, HIKE_NOTICE_MONTHS } from "@/lib/domain/alerts";
-import { HIKE_ROUNDING_ALLOWANCE } from "@/lib/domain/rent-rules";
 import { OVERDUE_GRACE_DAYS, RENT_DUE_DAY } from "@/lib/domain/rent-due";
 import { ACTIVITY_SHOWN_LIMIT } from "@/lib/activity-view";
 import { CONNECTION_NEEDS_ATTENTION, crossOriginRequest, PAGE_OUT_OF_DATE_MESSAGE, rateLimited, tabMissing, UNREADABLE_REQUEST_MESSAGE, unavailable } from "@/lib/errors";
-import { formatRupees } from "@/lib/format";
 import { HISTORY_NOT_SAVED } from "@/lib/history-retry";
 import { LATER_ENTRY_REASON } from "@/lib/domain/month-view";
 import {
@@ -297,13 +295,20 @@ describe("USER-GUIDE.md", () => {
     expect(paragraph).toMatch(/until you record the move-out/);
   });
 
-  it("gives the alert windows, the rounding allowance, the Activity limit and the sign-in's length as the code has them", () => {
+  it("gives the alert windows, the Activity limit and the sign-in's length as the code has them", () => {
     expect(guide).toContain(`end within ${AGREEMENT_NOTICE_DAYS} days`);
     expect(guide).toContain(`within the next ${HIKE_NOTICE_MONTHS} months`);
-    // the app writes a rupee amount with a no-break space; the guide, read as plain text, with an ordinary one
-    expect(guide).toContain(`within ${formatRupees(HIKE_ROUNDING_ALLOWANCE).replace(/\s/g, " ")} of the hike`);
     expect(guide).toContain(`newest ${ACTIVITY_SHOWN_LIMIT} that match`);
     expect(guide).toContain("seven days");
+  });
+
+  it("explains the suggested rent in plain words: the first payment of the hike cycle is the rent, and any other amount is agreed for its month", () => {
+    expect(guide).toContain("The rent RentBook suggests is the first payment of the current hike cycle.");
+    expect(guide).toContain("A different amount in another month is treated as agreed for that month: it does not change the suggestion and is never overdue.");
+    expect(guide).toContain("After a hike, the first payment you log is taken as the new rent, rounded or not.");
+    expect(guide).toContain("on a portion whose count never resets there is no hike cycle, so the suggestion follows the last payment");
+    // the old rule, a few rupees of allowance, is gone
+    expect(guide).not.toMatch(/within ₹ ?10|counts as rounded|as extra or short/);
   });
 
   it("names every mark of the year view's key", () => {

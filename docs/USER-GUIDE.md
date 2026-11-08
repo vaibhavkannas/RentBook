@@ -16,7 +16,9 @@ The title is the month on show. Tap the arrows or swipe to change month, or tap 
 
 Tap **Log payment** on a **Pending** card. The amount starts as the usual rent, the count is set for you, and **Date received** starts as today. Change them if you need to, then tap **Save to Sheet**. The payment goes into your Schedule, and a line with who logged it goes into the Payments Log tab.
 
-The first payment of a new cycle carries the portion's hike, and the amount starts with it. Tap **Round to** a round figure, or **Keep** the old rent, if you agreed something else. A rent within ₹ 10 of the hike counts as rounded, not as extra or short.
+The first payment of a new cycle carries the portion's hike, and the amount starts with it. Tap **Round to** a round figure, or **Keep** the old rent, if you agreed something else.
+
+The rent RentBook suggests is the first payment of the current hike cycle. A different amount in another month is treated as agreed for that month: it does not change the suggestion and is never overdue. After a hike, the first payment you log is taken as the new rent, rounded or not. If the rent changes for good in the middle of a cycle, its card shows the difference each month until the next cycle starts. But on a portion whose count never resets there is no hike cycle, so the suggestion follows the last payment.
 
 If the month already has a payment (someone logged it a moment ago), RentBook says so and offers **Replace amount** or **Go back**. To change a payment, tap **Edit amount** on a **Paid** card. To take one back, tap **Undo** and confirm with **Undo payment**. The Schedule is cleared, and the Payments Log keeps a record. A payment cannot be undone while later months have payments.
 
@@ -40,7 +42,7 @@ These three are under **More**, and only read your Sheet.
 
 **Year at a glance** shows each portion's twelve months of a year as a grid, with what was received against what was due. A key under the summary says what each mark means (**Paid**, **Unpaid**, **Vacant**, **Not due yet**); a month with a payment recorded is **Paid** whatever the amount. Tap a month to open it.
 
-**Agreements and hikes** lists agreements that have ended or end within 60 days, and rent increases coming within the next 2 months. A hike comes with the first payment of a new cycle, so the screen works it out from the count and the portion's cycle length. It lists none for a portion whose count never resets, whose hike is 0%, or that is vacant. The app sends no reminders: look here.
+**Agreements and hikes** lists agreements that have ended or end within 60 days, and rent increases coming within the next 2 months. A hike comes with the first payment of a new cycle, so the screen works it out from the count, the portion's cycle length and the rent of the cycle (its first payment). It lists none for a portion whose count never resets, whose hike is 0%, or that is vacant. The app sends no reminders: look here.
 
 ## Portion settings
 

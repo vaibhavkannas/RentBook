@@ -1,4 +1,4 @@
-import { isHikeRounding, nextCount, startsNewCycle, suggestAmount, sumAmounts } from "./rent-rules";
+import { nextCount, startsNewCycle, suggestAmount, sumAmounts } from "./rent-rules";
 import { currentTenancy, sameTenantName, summarize, type Tenancy } from "./tenancy";
 import type {
   MonthView,
@@ -59,34 +59,88 @@ export function hasLaterEntry(
   return rows.some((row) => compareYm(row.month, month) > 0 && row.entries.get(portionId));
 }
 
+/** The portion's entries from months strictly before `before`, newest month first, one per month (a month's lower row wins). */
+function entriesBefore(
+  rows: ScheduleRow[],
+  portionId: string,
+  before: YearMonth,
+): Array<{ month: YearMonth; entry: PortionEntry }> {
+  const byMonth = new Map<number, { month: YearMonth; entry: PortionEntry; rowNumber: number }>();
+  for (const row of rows) {
+    const entry = row.entries.get(portionId);
+    if (!entry || compareYm(row.month, before) >= 0) continue;
+    const key = row.month.year * 12 + row.month.month;
+    const seen = byMonth.get(key);
+    if (!seen || row.rowNumber > seen.rowNumber) byMonth.set(key, { month: row.month, entry, rowNumber: row.rowNumber });
+  }
+  return [...byMonth.values()].sort((a, b) => compareYm(b.month, a.month));
+}
+
+/**
+ * The portion's latest entry before `before` (its latest entry of all when no month is given), with the entry that is the first
+ * payment of the cycle it is in: the cycle's true rent. An amount agreed for one month, or a rent that was rounded, is only the
+ * rent of its own month; the first payment of a cycle is the rent of the whole cycle, so what is suggested next is worked from it.
+ *
+ * The cycle's first payment is found by walking back from the latest entry through the portion's earlier entries (a month's lower
+ * row wins, months with no entry do not matter) while they are the same tenant's, up to and including the entry whose count is 1.
+ * The walk also stops at the earliest entry of the tenant's run (a Schedule that starts in the middle of a cycle, or a change of
+ * tenant) and at the end of an earlier cycle: an entry whose count reached the cycle length ended it, so the entry after it began
+ * a cycle even if its count was typed by hand to something other than 1, as the next-payment rule reads it.
+ *
+ * A portion whose count never resets has no hike cycle and so no first payment after a hike to trust: its anchor is the latest
+ * entry itself, and the suggestion follows the last payment, as it always did.
+ */
+export function findPriorWithAnchor(
+  rows: ScheduleRow[],
+  portion: Pick<PortionConfig, "id" | "cycleLength">,
+  before?: YearMonth,
+): { month: YearMonth; entry: PortionEntry; anchor: PortionEntry } | null {
+  const latest = latestEntryRow(rows, portion.id, before);
+  if (!latest) return null;
+  const { month, entry } = latest;
+  if (portion.cycleLength === null || entry.count === 1) return { month, entry, anchor: entry };
+
+  let anchor = entry;
+  for (const earlier of entriesBefore(rows, portion.id, month)) {
+    if (anchor.count === 1) break;
+    if (!sameTenantName(earlier.entry.tenant, entry.tenant) || startsNewCycle(earlier.entry.count, portion.cycleLength)) break;
+    anchor = earlier.entry;
+  }
+  return { month, entry, anchor };
+}
+
+/**
+ * The payment after `prior`. `baseAmount` is the rent the suggestion is worked from: the portion's true rent, the cycle's first
+ * payment (see `findPriorWithAnchor`). It is `prior`'s own amount when not given.
+ */
 export function nextPayment(
   prior: PortionEntry,
   portion: PortionConfig,
+  baseAmount: number = prior.amount,
 ): NextPayment {
   const newCycle = startsNewCycle(prior.count, portion.cycleLength);
   return {
     tenant: prior.tenant,
     count: nextCount(prior.count, portion.cycleLength),
-    previousAmount: prior.amount,
+    previousAmount: baseAmount,
     startsNewCycle: newCycle,
-    suggestedAmount: suggestAmount(prior.amount, portion.hikePercent, newCycle),
+    suggestedAmount: suggestAmount(baseAmount, portion.hikePercent, newCycle),
   };
 }
 
 /**
- * The rent a month is measured against: the suggested amount for the payment after the earlier
- * entry. None when there is no earlier entry, and none for a paid card whose tenant is not the
+ * The rent a month is measured against. None when there is no earlier entry, and none for a paid card whose tenant is not the
  * earlier entry's tenant: a new tenant's first payment has no previous rent to compare with.
  *
- * On a new cycle, an amount within the rounding allowance of the suggested hike is the owner's
- * rounded rent: it becomes the reference itself, so it never shows as extra or short.
+ * The first payment of a new cycle (the earlier entry ended the cycle) is the rent of the cycle, whatever it is: a hike the owner
+ * rounded, or a rent agreed some other way, so it is its own reference and never shows as more or less. Any other month is
+ * measured against the suggested amount, which is the true rent of its cycle (the cycle's first payment), so an amount agreed for
+ * one month still shows as more or less than rent, and moves nothing after it.
  */
 function rentReference(entry: PortionEntry | null, next: NextPayment | null): number | null {
   if (!next) return null;
   if (entry && !sameTenantName(entry.tenant, next.tenant)) return null;
-  if (entry && next.startsNewCycle && isHikeRounding(entry.amount, next.suggestedAmount)) {
-    return entry.amount;
-  }
+  if (entry && next.startsNewCycle) return entry.amount;
   return next.suggestedAmount;
 }
 
@@ -121,8 +175,8 @@ export function deriveMonthView(
         vacancy: { since: occupancy.since, previousTenant: occupancy.previousTenant },
       };
     }
-    const prior = findPriorEntry(rows, portion.id, month);
-    const next = prior ? nextPayment(prior, portion) : null;
+    const found = findPriorWithAnchor(rows, portion, month);
+    const next = found ? nextPayment(found.entry, portion, found.anchor.amount) : null;
     const reference = rentReference(entry, next);
     // Details are shown only for the tenant the card shows, so they never outlive a change of tenant.
     const name = entry?.tenant ?? next?.tenant;

@@ -289,6 +289,12 @@ The owner can add a portion, switch one off and change the order of the portions
 
 Its rows in the Tenants tab and the Payments Log stay. RentBook does not give its id (for example `p4`) to a new portion while the Tenants tab still has rows for it.
 
+## How the suggested rent is worked out
+
+The suggested rent is the true rent of the current cycle: the amount of its first payment (the payment with count 1), found by looking back through that tenant's earlier payments in your Schedule. The first payment of a new cycle is the rent of the cycle, rounded or not, so after a hike the first payment you log is taken as the new rent, and the card shows no more or less than rent for it. A different amount in another month of the cycle is treated as agreed for that month: it does not change the suggestion for the months after it, the month still shows how it differs from the rent on its card, and it is never overdue. When a cycle ends, the next payment is suggested with the hike worked from that true rent (in whole basis points, rounded to the rupee).
+
+A Schedule that starts in the middle of a cycle, or a change of tenant, starts the look-back at that tenant's earliest payment in the run, and a count typed by hand to restart a cycle ends the look-back at the cycle before it. A rent that changes for good in the middle of a cycle shows as a difference on each month until the next cycle, whose first payment then becomes the new rent, so log the rent you really agreed as the first payment after a hike. On a portion whose count is ticked Count never resets there is no hike cycle, so nothing marks a new rent: the suggestion follows the last payment, and a change of rent there becomes the suggestion at once.
+
 ## Overdue rent, the year view and alerts
 
 Three screens show the Sheet across months. They read the same data as the month screen and only read: they never write to your Sheet. Open them from More, under Rent, or from the **Needs attention** card at the top of the month screen, which shows for this month only, when something needs a look.
@@ -299,7 +305,7 @@ Three screens show the Sheet across months. They read the same data as the month
 
 **How overdue is worked out.** Rent for a month is due on the 1st and counts as overdue from the 6th, 5 days later. Only a portion's current tenant counts, from the first month of their latest unbroken run of payments, and each month is judged by the same card the month screen shows: a month is overdue only when no payment is recorded for it, and it then owes the rent the card suggests. A month with any payment recorded is never overdue, even if the amount differs from the rent, for example an amount agreed with the tenant. Vacant months, months paid ahead and the advance (the deposit) never count. A tenant who has left keeps showing as owing until you record the move-out on the tenant page; the months after it then stop counting.
 
-**Alerts.** An agreement is listed from 60 days before its end date, and stays listed after it has ended until you change the date or the tenant moves out. The Sheet has no hike date, so a hike is worked out from the payment count and the portion's cycle length in Portion settings: it is listed from 2 months before the payment that carries it. There is none for a portion whose count never resets, whose hike is 0%, or that is vacant. Agreement ends come from the `Tenants` tab, so an agreement end that was never added is not listed.
+**Alerts.** An agreement is listed from 60 days before its end date, and stays listed after it has ended until you change the date or the tenant moves out. The Sheet has no hike date, so a hike is worked out from the payment count and the portion's cycle length in Portion settings: it is listed from 2 months before the payment that carries it, with the true rent of the cycle (its first payment) as the current rent and the hike worked from it. There is none for a portion whose count never resets, whose hike is 0%, or that is vacant. Agreement ends come from the `Tenants` tab, so an agreement end that was never added is not listed.
 
 ## The Tenancy Log
 

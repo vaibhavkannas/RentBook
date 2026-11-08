@@ -126,6 +126,18 @@ describe("the month screen", () => {
     expect(shown[4]).toMatch(/^Third floor, hall and kitchen Vacant Vacant since 1 Oct 2026\. Esha moved out\. Past tenants Add tenant$/);
   });
 
+  it("keeps suggesting the true rent after an amount agreed for one month: Bala paid 12,000 for payment 11, and the hike is still worked from 12,700", async () => {
+    const tabs = world("main", FIXED_NOW).tabs;
+    tabs.Schedule[4][6] = 12000; // p2's amount in the row of last month
+    useSheet(tabs);
+    const shown = cards(await month()).map((card) => card.text);
+    expect(shown[1]).toContain("₹ 13,335");
+    expect(shown[1]).toContain("New cycle. Suggested rent includes the hike (was ₹ 12,700).");
+    // last month's card still says how the agreed amount compares with the rent, and nothing else changed
+    const last = cards(await month({ month: "2026-09" })).map((card) => card.text);
+    expect(last[1]).toContain("₹ 12,000 ₹ 700 less than rent (₹ 12,700)");
+  });
+
   it("colours each card's pill by its state, not only by its words", async () => {
     const html = await month();
     expect(html.match(new RegExp(`<span class="${pillClasses("success")}">Paid</span>`, "g"))).toHaveLength(1);

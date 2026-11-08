@@ -30,6 +30,29 @@ function section(doc: string, heading: string): string {
   return doc.slice(from, next === -1 ? undefined : next);
 }
 
+describe("SETUP.md: how the suggested rent is worked out", () => {
+  const settings = section(setup, "How the suggested rent is worked out");
+
+  it("says the suggestion is the first payment of the current hike cycle, with the hike when the cycle ends", () => {
+    expect(settings).toContain("The suggested rent is the true rent of the current cycle: the amount of its first payment");
+    expect(settings).toContain("When a cycle ends, the next payment is suggested with the hike worked from that true rent");
+  });
+
+  it("says an amount agreed for one month changes nothing after it, and a first payment is the rent whatever it is", () => {
+    expect(settings).toMatch(/A different amount in another month of the cycle .* does not change the suggestion/);
+    expect(settings).toMatch(/first payment of a new cycle is the rent of the cycle, rounded or not/);
+    expect(settings).not.toMatch(/within ₹ ?10|counts as rounded/);
+  });
+
+  it("says a portion whose count never resets keeps following the last payment, and why", () => {
+    expect(settings).toMatch(/Count never resets[\s\S]*no hike cycle[\s\S]*follows the last payment/);
+  });
+
+  it("says a rent that changes for good in the middle of a cycle shows as a difference until the next cycle", () => {
+    expect(settings).toMatch(/changes for good in the middle of a cycle[\s\S]*until the next cycle/);
+  });
+});
+
 describe("SETUP.md: Overdue rent, the year view and alerts", () => {
   const rent = section(setup, "Overdue rent, the year view and alerts");
 

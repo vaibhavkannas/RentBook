@@ -9,7 +9,8 @@ export function nextCount(lastCount: number, cycleLength: number | null): number
 }
 
 /**
- * Suggested rent for the next payment. Only a new cycle raises the rent; the
+ * Suggested rent for the next payment, worked from `previousAmount`: the portion's true rent (the first payment of its cycle),
+ * or the last payment's amount for a portion whose count never resets. Only a new cycle raises the rent; the
  * result is a whole rupee (halves round up) and the owner can always edit it before saving.
  *
  * The hike is taken in whole basis points (hundredths of a percent) and worked out with whole numbers,
@@ -24,17 +25,6 @@ export function suggestAmount(
   if (!newCycle) return previousAmount;
   const basisPoints = Math.round(hikePercent * 100);
   return Math.floor((previousAmount * (10_000 + basisPoints) + 5_000) / 10_000);
-}
-
-/**
- * On a new cycle the owner may round the hiked rent to a figure they like (nearest 5 or 10). An
- * amount this close to the suggested hike (inclusive) counts as the new rent, not as extra or short.
- */
-export const HIKE_ROUNDING_ALLOWANCE = 10;
-
-/** True when `amount` is within the rounding allowance of the suggested hiked rent. */
-export function isHikeRounding(amount: number, suggested: number): boolean {
-  return Math.abs(amount - suggested) <= HIKE_ROUNDING_ALLOWANCE;
 }
 
 /**
