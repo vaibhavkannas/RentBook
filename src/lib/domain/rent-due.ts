@@ -1,6 +1,6 @@
 import { findEntryForMonth } from "./month-view";
 import { sameTenantName } from "./tenancy";
-import type { PortionCard, ScheduleRow, YearMonth } from "./types";
+import type { ScheduleRow, YearMonth } from "./types";
 import { monthOfDay } from "./vacancy";
 import { addMonths, compareYm, daysBetween, ymKey } from "./year-month";
 
@@ -15,13 +15,6 @@ export const RENT_DUE_DAY = 1;
  * the tenant has five days.
  */
 export const OVERDUE_GRACE_DAYS = 5;
-
-/**
- * How many rupees a payment may fall short of the rent before the month counts as short. 0: any shortfall counts, as the
- * month card's "less than rent" line does. (A new cycle's rent within the rounding allowance of the hike is already paid
- * in full on the card, so that is not a shortfall either.)
- */
-export const SHORTFALL_TOLERANCE = 0;
 
 /** The day (YYYY-MM-DD) a month's rent falls due. */
 export function dueDate(month: YearMonth): string {
@@ -41,19 +34,6 @@ export function lastDueMonth(today: string): YearMonth {
 /** Whole days from the month's due date to `today`, and 0 on or before the due date. */
 export function daysOverdue(month: YearMonth, today: string): number {
   return Math.max(0, daysBetween(dueDate(month), today));
-}
-
-/**
- * What a paid card is short by, in whole rupees (as the card's "less than rent" line shows it), when it is more than
- * SHORTFALL_TOLERANCE short of its rent; 0 for a card that is not short and for every other status. A new tenant's first
- * payment has no rent to measure against, so it is never short, and a hiked rent paid within the rounding allowance is
- * already paid in full on the card.
- */
-export function cardShortfall(card: Pick<PortionCard, "status" | "rentDifference">): number {
-  if (card.status !== "paid" || card.rentDifference === null) return 0;
-  if (!(card.rentDifference < -SHORTFALL_TOLERANCE)) return 0;
-  // The card rounds the signed difference, so an exact half-rupee goes toward zero here as it does there.
-  return Math.max(0, -Math.round(card.rentDifference));
 }
 
 /**

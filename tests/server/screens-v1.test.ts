@@ -312,6 +312,21 @@ describe("Overdue rent", () => {
     ]);
   });
 
+  it("does not list a month that has a payment, at whatever amount: Asha paid 3,000 for October and 6,000 for August", async () => {
+    const tabs = tabsOf("main");
+    // the amounts of the p1 payments, in the Schedule's August and October rows (the rent is 5,450)
+    tabs.Schedule[3][3] = 6000;
+    tabs.Schedule[5][3] = 3000;
+    useSheet(tabs);
+    const html = await overdue();
+    expect(pageText(html)).toContain("₹ 31,335 overdue 2 portions · counted up to October 2026");
+    expect(named(html, "li").filter((item) => inside(item, "h2").length > 0).map((item) => inside(item, "h2").map((heading) => textOf(heading))[0])).toEqual([
+      "Second floor, single bedroom",
+      "First floor, double bedroom",
+    ]);
+    expect(pageText(html)).not.toMatch(/short|Paid ₹/);
+  });
+
   it("links each month to that month's screen, and the arrow back to the month on show", async () => {
     h.search = "month=2026-09";
     const html = await overdue({ month: "2026-09" });
@@ -411,6 +426,19 @@ describe("Year at a glance", () => {
     ]);
   });
 
+  it("shows a month paid at another amount as paid, with the amount received: no part-paid month", async () => {
+    const tabs = tabsOf("main");
+    tabs.Schedule[3][3] = 6000;
+    tabs.Schedule[5][3] = 3000;
+    useSheet(tabs);
+    const [p1] = labels(await year());
+    expect(p1.slice(7, 10)).toEqual([
+      "August 2026, First floor, single bedroom: paid ₹ 6,000",
+      "September 2026, First floor, single bedroom: paid ₹ 5,450",
+      "October 2026, First floor, single bedroom: paid ₹ 3,000",
+    ]);
+  });
+
   it("links a month to that month's screen, and a month before the Schedule leads nowhere", async () => {
     const html = await year();
     const cells = inside(rows(html)[0], "li");
@@ -419,7 +447,7 @@ describe("Year at a glance", () => {
   });
 
   it("explains the colours in a key of glyphs and words", async () => {
-    expect(pageText(await year())).toContain("Paid Part paid Unpaid Vacant Not due yet");
+    expect(pageText(await year())).toContain("Paid Unpaid Vacant Not due yet");
   });
 
   it("says nothing was recorded in a year before the Schedule, and leads to the year it starts in", async () => {
@@ -624,6 +652,13 @@ describe("the home screen's Needs attention card", () => {
       ["1 agreement ends within 60 days", "/alerts?month=2026-10"],
       ["Rent goes up soon for 1 portion", "/alerts?month=2026-10#hikes"],
     ]);
+  });
+
+  it("does not count a month paid at another amount in the overdue row", async () => {
+    const tabs = tabsOf("main");
+    tabs.Schedule[5][3] = 3000; // Asha paid 3,000 for October against the rent of 5,450
+    useSheet(tabs);
+    expect(rows(await month())?.[0]).toEqual(["Rent overdue: 2 portions, ₹ 31,335", "/overdue?month=2026-10"]);
   });
 
   it("is on this month's screen only: no card on September", async () => {

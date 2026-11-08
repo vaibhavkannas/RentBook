@@ -289,6 +289,10 @@ describe("USER-GUIDE.md", () => {
     expect(guide).toContain("five days later");
     const paragraph = guide.split("\n\n").find((part) => part.includes("counts as overdue"));
     expect(paragraph).toMatch(/Only the current tenant/);
+    // a payment recorded at any amount (one agreed with the tenant, say) is paid: it is never overdue or short
+    expect(paragraph).toMatch(/A month is overdue only when no payment is recorded for it/);
+    expect(paragraph).toMatch(/any payment recorded is never overdue, even if the amount is not the usual rent/);
+    expect(paragraph).not.toMatch(/part that is missing|paid for less/);
     expect(paragraph).toMatch(/Vacant months, months paid ahead and the advance are never counted/);
     expect(paragraph).toMatch(/until you record the move-out/);
   });
@@ -304,6 +308,8 @@ describe("USER-GUIDE.md", () => {
 
   it("names every mark of the year view's key", () => {
     for (const { label } of YEAR_LEGEND) expect(guide, label).toContain(`**${label}**`);
+    expect(guide).not.toContain("Part paid");
+    expect(guide).toMatch(/a month with a payment recorded is \*\*Paid\*\* whatever the amount/);
   });
 
   it("links to the troubleshooting guide", () => {

@@ -278,12 +278,12 @@ describe("the Year page for the fixture year (2026, today 17 October)", () => {
 });
 
 describe("a label for each state a month can be in", () => {
-  // p1: Aug paid, Sep paid, Oct paid short of 5,450; p2 owes October; p4 was never let; Jan to Jul are before the Schedule
+  // p1: Aug paid, Sep paid, Oct paid 5,000 against 5,450 (still paid); p2 owes October; p4 was never let; Jan to Jul are before the Schedule
   const rows = () => baseRows([2026, 10, [["Asha", 4, 5000], null, ["Chitra", 6, 9000], null, ["Esha", 2, 5100]]]);
 
   it.each([
     ["paid", `August 2026, First floor, single bedroom: paid ${formatRupees(5450)}`],
-    ["part paid", `October 2026, First floor, single bedroom: part paid ${formatRupees(5000)} of ${formatRupees(5450)}`],
+    ["paid at another amount", `October 2026, First floor, single bedroom: paid ${formatRupees(5000)}`],
     ["unpaid", `October 2026, First floor, double bedroom: unpaid, ${formatRupees(13335)} due`],
     ["vacant", "October 2026, Second floor, double bedroom: vacant"],
     ["not due yet", "November 2026, First floor, single bedroom: not due yet"],
@@ -306,7 +306,7 @@ describe("a label for each state a month can be in", () => {
     const cell = (card: number, month: number) => cellsOf(cards[card])[month - 1];
     const expected: [number, number, YearCellState][] = [
       [0, 8, "paid"],
-      [0, 10, "partial"],
+      [0, 10, "paid"],
       [1, 10, "unpaid"],
       [3, 10, "vacant"],
       [0, 11, "upcoming"],

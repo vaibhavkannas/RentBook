@@ -1,5 +1,5 @@
 import { deriveMonthView } from "./month-view";
-import { cardShortfall, lastDueMonth } from "./rent-due";
+import { lastDueMonth } from "./rent-due";
 import { sumAmounts } from "./rent-rules";
 import type { PortionCard, RentSnapshot, ScheduleRow, YearMonth } from "./types";
 import { monthOfDay } from "./vacancy";
@@ -7,21 +7,20 @@ import { compareYm } from "./year-month";
 
 /**
  * How a portion did in one month of a year:
- * - `paid`: an entry for the month, and not short of the rent
- * - `partial`: an entry for the month, short of the rent (as in the overdue list)
+ * - `paid`: a payment is recorded for the month, at whatever amount (an amount agreed with the tenant is as paid as the rent)
  * - `unpaid`: no entry, and the month is overdue (on or before `lastDueMonth`)
  * - `upcoming`: no entry, and the month is not overdue yet
  * - `vacant`: nobody is let the portion (it moved out, or never had a tenant) in a month the Schedule covers
  * - `none`: before the Schedule's first month, or the portion has no card that month (switched off and vacant)
  */
-export type YearCellState = "paid" | "partial" | "unpaid" | "upcoming" | "vacant" | "none";
+export type YearCellState = "paid" | "unpaid" | "upcoming" | "vacant" | "none";
 
 /**
  * One month of one portion. `received` is the amount entered; `due` the rent for the month (the card's reference rent, or
- * the amount when a paid card has none), counted only for paid, partial and unpaid months; `shortBy` how much a partial month
- * is short, in whole rupees (0 otherwise).
+ * the amount when a paid card has none), counted only for paid and unpaid months. Both are the month screen's own figures, so
+ * a month paid at another amount adds what was paid to `received` and the rent to `due`, as the month summary does.
  */
-export type YearCell = { month: YearMonth; state: YearCellState; received: number; due: number; shortBy: number };
+export type YearCell = { month: YearMonth; state: YearCellState; received: number; due: number };
 
 export type YearRow = { portionId: string; name: string; cells: YearCell[]; received: number; due: number };
 
@@ -45,7 +44,7 @@ function firstScheduleMonth(rows: ScheduleRow[]): YearMonth | null {
   return first ? { ...first } : null;
 }
 
-const NO_MONEY = { received: 0, due: 0, shortBy: 0 };
+const NO_MONEY = { received: 0, due: 0 };
 
 /** The cell of a card (null: the portion has none that month) in a month, given the Schedule's first month and the last overdue month. */
 function cellFor(
@@ -60,13 +59,11 @@ function cellFor(
     case "paid": {
       const received = card.entry?.amount ?? 0;
       // The month view's own rule for what is due: the reference rent, or the amount when the card has none.
-      const due = card.rentReference ?? received;
-      const shortBy = cardShortfall(card);
-      return shortBy > 0 ? cell("partial", { received, due, shortBy }) : cell("paid", { received, due, shortBy: 0 });
+      return cell("paid", { received, due: card.rentReference ?? received });
     }
     case "pending":
       return compareYm(month, last) <= 0
-        ? cell("unpaid", { received: 0, due: card.rentReference ?? 0, shortBy: 0 })
+        ? cell("unpaid", { received: 0, due: card.rentReference ?? 0 })
         : cell("upcoming");
     default:
       // vacant, and needs-tenant (a portion that has not had its first tenant yet) from the Schedule's first month on

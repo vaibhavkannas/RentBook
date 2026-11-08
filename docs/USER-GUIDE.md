@@ -36,9 +36,9 @@ On each card, **Details** (or **Add details**, when none are saved) opens the te
 
 These three are under **More**, and only read your Sheet.
 
-**Overdue rent** lists who owes what, the most owed first, with the months behind each amount; tap a month to open it. Rent is due on the 1st and counts as overdue from the 6th, five days later. Only the current tenant counts. An unpaid month owes the usual rent, and a month paid for less owes the part that is missing. Vacant months, months paid ahead and the advance are never counted. A tenant who has left keeps showing until you record the move-out.
+**Overdue rent** lists who owes what, the most owed first, with the months behind each amount; tap a month to open it. Rent is due on the 1st and counts as overdue from the 6th, five days later. Only the current tenant counts. A month is overdue only when no payment is recorded for it, and it then owes the usual rent. A month with any payment recorded is never overdue, even if the amount is not the usual rent, for example an amount you agreed with the tenant. Vacant months, months paid ahead and the advance are never counted. A tenant who has left keeps showing until you record the move-out.
 
-**Year at a glance** shows each portion's twelve months of a year as a grid, with what was received against what was due. A key under the summary says what each mark means (**Paid**, **Part paid**, **Unpaid**, **Vacant**, **Not due yet**). Tap a month to open it.
+**Year at a glance** shows each portion's twelve months of a year as a grid, with what was received against what was due. A key under the summary says what each mark means (**Paid**, **Unpaid**, **Vacant**, **Not due yet**); a month with a payment recorded is **Paid** whatever the amount. Tap a month to open it.
 
 **Agreements and hikes** lists agreements that have ended or end within 60 days, and rent increases coming within the next 2 months. A hike comes with the first payment of a new cycle, so the screen works it out from the count and the portion's cycle length. It lists none for a portion whose count never resets, whose hike is 0%, or that is vacant. The app sends no reminders: look here.
 

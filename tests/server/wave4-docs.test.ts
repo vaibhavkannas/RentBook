@@ -58,6 +58,11 @@ describe("SETUP.md: Overdue rent, the year view and alerts", () => {
     expect(paragraph).toMatch(/vacant/i);
     expect(paragraph).toMatch(/deposit|advance/i);
     expect(paragraph).toMatch(/move-out/);
+    // a payment recorded at any amount is paid: only a month with no payment is overdue
+    expect(paragraph).toMatch(/overdue only when no payment is recorded for it/);
+    expect(paragraph).toMatch(/any payment recorded is never overdue, even if the amount differs from the rent/);
+    expect(paragraph).not.toMatch(/part that is missing|paid for less/);
+    expect(rent).not.toMatch(/paid short/);
   });
 
   it("says when an agreement is flagged and when a hike is, with the numbers the code uses", () => {

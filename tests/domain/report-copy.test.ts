@@ -71,55 +71,44 @@ describe("overdueAge", () => {
 
 describe("overdueMonthLine", () => {
   it("says an unpaid month is unpaid, and what is owed", () => {
-    expect(overdueMonthLine({ kind: "unpaid", expected: 13335, paid: 0, owed: 13335 })).toBe("Unpaid: ₹ 13,335");
-    expect(overdueMonthLine({ kind: "unpaid", expected: 5450, paid: 0, owed: 5450 })).toBe("Unpaid: ₹ 5,450");
-  });
-
-  it("says what a short month paid, of what, and what is short", () => {
-    expect(overdueMonthLine({ kind: "short", expected: 13335, paid: 13300, owed: 35 })).toBe(
-      "Paid ₹ 13,300 of ₹ 13,335: ₹ 35 short",
-    );
-    expect(overdueMonthLine({ kind: "short", expected: 5450, paid: 5000, owed: 450 })).toBe(
-      "Paid ₹ 5,000 of ₹ 5,450: ₹ 450 short",
-    );
+    expect(overdueMonthLine({ owed: 13335 })).toBe("Unpaid: ₹\u00a013,335");
+    expect(overdueMonthLine({ owed: 5450 })).toBe("Unpaid: ₹\u00a05,450");
   });
 
   it("groups the digits the Indian way", () => {
-    expect(overdueMonthLine({ kind: "unpaid", expected: 105000, paid: 0, owed: 105000 })).toBe("Unpaid: ₹ 1,05,000");
+    expect(overdueMonthLine({ owed: 105000 })).toBe("Unpaid: ₹\u00a01,05,000");
   });
 });
 
 describe("overdueSummary", () => {
-  const item = (unpaid: number, short: number, tenant = "Asha") => ({ tenant, unpaid, short });
+  /** An item with `unpaid` months owed, each of ₹ 1. */
+  const item = (unpaid: number, tenant = "Asha") => ({
+    tenant,
+    months: Array.from({ length: unpaid }, (_, index) => ({ month: { year: 2026, month: index % 12 + 1 }, owed: 1, dueDate: "2026-01-01", daysOverdue: 1 })),
+  });
 
   it("says the tenant and how many months are unpaid, in the singular and the plural", () => {
-    expect(overdueSummary(item(1, 0, "Bala"))).toBe("Bala · 1 unpaid month");
-    expect(overdueSummary(item(2, 0, "Bala"))).toBe("Bala · 2 unpaid months");
-    expect(overdueSummary(item(21, 0))).toBe("Asha · 21 unpaid months");
+    expect(overdueSummary(item(1, "Bala"))).toBe("Bala · 1 unpaid month");
+    expect(overdueSummary(item(2, "Bala"))).toBe("Bala · 2 unpaid months");
+    expect(overdueSummary(item(21))).toBe("Asha · 21 unpaid months");
   });
 
-  it("adds how many months were paid short, when there are any", () => {
-    expect(overdueSummary(item(1, 1))).toBe("Asha · 1 unpaid month · 1 paid short");
-    expect(overdueSummary(item(2, 1))).toBe("Asha · 2 unpaid months · 1 paid short");
-    expect(overdueSummary(item(1, 3))).toBe("Asha · 1 unpaid month · 3 paid short");
-  });
-
-  it("does not say 0 unpaid months when every month is a short one", () => {
-    expect(overdueSummary(item(0, 1))).toBe("Asha · 1 month paid short");
-    expect(overdueSummary(item(0, 2))).toBe("Asha · 2 months paid short");
+  it("says nothing of a month paid short: a month with a payment is not owed", () => {
+    for (const text of [overdueSummary(item(1)), overdueSummary(item(3))]) expect(text).not.toMatch(/\bshort\b|\bpaid\b/i);
   });
 
   it("does not start with a dot when the Schedule has no name for the tenant", () => {
-    expect(overdueSummary(item(2, 0, ""))).toBe("No tenant name · 2 unpaid months");
-    expect(overdueSummary(item(1, 1, "   "))).toBe("No tenant name · 1 unpaid month · 1 paid short");
+    expect(overdueSummary(item(2, ""))).toBe("No tenant name · 2 unpaid months");
+    expect(overdueSummary(item(1, "   "))).toBe("No tenant name · 1 unpaid month");
   });
 });
 
 describe("OVERDUE_RULES", () => {
-  it("states the four rules in plain words", () => {
+  it("states the rules in plain words, and that any recorded payment is paid whatever its amount", () => {
     expect(OVERDUE_RULES).toEqual([
       "Rent for a month is due on the 1st and counts as overdue from the 6th.",
-      "Amounts are what each month's card shows: the suggested rent for an unpaid month, or the part missing from a short one.",
+      "A month is overdue only when no payment is recorded for it. It owes the rent its card suggests.",
+      "A month with any payment recorded is never overdue, even if the amount differs from the rent, for example an amount you agreed with the tenant.",
       "Only the current tenant's months count. Vacant months and months paid ahead never do.",
       "A deposit is not rent and is never counted.",
     ]);
@@ -227,7 +216,6 @@ describe("yearCellLabel", () => {
     state: "paid",
     received: 0,
     due: 0,
-    shortBy: 0,
     ...overrides,
   });
   const portion = "First floor, single bedroom";
@@ -238,10 +226,13 @@ describe("yearCellLabel", () => {
     );
   });
 
-  it("says what a part-paid month received, of what was due", () => {
-    expect(
-      yearCellLabel(cell({ month: { year: 2026, month: 10 }, state: "partial", received: 5000, due: 5450, shortBy: 450 }), portion),
-    ).toBe("October 2026, First floor, single bedroom: part paid ₹\u00a05,000 of ₹\u00a05,450");
+  it("says what a paid month received, even when that is not the rent", () => {
+    expect(yearCellLabel(cell({ month: { year: 2026, month: 10 }, state: "paid", received: 5000, due: 5450 }), portion)).toBe(
+      "October 2026, First floor, single bedroom: paid ₹\u00a05,000",
+    );
+    expect(yearCellLabel(cell({ month: { year: 2026, month: 10 }, state: "paid", received: 9000, due: 5450 }), portion)).toBe(
+      "October 2026, First floor, single bedroom: paid ₹\u00a09,000",
+    );
   });
 
   it("says what an unpaid month has due", () => {
@@ -271,12 +262,11 @@ describe("YEAR_LEGEND", () => {
   it("lists a glyph and a word for every state a cell can show but none", () => {
     expect(YEAR_LEGEND.map((item) => `${item.glyph} ${item.label}`)).toEqual([
       "✓ Paid",
-      "½ Part paid",
       "! Unpaid",
       "– Vacant",
       "· Not due yet",
     ]);
-    expect(YEAR_LEGEND.map((item) => item.state)).toEqual(["paid", "partial", "unpaid", "vacant", "upcoming"]);
+    expect(YEAR_LEGEND.map((item) => item.state)).toEqual(["paid", "unpaid", "vacant", "upcoming"]);
   });
 
   it("gives each glyph once, so a state is never told apart by colour alone", () => {
@@ -433,6 +423,22 @@ describe("attentionItems", () => {
       { href: "/alerts?month=2026-10", text: "1 agreement ends within 60 days", tone: "warn" },
       { href: "/alerts?month=2026-10#hikes", text: "Rent goes up soon for 1 portion", tone: "neutral" },
     ]);
+  });
+
+  it("does not count a month paid at another amount: only months with no payment make Rent overdue", () => {
+    // p1 paid ₹ 5 000 and p3 ₹ 9 500 for October; p2 and p5 have paid nothing
+    const rows = baseRows([2026, 10, [["Asha", 4, 5000], null, ["Chitra", 6, 9500]]]);
+    const snapshot = { rows, portions: PORTIONS, tenancies: [] };
+    const overdue = overdueList(snapshot, TODAY);
+    expect(attentionItems({ overdue, agreements: [], hikes: [], monthKey: "2026-10" })).toEqual([
+      { href: "/overdue?month=2026-10", text: "Rent overdue: 2 portions, ₹\u00a018,435", tone: "danger" },
+    ]);
+  });
+
+  it("has no Rent overdue row when every month has a payment, whatever the amounts", () => {
+    const rows = baseRows([2026, 10, [["Asha", 4, 5000], ["Bala", 1, 1], ["Chitra", 6, 9500], null, ["Esha", 3, 100000]]]);
+    const snapshot = { rows, portions: PORTIONS, tenancies: [] };
+    expect(attentionItems({ overdue: overdueList(snapshot, TODAY), agreements: [], hikes: [], monthKey: "2026-10" })).toEqual([]);
   });
 
   it("says portion, agreement and portions, agreements in the singular and the plural", () => {

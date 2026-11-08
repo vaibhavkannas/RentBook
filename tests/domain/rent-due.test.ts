@@ -1,24 +1,18 @@
 import { describe, expect, it } from "vitest";
-import { deriveMonthView } from "@/lib/domain/month-view";
 import {
-  cardShortfall,
   dueDate,
   daysOverdue,
   lastDueMonth,
   latestTenantStart,
   OVERDUE_GRACE_DAYS,
   RENT_DUE_DAY,
-  SHORTFALL_TOLERANCE,
 } from "@/lib/domain/rent-due";
-import type { PortionCard, ScheduleRow, YearMonth } from "@/lib/domain/types";
+import type { YearMonth } from "@/lib/domain/types";
 import { todayIso } from "@/lib/domain/year-month";
-import { baseRows, PORTIONS, parsedRows } from "../support/fixtures";
+import { baseRows, parsedRows } from "../support/fixtures";
 
 const SEP: YearMonth = { year: 2026, month: 9 };
 const OCT: YearMonth = { year: 2026, month: 10 };
-
-const cardOf = (rows: ScheduleRow[], id: string, month: YearMonth): PortionCard =>
-  deriveMonthView(rows, PORTIONS, month).cards.find((card) => card.portionId === id)!;
 
 describe("the constants", () => {
   it("fall due on a day every month has, and give a whole number of days of grace", () => {
@@ -29,10 +23,9 @@ describe("the constants", () => {
     expect(OVERDUE_GRACE_DAYS).toBeGreaterThanOrEqual(0);
   });
 
-  it("are the owner's rule: due on the 1st, overdue from the 6th, any shortfall counts", () => {
+  it("are the owner's rule: due on the 1st, overdue from the 6th", () => {
     expect(RENT_DUE_DAY).toBe(1);
     expect(OVERDUE_GRACE_DAYS).toBe(5);
-    expect(SHORTFALL_TOLERANCE).toBe(0);
   });
 });
 
@@ -99,70 +92,6 @@ describe("daysOverdue", () => {
   it("counts the leap day", () => {
     expect(daysOverdue({ year: 2028, month: 2 }, "2028-03-01")).toBe(29);
     expect(daysOverdue({ year: 2026, month: 2 }, "2026-03-01")).toBe(28);
-  });
-});
-
-describe("cardShortfall, on the cards the month screen shows", () => {
-  it("is 0 for a hiked month paid within the rounding allowance of the hike", () => {
-    // Bala's cycle ended in September (count 11 at 12 700): October is a new cycle, suggested 13 335.
-    const oct = (amount: number) => baseRows([2026, 10, [null, ["Bala", 1, amount]]]);
-    expect(cardShortfall(cardOf(oct(13340), "p2", OCT))).toBe(0);
-    expect(cardShortfall(cardOf(oct(13335), "p2", OCT))).toBe(0);
-    expect(cardShortfall(cardOf(oct(13325), "p2", OCT))).toBe(0);
-    expect(cardShortfall(cardOf(oct(13345), "p2", OCT))).toBe(0);
-  });
-
-  it("is what is missing for a hiked month paid beyond the allowance", () => {
-    const oct = (amount: number) => baseRows([2026, 10, [null, ["Bala", 1, amount]]]);
-    expect(cardShortfall(cardOf(oct(13300), "p2", OCT))).toBe(35);
-    expect(cardShortfall(cardOf(oct(13324), "p2", OCT))).toBe(11);
-    // paying the old rent on a new cycle is short by the hike
-    expect(cardShortfall(cardOf(oct(12700), "p2", OCT))).toBe(635);
-  });
-
-  it("is what the card's less-than-rent line says for an ordinary short month", () => {
-    const card = cardOf(baseRows([2026, 10, [["Asha", 4, 5000]]]), "p1", OCT);
-    expect(card.rentDifference).toBe(-450);
-    expect(cardShortfall(card)).toBe(450);
-    expect(cardShortfall(cardOf(baseRows([2026, 10, [["Asha", 4, 5449]]]), "p1", OCT))).toBe(1);
-  });
-
-  it("is 0 for a month paid in full, or with more than the rent", () => {
-    expect(cardShortfall(cardOf(baseRows([2026, 10, [["Asha", 4, 5450]]]), "p1", OCT))).toBe(0);
-    expect(cardShortfall(cardOf(baseRows([2026, 10, [["Asha", 4, 6000]]]), "p1", OCT))).toBe(0);
-    expect(cardShortfall(cardOf(baseRows(), "p1", SEP))).toBe(0);
-  });
-
-  it("is 0 for a new tenant's first payment, which has no rent to fall short of", () => {
-    const card = cardOf(baseRows([2026, 10, [["Bala", 1, 1000]]]), "p1", OCT);
-    expect(card).toMatchObject({ status: "paid", rentReference: null, rentDifference: null });
-    expect(cardShortfall(card)).toBe(0);
-  });
-
-  it("is 0 for a card that is not paid", () => {
-    const rows = baseRows();
-    expect(cardOf(rows, "p1", OCT).status).toBe("pending");
-    expect(cardShortfall(cardOf(rows, "p1", OCT))).toBe(0);
-    expect(cardOf(rows, "p4", OCT).status).toBe("needs-tenant");
-    expect(cardShortfall(cardOf(rows, "p4", OCT))).toBe(0);
-    expect(cardShortfall({ status: "vacant", rentDifference: -500 })).toBe(0);
-    expect(cardShortfall({ status: "pending", rentDifference: -500 })).toBe(0);
-    expect(cardShortfall({ status: "needs-tenant", rentDifference: -500 })).toBe(0);
-  });
-
-  it("is a whole rupee, as the card's line is, and 0 where the card says nothing", () => {
-    expect(cardShortfall({ status: "paid", rentDifference: -450.4 })).toBe(450);
-    expect(cardShortfall({ status: "paid", rentDifference: -450.6 })).toBe(451);
-    expect(cardShortfall({ status: "paid", rentDifference: -0.4 })).toBe(0);
-    expect(cardShortfall({ status: "paid", rentDifference: -1 })).toBe(1);
-    // the card rounds the signed difference, so an exact half goes toward zero there and here
-    expect(cardShortfall({ status: "paid", rentDifference: -0.5 })).toBe(0);
-    expect(cardShortfall({ status: "paid", rentDifference: -0.51 })).toBe(1);
-    expect(cardShortfall({ status: "paid", rentDifference: -450.5 })).toBe(450);
-    expect(cardShortfall({ status: "paid", rentDifference: -1.5 })).toBe(1);
-    expect(cardShortfall({ status: "paid", rentDifference: 0 })).toBe(0);
-    expect(cardShortfall({ status: "paid", rentDifference: 12 })).toBe(0);
-    expect(cardShortfall({ status: "paid", rentDifference: null })).toBe(0);
   });
 });
 

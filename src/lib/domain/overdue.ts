@@ -1,19 +1,15 @@
 import { deriveMonthView } from "./month-view";
-import { cardShortfall, daysOverdue, dueDate, lastDueMonth, latestTenantStart } from "./rent-due";
+import { daysOverdue, dueDate, lastDueMonth, latestTenantStart } from "./rent-due";
 import { sumAmounts } from "./rent-rules";
 import type { PortionCard, RentSnapshot, YearMonth } from "./types";
 import { addMonths, compareYm } from "./year-month";
 
 /**
- * One month a portion's tenant owes rent for. `unpaid`: nothing entered, `owed` is the card's suggested rent for the month.
- * `short`: paid, but less than the rent, `owed` is what the card's "less than rent" line says is missing. `expected` is the
- * rent the month is measured against and `paid` what was entered (0 when unpaid). Whole rupees owed; `dueDate` is YYYY-MM-DD.
+ * One month a portion's tenant owes rent for: a month with no payment recorded. `owed` is the rent its card suggests for the
+ * month, in whole rupees; `dueDate` is YYYY-MM-DD.
  */
 export type OverdueMonth = {
   month: YearMonth;
-  kind: "unpaid" | "short";
-  expected: number;
-  paid: number;
   owed: number;
   dueDate: string;
   daysOverdue: number;
@@ -28,36 +24,28 @@ export type OverdueItem = {
   owed: number;
   oldest: YearMonth;
   daysOverdue: number;
-  unpaid: number;
-  short: number;
 };
 
 /**
- * What a month card says is owed for its month, or null when nothing is: a pending card is owed its suggested rent, a paid
- * card that is short is owed the shortfall. Every other card (paid in full, extra, vacant, needs a tenant) owes nothing, and
- * so does a month whose rent is nothing. Every figure is the card's own, in whole rupees.
+ * What a month card says is owed for its month, or null when nothing is. Only a card with no payment (pending) owes: its
+ * suggested rent. A card with any payment recorded is paid, whatever the amount (the owner and the tenant may have agreed one
+ * for the month), so it owes nothing, and neither does a vacant or needs-tenant card, or a month whose rent is nothing. Every
+ * figure is the card's own, in whole rupees.
  */
 function monthOwed(card: PortionCard, month: YearMonth, today: string): OverdueMonth | null {
-  const base = { month, dueDate: dueDate(month), daysOverdue: daysOverdue(month, today) };
-  if (card.status === "pending" && card.rentReference !== null) {
-    const owed = Math.round(card.rentReference);
-    return owed > 0 ? { ...base, kind: "unpaid", expected: card.rentReference, paid: 0, owed } : null;
-  }
-  if (card.status === "paid" && card.entry) {
-    const owed = cardShortfall(card);
-    if (owed <= 0) return null;
-    return { ...base, kind: "short", expected: card.rentReference ?? card.entry.amount, paid: card.entry.amount, owed };
-  }
-  return null;
+  if (card.status !== "pending" || card.rentReference === null) return null;
+  const owed = Math.round(card.rentReference);
+  return owed > 0 ? { month, owed, dueDate: dueDate(month), daysOverdue: daysOverdue(month, today) } : null;
 }
 
 /**
  * Who owes rent on `today` (YYYY-MM-DD, India time), and for which months. Per portion only the tenant of its latest Schedule
  * entry is looked at, from the first month of their latest unbroken run of entries to the last month that is overdue
- * (`lastDueMonth`), each month judged by the portion's card from `deriveMonthView`, which is the figure the month screen shows.
- * Vacant, needs-tenant and switched-off months have no due card and are skipped; a month paid ahead is after the last due
- * month and never counts, nor does it make up an earlier month. Most owed first; equal amounts, the oldest month first; then
- * Settings order. Portions that owe nothing are left out.
+ * (`lastDueMonth`), each month judged by the portion's card from `deriveMonthView`: a month is overdue only when it has no
+ * payment entry, and it owes the rent the card suggests. A month with any payment recorded, however much more or less than the
+ * rent, is never overdue. Vacant, needs-tenant and switched-off months have no due card and are skipped; a month paid ahead is
+ * after the last due month and never counts, nor does it make up an earlier month. Most owed first; equal amounts, the oldest
+ * month first; then Settings order. Portions that owe nothing are left out.
  */
 export function overdueList(snapshot: RentSnapshot, today: string): OverdueItem[] {
   const { rows, portions, tenancies } = snapshot;
@@ -100,8 +88,6 @@ export function overdueList(snapshot: RentSnapshot, today: string): OverdueItem[
       owed: sumAmounts(months.map((m) => m.owed)),
       oldest: months[0].month,
       daysOverdue: months[0].daysOverdue,
-      unpaid: months.filter((m) => m.kind === "unpaid").length,
-      short: months.filter((m) => m.kind === "short").length,
     });
   }
   // `items` is in Settings order and the sort is stable, so equal amounts of the same age stay in that order.

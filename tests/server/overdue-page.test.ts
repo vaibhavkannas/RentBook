@@ -194,21 +194,34 @@ describe("the Overdue page with rent owed", () => {
       expect(visibleText(html)).toContain(`${formatRupees(27250)} overdue`);
     });
 
-    it("says a month paid short with what was paid and what is missing, as the card does", async () => {
-      // September is paid 450 short of the 5,450 rent; October's card then suggests the 5,000 last paid
-      const short = parsedRows(
+    it("does not list a month paid at another amount: only the month with no payment is there, at the card's rent", async () => {
+      // September is paid 5,000 against the 5,450 rent, perhaps an amount agreed with the tenant; October has no payment, and
+      // its card suggests the 5,000 last paid
+      const lower = parsedRows(
         [2026, 8, [["Asha", 1, 5450], ["Bala", 3, 12700]]],
         [2026, 9, [["Asha", 2, 5000], ["Bala", 4, 12700]]],
         [2026, 10, [null, ["Bala", 5, 12700]]],
       );
-      mocks.loadPageSnapshot.mockResolvedValue(snapshot({ rows: short }));
-      const [card] = itemCards(await render());
-      expect(monthLinks(card).map((link) => link.text)).toEqual([
-        `October 2026 Unpaid: ${formatRupees(5000)} ›`,
-        `September 2026 Paid ${formatRupees(5000)} of ${formatRupees(5450)}: ${formatRupees(450)} short ›`,
-      ]);
-      expect(visibleText(card)).toContain("Asha · 1 unpaid month · 1 paid short");
-      expect(visibleText(card)).toContain("Oldest: September 2026");
+      mocks.loadPageSnapshot.mockResolvedValue(snapshot({ rows: lower }));
+      const html = await render();
+      const [card] = itemCards(html);
+      expect(monthLinks(card).map((link) => link.text)).toEqual([`October 2026 Unpaid: ${formatRupees(5000)} ›`]);
+      expect(visibleText(card)).toContain("Asha · 1 unpaid month");
+      expect(visibleText(card)).toContain("Oldest: October 2026");
+      expect(visibleText(html)).toContain(`${formatRupees(5000)} overdue`);
+      expect(visibleText(html)).not.toMatch(/short|Paid ₹/);
+    });
+
+    it("lists nothing for a portion whose every month has a payment, at any amount", async () => {
+      const agreed = parsedRows(
+        [2026, 8, [["Asha", 1, 5450]]],
+        [2026, 9, [["Asha", 2, 3000]]],
+        [2026, 10, [["Asha", 3, 9000]]],
+      );
+      mocks.loadPageSnapshot.mockResolvedValue(snapshot({ rows: agreed }));
+      const html = await render();
+      expect(itemCards(html)).toEqual([]);
+      expect(visibleText(html)).toContain("Nothing overdue");
     });
 
     it("sends the person to the tenant page when the oldest month is more than three months back, keeping the month", async () => {

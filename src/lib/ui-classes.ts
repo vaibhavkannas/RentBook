@@ -61,7 +61,6 @@ export const ICON_BUTTON_OFF = "grid min-h-11 min-w-11 place-items-center rounde
  */
 const YEAR_CELL: Record<YearCellState, string> = {
   paid: "bg-success-bg text-success-ink",
-  partial: "bg-warn-bg text-warn-ink",
   unpaid: "bg-danger-bg text-danger-ink",
   vacant: "bg-line text-foreground",
   upcoming: "border border-dashed border-line text-muted",

@@ -70,11 +70,11 @@ describe("deriveYearView on the base Schedule (August and September 2026), today
   });
 
   it("carries the money in each cell: the amount entered, the rent due, nothing for the rest", () => {
-    expect(cellOf(view, "p2", 8)).toEqual({ month: { year: 2026, month: 8 }, state: "paid", received: 12700, due: 12700, shortBy: 0 });
+    expect(cellOf(view, "p2", 8)).toEqual({ month: { year: 2026, month: 8 }, state: "paid", received: 12700, due: 12700 });
     // October is unpaid for p2 at the hiked rent of a new cycle
-    expect(cellOf(view, "p2", 10)).toEqual({ month: { year: 2026, month: 10 }, state: "unpaid", received: 0, due: 13335, shortBy: 0 });
+    expect(cellOf(view, "p2", 10)).toEqual({ month: { year: 2026, month: 10 }, state: "unpaid", received: 0, due: 13335 });
     for (const [id, month] of [["p2", 11], ["p4", 9], ["p5", 8], ["p1", 3]] as const) {
-      expect(cellOf(view, id, month)).toMatchObject({ received: 0, due: 0, shortBy: 0 });
+      expect(cellOf(view, id, month)).toMatchObject({ received: 0, due: 0 });
     }
   });
 
@@ -114,31 +114,24 @@ describe("deriveYearView agrees with the month screen", () => {
     const rows = baseRows([2026, 10, [["Asha", 4, 5000], null, ["Chitra", 6, 9500]]]);
     const view = deriveYearView(snapshot(rows), 2026, TODAY);
     const oct = deriveMonthView(rows, PORTIONS, { year: 2026, month: 10 });
+    // paid less than the rent: the card says so, and the cell is paid all the same
     expect(oct.cards.find((card) => card.portionId === "p1")?.rentDifference).toBe(-450);
-    expect(cellOf(view, "p1", 10).state).toBe("partial");
+    expect(cellOf(view, "p1", 10).state).toBe("paid");
     // more than the rent is paid
     expect(oct.cards.find((card) => card.portionId === "p3")?.rentDifference).toBe(500);
     expect(cellOf(view, "p3", 10)).toMatchObject({ state: "paid", received: 9500, due: 9000 });
   });
 });
 
-describe("deriveYearView: short and ahead", () => {
-  it("shows a short month as partial, with what is short", () => {
-    const view = deriveYearView(snapshot(baseRows([2026, 10, [["Asha", 4, 5000]]])), 2026, TODAY);
-    expect(cellOf(view, "p1", 10)).toEqual({ month: { year: 2026, month: 10 }, state: "partial", received: 5000, due: 5450, shortBy: 450 });
-    expect(rowOf(view, "p1")).toMatchObject({ received: 15900, due: 16350 });
-  });
-
-  it("shows a hiked month paid within the rounding allowance as paid, and beyond it as partial", () => {
-    const hike = (amount: number) =>
-      deriveYearView(snapshot(baseRows([2026, 10, [null, ["Bala", 1, amount]]])), 2026, TODAY);
-    expect(cellOf(hike(13340), "p2", 10)).toMatchObject({ state: "paid", received: 13340, due: 13340, shortBy: 0 });
-    expect(cellOf(hike(13300), "p2", 10)).toMatchObject({ state: "partial", received: 13300, due: 13335, shortBy: 35 });
+describe("deriveYearView: paid at another amount, and ahead", () => {
+  it("shows a hiked month paid within the rounding allowance of the hike as paid, with the amount as the rent due", () => {
+    const view = deriveYearView(snapshot(baseRows([2026, 10, [null, ["Bala", 1, 13340]]])), 2026, TODAY);
+    expect(cellOf(view, "p2", 10)).toMatchObject({ state: "paid", received: 13340, due: 13340 });
   });
 
   it("shows a new tenant's first payment as paid, with the amount as the rent due", () => {
     const view = deriveYearView(snapshot(baseRows([2026, 10, [["Dev", 1, 100]]])), 2026, TODAY);
-    expect(cellOf(view, "p1", 10)).toMatchObject({ state: "paid", received: 100, due: 100, shortBy: 0 });
+    expect(cellOf(view, "p1", 10)).toMatchObject({ state: "paid", received: 100, due: 100 });
   });
 
   it("counts a month paid ahead in both what was received and what is due", () => {
@@ -148,11 +141,6 @@ describe("deriveYearView: short and ahead", () => {
     expect(cellOf(view, "p1", 12)).toMatchObject({ received: 5450, due: 5450 });
     expect(view.received).toBe(59400 + 5450);
     expect(view.due).toBe(92285 + 5450);
-  });
-
-  it("shows a short month that is paid ahead as partial", () => {
-    const view = deriveYearView(snapshot(baseRows([2026, 12, [["Asha", 4, 5000]]])), 2026, TODAY);
-    expect(cellOf(view, "p1", 12)).toMatchObject({ state: "partial", shortBy: 450 });
   });
 
   it("does not count a month that is not due yet", () => {
@@ -330,7 +318,7 @@ describe("deriveYearView: odd rows", () => {
   it("reads a month typed twice as the lower row", () => {
     const rows = parsedRows([2026, 8, [["Asha", 2, 5450]]], [2026, 9, [["Asha", 3, 5450]]], [2026, 9, [["Asha", 3, 5000]]]);
     const view = deriveYearView(snapshot(rows), 2026, TODAY);
-    expect(cellOf(view, "p1", 9)).toMatchObject({ state: "partial", received: 5000, shortBy: 450 });
+    expect(cellOf(view, "p1", 9)).toMatchObject({ state: "paid", received: 5000, due: 5450 });
   });
 
   it("shows a blank month between two paid months as unpaid", () => {
@@ -428,5 +416,68 @@ describe("yearNeighbours", () => {
 
   it("for a Schedule that starts after this year, offers the Schedule's first year as next", () => {
     expect(yearNeighbours(2026, yearBounds(parsedRows([2027, 2, [["Asha", 1, 5000]]]), TODAY))).toEqual({ previous: null, next: 2027 });
+  });
+});
+
+describe("deriveYearView: a month with any payment recorded is paid", () => {
+  const OCT = { year: 2026, month: 10 };
+
+  it("shows a month paid at a lower amount as paid, with the amount received and the rent due", () => {
+    const view = deriveYearView(snapshot(baseRows([2026, 10, [["Asha", 4, 5000]]])), 2026, TODAY);
+    expect(cellOf(view, "p1", 10)).toEqual({ month: OCT, state: "paid", received: 5000, due: 5450 });
+    expect(rowOf(view, "p1")).toMatchObject({ received: 15900, due: 16350 });
+  });
+
+  it("shows a month paid at a higher amount as paid", () => {
+    const view = deriveYearView(snapshot(baseRows([2026, 10, [["Asha", 4, 9000]]])), 2026, TODAY);
+    expect(cellOf(view, "p1", 10)).toEqual({ month: OCT, state: "paid", received: 9000, due: 5450 });
+  });
+
+  it("shows a hiked month as paid whatever was paid", () => {
+    for (const amount of [13340, 13300, 13324, 12700, 1]) {
+      const view = deriveYearView(snapshot(baseRows([2026, 10, [null, ["Bala", 1, amount]]])), 2026, TODAY);
+      expect(cellOf(view, "p2", 10).state, String(amount)).toBe("paid");
+      expect(cellOf(view, "p2", 10).received).toBe(amount);
+    }
+  });
+
+  it("shows a month paid ahead at a lower amount as paid", () => {
+    const view = deriveYearView(snapshot(baseRows([2026, 12, [["Asha", 4, 5000]]])), 2026, TODAY);
+    expect(cellOf(view, "p1", 12)).toMatchObject({ state: "paid", received: 5000, due: 5450 });
+  });
+
+  it("is the owner's example: September paid 5 000 against 5 450, October paid 5 450, both paid", () => {
+    const rows = parsedRows([2026, 8, [["Asha", 2, 5450]]], [2026, 9, [["Asha", 3, 5000]]], [2026, 10, [["Asha", 4, 5450]]]);
+    expect(states(deriveYearView(snapshot(rows), 2026, TODAY), "p1").slice(7, 10)).toEqual(["paid", "paid", "paid"]);
+    // the extra payment that makes the next month read "less than rent" on its card
+    const ahead = parsedRows([2026, 8, [["Asha", 2, 5450]]], [2026, 9, [["Asha", 3, 6000]]], [2026, 10, [["Asha", 4, 5450]]]);
+    expect(states(deriveYearView(snapshot(ahead), 2026, TODAY), "p1").slice(7, 10)).toEqual(["paid", "paid", "paid"]);
+  });
+
+  it("still shows a month with no payment beside it as unpaid, at the rent its card suggests", () => {
+    const rows = parsedRows([2026, 8, [["Asha", 2, 5450]]], [2026, 9, [["Asha", 3, 5000]]]);
+    const view = deriveYearView(snapshot(rows), 2026, TODAY);
+    expect(cellOf(view, "p1", 9)).toMatchObject({ state: "paid", received: 5000, due: 5450 });
+    expect(cellOf(view, "p1", 10)).toEqual({ month: OCT, state: "unpaid", received: 0, due: 5000 });
+  });
+
+  it("keeps the cells adding up to the month screen's received and due, whatever was paid", () => {
+    const rows = baseRows([2026, 10, [["Asha", 4, 5000], null, ["Chitra", 6, 9500], null, ["Esha", 3, 1]]]);
+    const view = deriveYearView(snapshot(rows), 2026, TODAY);
+    for (let month = 8; month <= 10; month++) {
+      const monthView = deriveMonthView(rows, PORTIONS, { year: 2026, month });
+      const cells = view.rows.map((row) => row.cells[month - 1]);
+      expect(cells.reduce((sum, cell) => sum + cell.received, 0)).toBe(monthView.received);
+      expect(cells.reduce((sum, cell) => sum + cell.due, 0)).toBe(monthView.due);
+    }
+    expect(view.received).toBe(view.rows.reduce((sum, row) => sum + row.received, 0));
+  });
+
+  it("has no state or field for a part-paid month", () => {
+    const rows = baseRows([2026, 10, [["Asha", 4, 5000], ["Bala", 1, 13300], ["Chitra", 6, 9500]]], [2026, 12, [["Asha", 5, 4000]]]);
+    const view = deriveYearView(snapshot(rows), 2026, TODAY);
+    const cells = view.rows.flatMap((row) => row.cells);
+    expect(new Set(cells.map((cell) => cell.state))).toEqual(new Set(["none", "paid", "unpaid", "upcoming", "vacant"]));
+    for (const cell of cells) expect(Object.keys(cell).sort()).toEqual(["due", "month", "received", "state"]);
   });
 });

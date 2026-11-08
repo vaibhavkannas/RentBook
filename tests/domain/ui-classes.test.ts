@@ -92,7 +92,6 @@ describe("ICON_BUTTON_OFF", () => {
 describe("yearCellClasses", () => {
   it.each([
     ["paid", "bg-success-bg text-success-ink"],
-    ["partial", "bg-warn-bg text-warn-ink"],
     ["unpaid", "bg-danger-bg text-danger-ink"],
     ["vacant", "bg-line text-foreground"],
     ["upcoming", "border border-dashed border-line text-muted"],
@@ -101,15 +100,19 @@ describe("yearCellClasses", () => {
     expect(yearCellClasses(state)).toBe(classes);
   });
 
+  it("has no colours for a part-paid month: a month with a payment is paid", () => {
+    expect(yearCellClasses("partial" as YearCellState)).toBeUndefined();
+  });
+
   it("tells each state apart by more than the colour of its text: a fill, or a dashed border", () => {
-    const states: YearCellState[] = ["paid", "partial", "unpaid", "vacant", "upcoming", "none"];
+    const states: YearCellState[] = ["paid", "unpaid", "vacant", "upcoming", "none"];
     expect(new Set(states.map(yearCellClasses)).size).toBe(states.length);
-    for (const state of ["paid", "partial", "unpaid", "vacant"] as const) expect(yearCellClasses(state)).toMatch(/\bbg-/);
+    for (const state of ["paid", "unpaid", "vacant"] as const) expect(yearCellClasses(state)).toMatch(/\bbg-/);
     expect(yearCellClasses("upcoming")).toContain("border-dashed");
   });
 
   it("uses tokens only: no palette colour, no hex, and no size or corner (the screen gives those)", () => {
-    for (const state of ["paid", "partial", "unpaid", "vacant", "upcoming", "none"] as const) {
+    for (const state of ["paid", "unpaid", "vacant", "upcoming", "none"] as const) {
       expect(yearCellClasses(state)).not.toMatch(/#|rgb|\b(?:red|green|amber|gray|slate)-\d|rounded|min-h/);
     }
   });

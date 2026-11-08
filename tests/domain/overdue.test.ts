@@ -43,20 +43,16 @@ describe("overdueList on the base Schedule (August and September paid)", () => {
     expect(itemFor(items, "p4")).toBeUndefined();
   });
 
-  it("describes each item: the portion, the tenant, the month, its age", () => {
+  it("describes each item: the portion, the tenant, each month owed and how old it is, and says nothing of what was paid", () => {
     const items = overdueList(snapshot(baseRows()), TODAY);
     expect(items[0]).toEqual({
       portionId: "p2",
       name: "First floor, double bedroom",
       tenant: "Bala",
-      months: [
-        { month: OCT, kind: "unpaid", expected: 13335, paid: 0, owed: 13335, dueDate: "2026-10-01", daysOverdue: 16 },
-      ],
+      months: [{ month: OCT, owed: 13335, dueDate: "2026-10-01", daysOverdue: 16 }],
       owed: 13335,
       oldest: OCT,
       daysOverdue: 16,
-      unpaid: 1,
-      short: 0,
     });
   });
 
@@ -90,8 +86,8 @@ describe("overdueList on the base Schedule (August and September paid)", () => {
 });
 
 describe("overdueList: what is owed is what the month card shows", () => {
-  // Several tenants, short and hiked months, runs of unpaid months and a change of tenant: the owed amounts are compared
-  // with the cards the month screen draws for each month, not with figures worked out again here.
+  // Several tenants, months paid at other amounts, hiked months, runs of unpaid months and a change of tenant: the owed amounts
+  // are compared with the cards the month screen draws for each month, not with figures worked out again here.
   const rows = parsedRows(
     [2026, 1, [["Asha", 1, 5000], ["Bala", 7, 12000], ["Chitra", 3, 9000], null, ["Esha", 9, 11000]]],
     [2026, 2, [["Asha", 2, 5000], ["Bala", 8, 12000], ["Chitra", 4, 9000], null, ["Esha", 10, 11000]]],
@@ -105,54 +101,46 @@ describe("overdueList: what is owed is what the month card shows", () => {
   );
   const items = overdueList(snapshot(rows), TODAY);
 
-  it("lists something of every kind, or the check below proves little", () => {
-    const months = items.flatMap((item) => item.months);
-    expect(months.some((m) => m.kind === "unpaid")).toBe(true);
-    expect(months.some((m) => m.kind === "short")).toBe(true);
-    expect(months.length).toBeGreaterThan(8);
+  it("lists unpaid months among months paid below and above the rent, or the checks below prove little", () => {
+    expect(items.flatMap((item) => item.months).length).toBeGreaterThan(8);
+    const differences: number[] = [];
+    for (let month = 1; month <= 9; month++) {
+      for (const card of deriveMonthView(rows, PORTIONS, { year: 2026, month }).cards) {
+        if (card.status === "paid" && card.rentDifference) differences.push(card.rentDifference);
+      }
+    }
+    expect(differences.some((difference) => difference < 0)).toBe(true);
+    expect(differences.some((difference) => difference > 0)).toBe(true);
   });
 
-  it("owes, for every listed month, the card's reference (unpaid) or the card's shortfall (short)", () => {
+  it("owes, for every listed month, the card's reference rent, and the card has no payment", () => {
     for (const item of items) {
       for (const m of item.months) {
         const card = deriveMonthView(rows, PORTIONS, m.month).cards.find((c) => c.portionId === item.portionId)!;
-        if (m.kind === "unpaid") {
-          expect(card.status).toBe("pending");
-          expect(m.owed).toBe(card.rentReference);
-          expect(m.paid).toBe(0);
-        } else {
-          expect(card.status).toBe("paid");
-          expect(m.owed).toBe(-card.rentDifference!);
-          expect(m.paid).toBe(card.entry!.amount);
-          expect(m.expected).toBe(card.rentReference);
-        }
+        expect(card.status).toBe("pending");
+        expect(card.entry).toBeNull();
+        expect(m.owed).toBe(card.rentReference);
       }
     }
   });
 
-  it("lists every pending card and every short paid card of the current tenant's run, and nothing else", () => {
+  it("lists every pending card of the current tenant's run, and nothing else: no month with a payment", () => {
     for (const item of items) {
-      const run = item.months;
       const start = { year: 2026, month: 1 };
       for (let month = start; compareYm(month, OCT) <= 0; month = addMonths(month, 1)) {
         const card = deriveMonthView(rows, PORTIONS, month).cards.find((c) => c.portionId === item.portionId)!;
-        const listed = run.some((m) => compareYm(m.month, month) === 0);
+        const listed = item.months.some((m) => compareYm(m.month, month) === 0);
         const inRun = item.portionId !== "p3" || compareYm(month, { year: 2026, month: 7 }) >= 0; // Dev's run starts in July
-        const owes = card.status === "pending" || (card.status === "paid" && (card.rentDifference ?? 0) < 0);
-        expect(listed).toBe(inRun && owes);
+        expect(listed).toBe(inRun && card.status === "pending");
       }
     }
   });
 
-  it("adds the months up, and counts the kinds", () => {
+  it("adds the months up, oldest first", () => {
     for (const item of items) {
       expect(item.owed).toBe(item.months.reduce((sum, m) => sum + m.owed, 0));
-      expect(item.unpaid).toBe(item.months.filter((m) => m.kind === "unpaid").length);
-      expect(item.short).toBe(item.months.filter((m) => m.kind === "short").length);
-      expect(item.unpaid + item.short).toBe(item.months.length);
       expect(item.oldest).toEqual(item.months[0].month);
       expect(item.daysOverdue).toBe(item.months[0].daysOverdue);
-      // oldest first
       for (let i = 1; i < item.months.length; i++) {
         expect(compareYm(item.months[i - 1].month, item.months[i].month)).toBeLessThan(0);
       }
@@ -160,66 +148,102 @@ describe("overdueList: what is owed is what the month card shows", () => {
   });
 });
 
-describe("overdueList: short months", () => {
-  it("lists a short month for what is missing, and the next month at the card's suggestion", () => {
-    // Asha paid 5 000 against 5 450 in September; October is unpaid and its suggestion comes from September's 5 000.
-    const rows = parsedRows([2026, 8, [["Asha", 2, 5450]]], [2026, 9, [["Asha", 3, 5000]]]);
-    const [item, ...rest] = overdueList(snapshot(rows), TODAY);
-    expect(rest).toEqual([]);
-    expect(item.months).toEqual([
-      { month: SEP, kind: "short", expected: 5450, paid: 5000, owed: 450, dueDate: "2026-09-01", daysOverdue: 46 },
-      { month: OCT, kind: "unpaid", expected: 5000, paid: 0, owed: 5000, dueDate: "2026-10-01", daysOverdue: 16 },
-    ]);
-    expect(item).toMatchObject({ owed: 5450, oldest: SEP, daysOverdue: 46, unpaid: 1, short: 1 });
+describe("overdueList: a month with any payment recorded is never overdue", () => {
+  /** p1's card for a month, as the month screen draws it. */
+  const cardOf = (rows: ScheduleRow[], month: YearMonth) => deriveMonthView(rows, PORTIONS, month).cards.find((c) => c.portionId === "p1")!;
+
+  it("does not list a month paid at a lower amount, such as one agreed with the tenant", () => {
+    const rows = parsedRows([2026, 8, [["Asha", 2, 5450]]], [2026, 9, [["Asha", 3, 5450]]], [2026, 10, [["Asha", 4, 3000]]]);
+    // the card calls October "less than rent"; the list does not
+    expect(cardOf(rows, OCT)).toMatchObject({ status: "paid", rentReference: 5450, rentDifference: -2450 });
+    expect(overdueList(snapshot(rows), TODAY)).toEqual([]);
   });
 
-  it("lists a short month that is the latest one, with nothing else", () => {
-    const rows = parsedRows([2026, 8, [["Asha", 2, 5450]]], [2026, 9, [["Asha", 3, 5450]]], [2026, 10, [["Asha", 4, 5000]]]);
-    const [item] = overdueList(snapshot(rows), TODAY);
-    expect(item.months).toHaveLength(1);
-    expect(item).toMatchObject({ owed: 450, unpaid: 0, short: 1, oldest: OCT });
+  it("does not list a month paid at a higher amount", () => {
+    const rows = parsedRows([2026, 8, [["Asha", 2, 5450]]], [2026, 9, [["Asha", 3, 5450]]], [2026, 10, [["Asha", 4, 9000]]]);
+    expect(cardOf(rows, OCT).rentDifference).toBe(3550);
+    expect(overdueList(snapshot(rows), TODAY)).toEqual([]);
   });
 
-  it("does not list a month paid in full or with more than the rent", () => {
+  it("does not list a month paid in full", () => {
     const rows = parsedRows([2026, 8, [["Asha", 2, 5450]]], [2026, 9, [["Asha", 3, 6000]]], [2026, 10, [["Asha", 4, 6000]]]);
     expect(overdueList(snapshot(rows), TODAY)).toEqual([]);
   });
 
-  it("measures a month against the payment before it, as its card does, so it follows an extra payment's higher rent", () => {
-    // September paid 6 000 against 5 450. October's card suggests 6 000, so October paid at 5 450 is ₹ 550 less than rent on
-    // the card, and the same ₹ 550 is listed: the list never disagrees with the card.
+  it("does not count them in the totals, or list the portion at all", () => {
+    // p1 paid ₹ 5 000 for October and p3 ₹ 9 500; p2 and p5 have paid nothing
+    const rows = baseRows([2026, 10, [["Asha", 4, 5000], null, ["Chitra", 6, 9500]]]);
+    const items = overdueList(snapshot(rows), TODAY);
+    expect(ids(items)).toEqual(["p2", "p5"]);
+    expect(overdueTotals(items)).toEqual({ portions: 2, owed: 13335 + 5100 });
+  });
+
+  it("is the owner's example: September paid 5 000 against 5 450, then October paid 5 450", () => {
+    const rows = parsedRows([2026, 8, [["Asha", 2, 5450]]], [2026, 9, [["Asha", 3, 5000]]], [2026, 10, [["Asha", 4, 5450]]]);
+    expect(cardOf(rows, SEP).rentDifference).toBe(-450);
+    expect(cardOf(rows, OCT).rentDifference).toBe(450);
+    expect(overdueList(snapshot(rows), TODAY)).toEqual([]);
+    expect(overdueTotals(overdueList(snapshot(rows), TODAY))).toEqual({ portions: 0, owed: 0 });
+  });
+
+  it("does not list the month after an extra payment that the card reads as less than rent", () => {
+    // September paid 6 000, so October's card suggests 6 000 and October paid 5 450 reads "₹ 550 less than rent": it is paid
     const rows = parsedRows([2026, 8, [["Asha", 2, 5450]]], [2026, 9, [["Asha", 3, 6000]]], [2026, 10, [["Asha", 4, 5450]]]);
-    const card = deriveMonthView(rows, PORTIONS, OCT).cards.find((c) => c.portionId === "p1")!;
-    expect(card.rentDifference).toBe(-550);
-    expect(overdueList(snapshot(rows), TODAY)[0]).toMatchObject({ owed: 550, short: 1, unpaid: 0 });
+    expect(cardOf(rows, OCT).rentDifference).toBe(-550);
+    expect(overdueList(snapshot(rows), TODAY)).toEqual([]);
   });
 
-  it("does not let an extra amount in one month pay for another", () => {
-    // September 1 000 over, October unpaid: October is still owed in full.
-    const rows = parsedRows([2026, 8, [["Asha", 2, 5450]]], [2026, 9, [["Asha", 3, 6450]]]);
-    const [item] = overdueList(snapshot(rows), TODAY);
-    expect(item.months).toEqual([expect.objectContaining({ month: OCT, kind: "unpaid", owed: 6450 })]);
-    // an extra amount does not shorten a short month either
-    const both = parsedRows([2026, 7, [["Asha", 1, 5450]]], [2026, 8, [["Asha", 2, 4450]]], [2026, 9, [["Asha", 3, 7450]]], [2026, 10, [["Asha", 4, 7450]]]);
-    const [other] = overdueList(snapshot(both), TODAY);
-    expect(other.months.map((m) => [m.month.month, m.kind, m.owed])).toEqual([[8, "short", 1000]]);
-  });
-
-  it("does not list a hiked month paid within the rounding allowance, and lists a shortfall beyond it", () => {
-    const paid = (amount: number) => baseRows([2026, 10, [null, ["Bala", 1, amount]]]);
-    expect(itemFor(overdueList(snapshot(paid(13340)), TODAY), "p2")).toBeUndefined();
-    expect(itemFor(overdueList(snapshot(paid(13335)), TODAY), "p2")).toBeUndefined();
-    expect(itemFor(overdueList(snapshot(paid(13325)), TODAY), "p2")).toBeUndefined();
-    const short = itemFor(overdueList(snapshot(paid(13300)), TODAY), "p2")!;
-    expect(short.months).toEqual([
-      { month: OCT, kind: "short", expected: 13335, paid: 13300, owed: 35, dueDate: "2026-10-01", daysOverdue: 16 },
-    ]);
-    expect(short.owed).toBe(35);
+  it("does not list a hiked month paid at any amount, within the rounding allowance or beyond it", () => {
+    for (const amount of [13340, 13335, 13325, 13324, 13300, 12700, 5000, 1]) {
+      const rows = baseRows([2026, 10, [null, ["Bala", 1, amount]]]);
+      expect(itemFor(overdueList(snapshot(rows), TODAY), "p2"), String(amount)).toBeUndefined();
+    }
   });
 
   it("does not list a new tenant's first payment, whatever it is", () => {
     const rows = baseRows([2026, 10, [["Dev", 1, 100]]]);
     expect(itemFor(overdueList(snapshot(rows), TODAY), "p1")).toBeUndefined();
+  });
+
+  it("does not list a switched-off portion's month with a payment, whatever it is", () => {
+    const rows = baseRows([2026, 10, [null, null, ["Chitra", 6, 8000]]]);
+    const moved = [tenancyRow({ portionId: "p3", tenant: "Chitra", moveOut: "2026-11-30" })];
+    const items = overdueList(snapshot(rows, moved, portionsWith({ p3: { inactive: true } })), TODAY);
+    expect(itemFor(items, "p3")).toBeUndefined();
+  });
+
+  it("still lists a month with no payment beside months paid at other amounts, at the card's reference rent", () => {
+    // June 5 450; July 4 000 (agreed, lower); August nothing; September 9 000 (higher); October nothing
+    const rows = parsedRows(
+      [2026, 6, [["Asha", 1, 5450]]],
+      [2026, 7, [["Asha", 2, 4000]]],
+      [2026, 9, [["Asha", 3, 9000]]],
+    );
+    const [item, ...rest] = overdueList(snapshot(rows), TODAY);
+    expect(rest).toEqual([]);
+    // each unpaid month owes what its card suggests: the payment before it (July's 4 000 for August, September's 9 000 for October)
+    expect(item.months).toEqual([
+      { month: { year: 2026, month: 8 }, owed: 4000, dueDate: "2026-08-01", daysOverdue: 77 },
+      { month: OCT, owed: 9000, dueDate: "2026-10-01", daysOverdue: 16 },
+    ]);
+    expect(item).toMatchObject({ owed: 13000, oldest: { year: 2026, month: 8 }, daysOverdue: 77 });
+    for (const m of item.months) expect(cardOf(rows, m.month)).toMatchObject({ status: "pending", rentReference: m.owed });
+  });
+
+  it("lists the unpaid month beside a month paid at another amount at the card's suggestion", () => {
+    // Asha paid 5 000 against 5 450 in September; October has no payment and its suggestion comes from September's 5 000
+    const rows = parsedRows([2026, 8, [["Asha", 2, 5450]]], [2026, 9, [["Asha", 3, 5000]]]);
+    const [item, ...rest] = overdueList(snapshot(rows), TODAY);
+    expect(rest).toEqual([]);
+    expect(item.months).toEqual([{ month: OCT, owed: 5000, dueDate: "2026-10-01", daysOverdue: 16 }]);
+    expect(item).toMatchObject({ owed: 5000, oldest: OCT, daysOverdue: 16 });
+  });
+
+  it("does not let an extra amount in one month pay for another", () => {
+    // September 1 000 over, October unpaid: October is still owed, at the 6 450 its card suggests
+    const rows = parsedRows([2026, 8, [["Asha", 2, 5450]]], [2026, 9, [["Asha", 3, 6450]]]);
+    const [item] = overdueList(snapshot(rows), TODAY);
+    expect(item.months).toEqual([expect.objectContaining({ month: OCT, owed: 6450 })]);
   });
 });
 
@@ -229,7 +253,7 @@ describe("overdueList: months paid ahead", () => {
     const rows = baseRows([2026, 11, [["Asha", 4, 5450]]]);
     const items = overdueList(snapshot(rows), TODAY);
     const p1 = itemFor(items, "p1")!;
-    expect(p1.months).toEqual([expect.objectContaining({ month: OCT, kind: "unpaid", owed: 5450 })]);
+    expect(p1.months).toEqual([expect.objectContaining({ month: OCT, owed: 5450 })]);
     expect(p1.owed).toBe(5450);
   });
 
@@ -244,11 +268,11 @@ describe("overdueList: months paid ahead", () => {
     expect(itemFor(overdueList(snapshot(rows), TODAY), "p1")).toBeUndefined();
   });
 
-  it("does not list a month that is only short when it is still before its overdue day", () => {
-    // 3 October: September is the last month due. A short October is not looked at yet.
+  it("does not list a month with a payment of a low amount, before its overdue day or after it", () => {
+    // 3 October: September is the last month due, so October is not looked at yet; from the 6th it is, and it has a payment
     const rows = baseRows([2026, 10, [["Asha", 4, 100]]]);
     expect(itemFor(overdueList(snapshot(rows), "2026-10-03"), "p1")).toBeUndefined();
-    expect(itemFor(overdueList(snapshot(rows), "2026-10-06"), "p1")).toMatchObject({ owed: 5350, short: 1 });
+    expect(itemFor(overdueList(snapshot(rows), "2026-10-06"), "p1")).toBeUndefined();
   });
 });
 
@@ -309,7 +333,7 @@ describe("overdueList: only the current tenant's run counts", () => {
     );
     // July has no entry: the card says unpaid, and its suggestion comes from June's 5 000.
     const [item] = overdueList(snapshot(rows), TODAY);
-    expect(item.months).toEqual([expect.objectContaining({ month: { year: 2026, month: 7 }, kind: "unpaid", owed: 5000 })]);
+    expect(item.months).toEqual([expect.objectContaining({ month: { year: 2026, month: 7 }, owed: 5000 })]);
   });
 
   it("reads a tenant's name in another case as the same tenant", () => {
@@ -326,7 +350,7 @@ describe("overdueList: only the current tenant's run counts", () => {
     expect(item.oldest).toEqual({ year: 2025, month: 2 });
     expect(item.months[0].month).toEqual({ year: 2025, month: 2 });
     expect(item.months[20].month).toEqual(OCT);
-    expect(item).toMatchObject({ owed: 105000, unpaid: 21, short: 0, daysOverdue: 623 });
+    expect(item).toMatchObject({ owed: 105000, daysOverdue: 623 });
   });
 
   it("is not changed by the order of the rows or a month typed twice", () => {
@@ -344,8 +368,9 @@ describe("overdueList: only the current tenant's run counts", () => {
       [2026, 9, [["Asha", 3, 5450]]],
       [2026, 9, [["Asha", 3, 5000]]],
     );
+    // September is paid (the lower row's 5 000, at another amount than the rent) and October's card follows from that payment
     const [item] = overdueList(snapshot(rows), TODAY);
-    expect(item.months.map((m) => [m.month.month, m.kind, m.owed])).toEqual([[9, "short", 450], [10, "unpaid", 5000]]);
+    expect(item.months.map((m) => [m.month.month, m.owed])).toEqual([[10, 5000]]);
   });
 });
 
@@ -371,7 +396,7 @@ describe("overdueList: vacant portions", () => {
     // Asha owes July and moved out on 31 August: July is listed, September and October are vacant.
     const rows = parsedRows([2026, 6, [["Asha", 1, 5000]]], [2026, 8, [["Asha", 2, 5000]]]);
     const [item] = overdueList(snapshot(rows, leftOn("2026-08-31")), TODAY);
-    expect(item.months.map((m) => [m.month.month, m.kind])).toEqual([[7, "unpaid"]]);
+    expect(item.months.map((m) => m.month.month)).toEqual([7]);
   });
 
   it("does not take a move-out for a vacancy when rent was logged after it", () => {
@@ -426,11 +451,6 @@ describe("overdueList: switched-off portions", () => {
     expect(itemFor(items, "p3")).toBeUndefined();
   });
 
-  it("still counts a month paid short by a switched-off portion, which has its card in that month", () => {
-    const rows = baseRows([2026, 10, [null, null, ["Chitra", 6, 8000]]]);
-    const items = overdueList(snapshot(rows, [tenancyRow({ portionId: "p3", tenant: "Chitra", moveOut: "2026-11-30" })], portionsWith({ p3: { inactive: true } })), TODAY);
-    expect(itemFor(items, "p3")).toMatchObject({ owed: 1000, short: 1, unpaid: 0 });
-  });
 });
 
 describe("overdueList: odd rows", () => {
@@ -443,17 +463,17 @@ describe("overdueList: odd rows", () => {
   it("works in whole rupees when an amount has paise", () => {
     const rows = parsedRows([2026, 8, [["Asha", 1, 5450.4]]], [2026, 9, [["Asha", 2, 5000]]]);
     const [item] = overdueList(snapshot(rows), TODAY);
-    // September is short by 450.4, which the card shows as ₹ 450; October is owed at September's 5 000
-    expect(item.months.map((m) => [m.month.month, m.owed])).toEqual([[9, 450], [10, 5000]]);
+    // September has a payment (450.4 under the rent); October is owed at September's 5 000
+    expect(item.months.map((m) => [m.month.month, m.owed])).toEqual([[10, 5000]]);
     const decimal = parsedRows([2026, 9, [["Asha", 1, 5450.5]]]);
     expect(overdueList(snapshot(decimal), TODAY)[0].owed).toBe(5451);
   });
 
-  it("lists a month short by more than half a rupee as ₹ 1, and not one short by less, as the card's line does", () => {
-    const short = parsedRows([2026, 8, [["Asha", 2, 5450]]], [2026, 9, [["Asha", 3, 5449.4]]], [2026, 10, [["Asha", 4, 5449.4]]]);
-    expect(overdueList(snapshot(short), TODAY)[0].months.map((m) => [m.month.month, m.owed])).toEqual([[9, 1]]);
-    const nearly = parsedRows([2026, 8, [["Asha", 2, 5450]]], [2026, 9, [["Asha", 3, 5449.7]]], [2026, 10, [["Asha", 4, 5449.7]]]);
-    expect(overdueList(snapshot(nearly), TODAY)).toEqual([]);
+  it("does not list a month paid a rupee or a part of one under the rent", () => {
+    for (const amount of [5449.7, 5449.4, 5449, 5400]) {
+      const rows = parsedRows([2026, 8, [["Asha", 2, 5450]]], [2026, 9, [["Asha", 3, amount]]], [2026, 10, [["Asha", 4, amount]]]);
+      expect(overdueList(snapshot(rows), TODAY), String(amount)).toEqual([]);
+    }
   });
 
   it("keeps a blank tenant name as it is", () => {
