@@ -1,10 +1,10 @@
 # RentBook v1.0: build status
 
-Last updated: 2026-11-08, at the end of the work: waves 1 to 5 are built, reviewed and pushed as branches. Nothing is merged to `main` or deployed; that step is yours (see "Owner steps").
+Last updated: 2026-11-08, at the end of the work: waves 1 to 5 are built, reviewed and pushed as branches. The merge to `main` was requested at the end of the work: see "Where things are" and `git log origin/main` for whether it has landed.
 
 ## Where things are
 
-Every wave is a branch stacked on the one before it, so the newest branch, `v1-wave-5`, contains all the work. Nothing has been merged to `main` or deployed. `main` is still at 845a252 (the live hike-rounding fix). An attempt to fast-forward `main` was blocked by the permission layer as a production deploy, and it was not worked around. The merge is yours to make (see "Owner steps").
+Every wave is a branch stacked on the one before it, so the newest branch, `v1-wave-5`, contains all the work. When this file was written nothing had been merged to `main` or deployed, and `main` was at 845a252 (the live hike-rounding fix). An early attempt to fast-forward `main` was blocked by the permission layer as a production deploy, and it was not worked around. The owner later asked for the merge to be made at the end of the work: check `git log origin/main` for whether it has landed, and see "Owner steps" if it has not.
 
 | Branch | What it holds | Tip | Tests at the tip |
 | --- | --- | --- | --- |
@@ -12,7 +12,7 @@ Every wave is a branch stacked on the one before it, so the newest branch, `v1-w
 | `v1-wave-2` | Wave 1 plus wave 2 (app feel, items 8 to 13) | f02f900 | 117 files, 2,696 tests |
 | `v1-wave-3` | Wave 2 plus wave 3 (setup, vacant units, add, switch off and reorder units, looser Sheet rules) | 5b105bc | 143 files, 3,967 tests |
 | `v1-wave-4` | Wave 3 plus wave 4 (overdue, year view, alerts, change history) | 4e4e569 | 165 files, 4,763 tests |
-| `v1-wave-5` | Wave 4 plus wave 5 (screen tests, end-to-end run, guides): the whole product | cd34e7c, then this status update | 176 files, 5,260 tests |
+| `v1-wave-5` | Wave 4 plus wave 5 (screen tests, end-to-end run, guides): the whole product | f4685d7, then this status update | 176 files, 5,262 tests |
 
 The baseline before this work was 1,420 tests. At every commit `npm test`, `npm run typecheck`, `npm run lint` and `npm run build` were green, and the build passes with no sign-in settings in the environment.
 
@@ -125,6 +125,7 @@ The wave 3 final fixes were merged into wave 4 by merge commit 7e56a06 (no rebas
 | 5-7 | `docs/USER-GUIDE.md`, `docs/TROUBLESHOOTING.md`, README touch-up | 60ac356 |
 | 5-8 | Verification: two consecutive end-to-end runs passed (18 checks, about 55 seconds each with the build); the run was repeated after the fixes (18 passed, 53 seconds) | |
 | Review fixes | Troubleshooting, README and SETUP corrections (the sign-in configuration error cannot be diagnosed from Set up; `SESSION_NOT_BEFORE` must be now or earlier), a stricter check that every bold label in the user guide is on a screen, and the end-to-end runner now cleans up its server and temporary copy on Ctrl-C and when killed | 8743f97, cd34e7c |
+| Polish | The three small items the reviews had carried: card pill colours are tested by state, the tenant page's detail rows line up with their labels, and a Schedule with only its header row says what to do | f4685d7 |
 
 The wave 4 final fix was merged into wave 5 by merge commit ea0c4c2 (no rebase). Plan: `docs/superpowers/plans/2026-11-03-v1-wave-5-tests-guides.md`.
 
@@ -169,7 +170,7 @@ Reviews: every wave had a final whole-branch review with the earlier slices revi
 
 - Wave 3: a New tenant corrected by a second New tenant of the old name with Replace leaves the old tenancy closed, so the portion shows Vacant with "Add tenant"; adding details for the same name ends the vacancy. A move-out recorded without details cannot be undone in the app. After a switch-off an old gap month keeps its pending card, so it stays in what is due until logged or the Schedule is edited. Typed (non-formula) totals go stale when `TOTAL_HEADER` is not set. On a switched-off card with no details the link reads "Tenant page".
 - Wave 4: a card measures a month against the payment before it, so an extra payment lifts the next month's reference rent and the next month can read "less than rent"; the overdue list and year view agree with the card (the card rule is unchanged). A blank tenant cell is a name of its own and ends a tenant's run. A portion whose tenant left without a recorded move-out shows long arrears, a hike and an ended agreement until the move-out is recorded (the screens say so). A hike alert is not hidden for a move-out recorded for a future day until that month is vacant. The year grid can show an unpaid month of an earlier tenant that the overdue list ignores. `/year?year=2099` shows a grid of "Not due yet" cells. A New tenant that fails halfway writes no history. The browser's one automatic retry of a history write is not awaited: a full page reload before it finishes loses that row without a message, and the page does not refresh after a successful retry. A History entry's time shows no year. A Sheet that has a "Tenancy Log" tab but no Settings tab is refused with "Settings tab is missing". A history write that gave up after 3 seconds can still land just before its retry looks, which would add the rows twice (accepted, as the Payments Log has the same property). A save that changes more than 12 history rows gets no retry token, and nothing checks a token against the retry route's 4,000-character body limit. A New tenant's payment now has up to 3 seconds more inside one lock and the 15-second request limit (the risk predates the wave).
-- Wave 5: a runner killed with SIGKILL cannot delete its temporary copy under `/tmp` (a watchdog ends its server and browser; remove the `rentbook-e2e-*` folder by hand). In a production build a sign-in configuration error reaches the server log as `code: "internal"`, not the configuration code, because the instrumentation hook and the pages load separate copies of the error class; the log line still names each missing setting and never a value. A Schedule that has only its header row shows "The Schedule tab has no month rows to copy the format from." (the troubleshooting guide says what to do). The tenant page's Phone row has its label and number slightly out of line.
+- Wave 5: a runner killed with SIGKILL cannot delete its temporary copy under `/tmp` (a watchdog ends its server and browser; remove the `rentbook-e2e-*` folder by hand). In a production build a sign-in configuration error reaches the server log as `code: "internal"`, not the configuration code, because the instrumentation hook and the pages load separate copies of the error class; the log line still names each missing setting and never a value.
 
 - Back and history: after Month, More, Settings, Month there is one extra history entry (More). Browsers without the Navigation API (Firefox) add one history entry per round trip. The phone's own Back button shows a screen as it was kept, so it can show an out-of-date screen; the tab bar and the back arrow refresh.
 - On Android, closing the keyboard with Back usually leaves the field focused, so the tab bar stays hidden until the next tap elsewhere (unchecked on a device).
