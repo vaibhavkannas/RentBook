@@ -161,7 +161,7 @@ export function parseSchedule(
   const months = dataRows.map((raw) => readMonth(raw[monthCol]));
   const lastMonthIndex = months.findLastIndex((month) => month !== null);
   if (lastMonthIndex === -1) {
-    throw sheetStructure("The Schedule tab has no month rows to copy the format from.");
+    throw sheetStructure("The Schedule tab has no month rows yet. Type this month's row, with each portion's tenant, count and amount, then try again.");
   }
   const codec = detectMonthCodec(dataRows[lastMonthIndex][monthCol]);
   // A cell with something in it that is not a month, inside the table, would silently drop that row's

@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { summaryText } from "@/lib/month-summary";
 import { CONNECTION_NEEDS_ATTENTION } from "@/lib/errors";
 import { getMonthView } from "@/lib/sheets/service";
+import { pillClasses } from "@/lib/ui-classes";
 import { inside, link, named, pageText, textOf } from "../support/html";
 import { captureLogs, type LogSpies } from "../support/logs";
 import { expectSound as sound, FIXED_NOW, MEMBER, OWNER, renderScreen, screenContext } from "../support/screens";
@@ -125,6 +126,13 @@ describe("the month screen", () => {
     expect(shown[4]).toMatch(/^Third floor, hall and kitchen Vacant Vacant since 1 Oct 2026\. Esha moved out\. Past tenants Add tenant$/);
   });
 
+  it("colours each card's pill by its state, not only by its words", async () => {
+    const html = await month();
+    expect(html.match(new RegExp(`<span class="${pillClasses("success")}">Paid</span>`, "g"))).toHaveLength(1);
+    expect(html.match(new RegExp(`<span class="${pillClasses("warn")}">Pending</span>`, "g"))).toHaveLength(2);
+    expect(html.match(new RegExp(`<span class="${pillClasses("neutral")}">Vacant</span>`, "g"))).toHaveLength(2);
+  });
+
   it("sums the month in a summary that says what summaryText says", async () => {
     const view = await getMonthView(screenContext("main").ctx, { year: 2026, month: 10 });
     const html = await month();
@@ -179,7 +187,7 @@ describe("the month screen", () => {
     tabs.Schedule = tabs.Schedule.slice(0, 3);
     useSheet(tabs);
     const html = await month();
-    expect(pageText(html)).toContain("Can't load your Sheet The Schedule tab has no month rows to copy the format from.");
+    expect(pageText(html)).toContain("Can't load your Sheet The Schedule tab has no month rows yet. Type this month's row, with each portion's tenant, count and amount, then try again.");
     expect(link(html, "Open Set up to see what is wrong")?.attrs.href).toBe("/setup?month=2026-10");
     expect(html).not.toContain("Month summary");
   });
@@ -498,6 +506,13 @@ describe("a tenant's page", () => {
     expect(text).toContain("History Details changed for Asha. Phone number changed. Agreement end set to 16 Nov 2026. 12 Oct, 5:30 pm · by you Details added for Asha. 1 Jul, 10:00 am · by you");
     expect(link(html, "Back to month")?.attrs.href).toBe("/");
     expect(named(html, "a").find((anchor) => anchor.attrs.href?.startsWith("tel:"))).toBeDefined();
+  });
+
+  it("centres each detail row's label on its value, so the phone link, a taller target, sits level with its label", async () => {
+    const html = await tenant("p1");
+    const rows = html.match(/<div class="flex items-center justify-between gap-4 py-1\.5 text-sm"><dt/g) ?? [];
+    expect(rows.length).toBeGreaterThanOrEqual(5);
+    expect(html).not.toContain('<div class="flex justify-between gap-4 py-1.5 text-sm"><dt');
   });
 
   it("keeps the month in the way back and in the forms", async () => {

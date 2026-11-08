@@ -453,7 +453,7 @@ describe("the month rows (step 4)", () => {
     const { checks } = await run(sheet({ Schedule: baseSchedule().slice(0, 3) }));
     expect(byId(checks, "months")).toMatchObject({
       status: "fail",
-      detail: "The Schedule tab has no month rows to copy the format from.",
+      detail: "The Schedule tab has no month rows yet. Type this month's row, with each portion's tenant, count and amount, then try again.",
     });
   });
 });

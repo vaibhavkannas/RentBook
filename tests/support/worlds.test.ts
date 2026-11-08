@@ -130,7 +130,7 @@ describe("the worlds", () => {
   it("a Schedule with its header and no month row at all is refused by the app, so it is not what a quiet Sheet is", async () => {
     const { tabs } = world("empty", now);
     tabs.Schedule = tabs.Schedule.slice(0, 3);
-    await expect(loadSnapshot(contextOf(new FakeGateway(tabs)))).rejects.toThrow("The Schedule tab has no month rows to copy the format from.");
+    await expect(loadSnapshot(contextOf(new FakeGateway(tabs)))).rejects.toThrow("The Schedule tab has no month rows yet. Type this month's row, with each portion's tenant, count and amount, then try again.");
   });
 
   it("fresh has only the Schedule tab of main", () => {

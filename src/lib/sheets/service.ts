@@ -226,7 +226,7 @@ async function ensureMonthRow(
 
   const last = loaded.rows[loaded.rows.length - 1];
   if (!last) {
-    throw sheetStructure("The Schedule tab has no month rows to copy the format from.");
+    throw sheetStructure("The Schedule tab has no month rows yet. Type this month's row, with each portion's tenant, count and amount, then try again.");
   }
   // Month rows are only ever added in order, so a month with no row of its own is refused unless it is
   // the very next one. The words say what to do: add the row by hand, or log the earlier month first.

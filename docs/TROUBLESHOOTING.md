@@ -95,7 +95,7 @@ A header in Portion settings is not in the Schedule's header row, or was renamed
 
 Each Tenant, Count and Amount header may appear once. Rename the repeats, for example Tenant2, Count2, Amount2.
 
-> "The Schedule tab has no month rows to copy the format from."
+> "The Schedule tab has no month rows yet. Type this month's row, with each portion's tenant, count and amount, then try again."
 
 The Schedule has its header and no month under it. Type the first month's row yourself, in the same style as your others, such as Oct-26, then try again.
 

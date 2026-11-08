@@ -165,14 +165,14 @@ describe.each(pages)("%s: the link to Set up", (_name, render, mock) => {
     asOwner();
     mock.mockRejectedValue(configError(DETAIL));
     expect(await render()).toMatch(SETUP);
-    mock.mockRejectedValue(sheetStructure("The Schedule tab has no month rows to copy the format from."));
+    mock.mockRejectedValue(sheetStructure("The Schedule tab has no month rows yet. Type this month's row, with each portion's tenant, count and amount, then try again."));
     expect(await render()).toMatch(SETUP);
   });
 
   it("is not shown to a member, who is told to ask the owner", async () => {
     mock.mockRejectedValue(configError(DETAIL));
     expect(await render()).not.toContain("Set up");
-    mock.mockRejectedValue(sheetStructure("The Schedule tab has no month rows to copy the format from."));
+    mock.mockRejectedValue(sheetStructure("The Schedule tab has no month rows yet. Type this month's row, with each portion's tenant, count and amount, then try again."));
     expect(await render()).not.toContain("Set up");
   });
 

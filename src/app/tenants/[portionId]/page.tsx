@@ -45,7 +45,7 @@ export const maxDuration = 15;
 /** One label and value of the current tenancy. An empty value reads "Not added". */
 function Detail({ label, children }: { label: string; children?: ReactNode }) {
   return (
-    <div className="flex justify-between gap-4 py-1.5 text-sm">
+    <div className="flex items-center justify-between gap-4 py-1.5 text-sm">
       <dt className="shrink-0 text-muted">{label}</dt>
       <dd className="min-w-0 break-words text-right">
         {children || <span className="text-muted">Not added</span>}
