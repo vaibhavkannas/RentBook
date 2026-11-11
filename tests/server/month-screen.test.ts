@@ -65,9 +65,9 @@ describe("the month screen", () => {
   });
 
   it("offers the way back to this month, in the place of the refresh button, except on it", () => {
-    expect(render("2026-09")).toContain(">This month</button>");
+    expect(render("2026-09")).toContain('aria-label="This month"');
     expect(render("2026-09")).not.toContain('aria-label="Refresh"');
-    expect(render("2026-10")).not.toContain(">This month</button>");
+    expect(render("2026-10")).not.toContain('aria-label="This month"');
     expect(render("2026-10")).toContain('aria-label="Refresh"');
   });
 

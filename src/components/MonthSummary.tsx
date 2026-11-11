@@ -9,7 +9,7 @@ import { formatRupees } from "@/lib/format";
 import { summaryCounts, summaryText } from "@/lib/month-summary";
 import { describeDifference, progressPercent } from "@/lib/rent-difference";
 
-const LINK = "press inline-flex min-h-11 items-center gap-1.5 rounded-control border border-line bg-surface px-3 text-sm font-medium";
+const LINK = "press inline-flex min-h-11 min-w-0 flex-1 items-center justify-center gap-1.5 whitespace-nowrap rounded-control border border-line bg-surface px-2 text-[13px] font-medium";
 
 /**
  * The month's figures: a ring that fills with the share of the rent collected, what was received of what is due, how many
@@ -40,7 +40,7 @@ export default function MonthSummary({ view, status }: { view: MonthView; status
           {status}
         </p>
       </div>
-      <div className="col-span-2 flex flex-wrap gap-2">
+      <div className="col-span-2 flex gap-2">
         <Link href={yearHref(view.month.year, key)} className={LINK}>
           <Icon name="grid" />
           Year at a glance

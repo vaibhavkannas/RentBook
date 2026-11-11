@@ -209,17 +209,18 @@ export default function MonthScreen({ monthKey, currentKey, today, renderedAt, v
         {atCurrent ? (
           <RefreshButton store={refreshStore} />
         ) : (
-          <button
-            type="button"
+          <IconButton
+            framed
+            label="This month"
+            title="This month"
             onClick={() => {
               go(currentKey);
               // The button disappears on the current month, so keep focus somewhere that stays.
               titleRef.current?.focus();
             }}
-            className="press min-h-11 whitespace-nowrap rounded-full bg-accent-soft px-3 text-sm font-medium text-accent"
           >
-            This month
-          </button>
+            <Icon name="month" />
+          </IconButton>
         )}
       </div>
 
