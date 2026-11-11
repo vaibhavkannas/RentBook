@@ -161,7 +161,7 @@ describe("noticeClasses", () => {
 });
 
 describe("pillClasses", () => {
-  const BASE = "shrink-0 rounded-chip px-2.5 py-0.5 text-xs font-medium";
+  const BASE = "shrink-0 rounded-full px-2.5 py-0.5 text-xs font-medium";
 
   it.each([
     ["success", "bg-success-bg text-success-ink"],

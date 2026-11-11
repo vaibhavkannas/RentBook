@@ -109,7 +109,7 @@ const PILL_TONE: Record<PillTone, string> = {
 };
 
 export const pillClasses = (tone: PillTone) =>
-  `shrink-0 rounded-chip px-2.5 py-0.5 text-xs font-medium ${PILL_TONE[tone]}`;
+  `shrink-0 rounded-full px-2.5 py-0.5 text-xs font-medium ${PILL_TONE[tone]}`;
 
 export const CARD = "rounded-card border border-line bg-surface p-4";
 

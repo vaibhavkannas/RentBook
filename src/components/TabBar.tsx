@@ -2,33 +2,13 @@
 
 import Link, { useLinkStatus } from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
-import type { ReactNode } from "react";
 import { monthParam, TABS, tabForPath, withMonth, type TabId } from "@/lib/app-nav";
+import { Icon, type IconName } from "@/components/ui/Icon";
 import { cx } from "@/lib/ui-classes";
 import { useAppNavigate } from "./useAppNavigate";
 
-/** Each tab's icon: 24 px, drawn in the colour of the label. A calendar, a list and three dots. */
-const ICONS: Record<TabId, ReactNode> = {
-  month: (
-    <>
-      <rect x="4" y="5" width="16" height="15" rx="2" />
-      <path d="M4 10h16M8 3v4M16 3v4" />
-    </>
-  ),
-  activity: (
-    <>
-      <path d="M9 6h11M9 12h11M9 18h11" />
-      <path d="M4.5 6h.01M4.5 12h.01M4.5 18h.01" />
-    </>
-  ),
-  more: (
-    <>
-      <circle cx="5" cy="12" r="1" />
-      <circle cx="12" cy="12" r="1" />
-      <circle cx="19" cy="12" r="1" />
-    </>
-  ),
-};
+/** Each tab's icon, from the app's own set: a calendar, a list and three dots. */
+const ICONS: Record<TabId, IconName> = { month: "month", activity: "list", more: "dots" };
 
 /**
  * A small dot that shows while the next screen loads: for a Link navigation (useLinkStatus, which must sit inside the
@@ -70,21 +50,10 @@ function TabBarView({ month }: { month: string | null }) {
               className={cx(
                 // The ring is drawn inside the link: the first and the last touch the edge of the screen, which would clip it.
                 "press relative flex min-h-16 flex-1 flex-col items-center justify-center gap-0.5 text-xs font-medium focus-visible:-outline-offset-2",
-                current ? "text-accent" : "text-muted",
+                current ? "font-semibold text-accent" : "text-muted",
               )}
             >
-              <svg
-                aria-hidden="true"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                className="size-6"
-              >
-                {ICONS[tab.id]}
-              </svg>
+              <Icon name={ICONS[tab.id]} className="size-6" />
               {tab.label}
               <PendingDot replacing={replacingHref === href} />
             </Link>

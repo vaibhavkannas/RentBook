@@ -89,7 +89,7 @@ describe("Sheet", () => {
     expect(bar).not.toMatch(/\bbg-line\b/);
     const css = source("src/app/globals.css");
     const light = /(?:^|\n):root\s*\{([^}]*)\}/.exec(css)![1];
-    const dark = /@media\s*\(prefers-color-scheme:\s*dark\)\s*\{\s*:root\s*\{([^}]*)\}/.exec(css)![1];
+    const dark = /@media\s*\(prefers-color-scheme:\s*dark\)\s*\{\s*:root:not\(\[data-theme="light"\]\)\s*\{([^}]*)\}/.exec(css)![1];
     const token = (block: string, name: string) => new RegExp(`${name}:\\s*(#[0-9a-f]{6});`, "i").exec(block)![1];
     // the WCAG contrast of one colour on another; 3:1 is what a control or a graphic needs to be seen
     const channel = (value: number) => {

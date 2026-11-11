@@ -15,7 +15,9 @@ function tokens(opening: RegExp): Record<string, string> {
 }
 
 const light = tokens(/^:root\s*\{/m);
-const dark = tokens(/@media \(prefers-color-scheme: dark\)\s*\{\s*:root\s*\{/);
+// Dark is written twice: for Auto on a dark phone, and for Dark chosen under More. The two must be the same.
+const dark = tokens(/@media \(prefers-color-scheme: dark\)\s*\{\s*:root:not\(\[data-theme="light"\]\)\s*\{/);
+const darkChosen = tokens(/^:root\[data-theme="dark"\]\s*\{/m);
 
 function luminance(hex: string): number {
   const [r, g, b] = [1, 3, 5].map((at) => parseInt(hex.slice(at, at + 2), 16) / 255).map((c) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4));
@@ -48,6 +50,19 @@ const TEXT_ON: [string, string][] = [
   ["danger-ink", "surface"],
   ["off-ink", "off-bg"],
   ["background", "foreground"],
+  // Added for the redesigned screens: chips, segmented control, icon tiles, tinted rows and notes.
+  ["foreground", "surface-2"],
+  ["foreground", "success-bg"],
+  ["foreground", "warn-bg"],
+  ["foreground", "danger-bg"],
+  ["accent", "surface-2"],
+  ["danger-ink", "surface-2"],
+  ["success-ink", "surface-2"],
+  ["warn-ink", "surface-2"],
+  ["off-ink", "surface"],
+  ["off-ink", "surface-2"],
+  ["muted", "off-bg"],
+  ["muted", "warn-bg"],
 ];
 
 describe.each([
@@ -71,5 +86,16 @@ describe("the dark palette", () => {
       if (name === "focus") continue;
       expect(dark[name], `--${name}`).toBeDefined();
     }
+  });
+});
+
+describe("the chosen dark palette", () => {
+  it("has exactly the tokens of the dark palette of an Auto phone", () => {
+    expect(darkChosen).toEqual(dark);
+  });
+
+  it("is declared with a data-theme selector for each choice", () => {
+    expect(css).toMatch(/:root\[data-theme="light"\]\s*\{\s*color-scheme: light;/);
+    expect(css).toMatch(/:root\[data-theme="dark"\]\s*\{[^}]*color-scheme: dark;/);
   });
 });

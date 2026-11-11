@@ -1,10 +1,12 @@
 import type { Metadata, Viewport } from "next";
 import { Inter, Space_Grotesk } from "next/font/google";
+import { cookies } from "next/headers";
 import { Suspense } from "react";
 import BackRefresh from "@/components/BackRefresh";
 import TabBar, { TabBarFallback } from "@/components/TabBar";
 import { ToastProvider } from "@/components/ui/Toast";
 import { BRAND } from "@/lib/brand";
+import { dataTheme, parseTheme, THEME_COOKIE } from "@/lib/theme";
 import "./globals.css";
 
 // Inter for text, Space Grotesk for numbers and headings (the `font-display` class). Both are fetched when the app is built and
@@ -41,9 +43,12 @@ export const viewport: Viewport = {
   interactiveWidget: "resizes-content",
 };
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+export default async function RootLayout({ children }: LayoutProps<"/">) {
+  // The Appearance choice (More) is a cookie, so the first paint is already Light or Dark and nothing flashes. Every page asks
+  // for the request already, so reading it here costs the app no static page.
+  const theme = dataTheme(parseTheme((await cookies()).get(THEME_COOKIE)?.value));
   return (
-    <html lang="en" className={`${inter.variable} ${spaceGrotesk.variable} h-full antialiased`}>
+    <html lang="en" data-theme={theme} className={`${inter.variable} ${spaceGrotesk.variable} h-full antialiased`}>
       <body className="min-h-full">
         <ToastProvider>{children}</ToastProvider>
         {/* A tap that goes back lands on a kept screen: this loads it again (it renders nothing). */}

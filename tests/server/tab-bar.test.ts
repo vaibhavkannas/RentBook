@@ -3,6 +3,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { withoutComments } from "../support/source-scan";
+import { smallTargets, unpressedTargets } from "../support/tap-targets";
 
 // The bottom tab bar as the server renders it. Which way a tap goes (back, push, replace, nothing) is decided by
 // navAction (tests/domain/app-nav.test.ts); what a tap does in a real browser was checked by hand.
@@ -261,5 +262,32 @@ describe("BackRefresh", () => {
   it("renders as nothing at all", () => {
     nav.pathname = "/";
     expect(html(createElement(BackRefresh))).toBe("");
+  });
+});
+
+describe("TabBar icons and active state", () => {
+  it("draws an icon above each label, hidden from a screen reader, a different one for each tab", () => {
+    const found = links(bar("/"));
+    const shapes = found.map((link) => link.markup.match(/<svg[\s\S]*?<\/svg>/)?.[0]);
+    for (const shape of shapes) {
+      expect(shape).toBeDefined();
+      expect(shape).toContain('aria-hidden="true"');
+    }
+    expect(new Set(shapes).size).toBe(3);
+    // the icon comes before the label, so it sits above it in the column
+    for (const link of found) expect(link.markup.indexOf("<svg")).toBeLessThan(link.markup.indexOf(link.text));
+  });
+
+  it("makes the current tab bold as well as accent coloured, so it is not told by colour alone", () => {
+    const [month, activity] = links(bar("/"));
+    expect(month.markup).toMatch(/class="[^"]*\bfont-semibold\b/);
+    expect(activity.markup).not.toMatch(/class="[^"]*\bfont-semibold\b/);
+  });
+
+  it("gives every tab a 48 px or taller, pressable target, clear of the home indicator", () => {
+    const out = bar("/");
+    expect(smallTargets(out)).toEqual([]);
+    expect(unpressedTargets(out)).toEqual([]);
+    expect(withoutComments(source("src/app/globals.css"))).toMatch(/@utility h-tabbar \{[^}]*env\(safe-area-inset-bottom\)/);
   });
 });

@@ -33,7 +33,7 @@ describe("BRAND", () => {
 /** The declarations of the `:root` block that is not inside a media query, and of the one inside the dark query. */
 function rootBlocks(css: string): { light: string; dark: string } {
   const light = /(?:^|\n):root\s*\{([^}]*)\}/.exec(css)?.[1] ?? "";
-  const dark = /@media\s*\(prefers-color-scheme:\s*dark\)\s*\{\s*:root\s*\{([^}]*)\}/.exec(css)?.[1] ?? "";
+  const dark = /@media\s*\(prefers-color-scheme:\s*dark\)\s*\{\s*:root:not\(\[data-theme="light"\]\)\s*\{([^}]*)\}/.exec(css)?.[1] ?? "";
   return { light, dark };
 }
 

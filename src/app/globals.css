@@ -37,8 +37,14 @@
   --tabbar-h: 4rem;
 }
 
+/*
+ * Appearance. The scheme follows the phone (Auto) unless the person chose Light or Dark under More: the choice is the
+ * data-theme attribute on <html>, set on the server from a cookie (see src/lib/theme.ts), so there is no flash of the wrong
+ * theme and no inline script. The dark tokens are written twice, for Auto on a dark phone and for a chosen Dark; the palette
+ * test checks that the two are the same.
+ */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
     --background: #0c1218;
     --foreground: #e8eef4;
     --surface: #151d26;
@@ -59,7 +65,36 @@
     --off-ink: #93a3b3;
     --overlay: rgb(0 0 0 / 0.6);
     --shadow: 0 1px 2px rgb(0 0 0 / 0.4), 0 8px 24px rgb(0 0 0 / 0.4);
+    color-scheme: dark;
   }
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+  --background: #0c1218;
+  --foreground: #e8eef4;
+  --surface: #151d26;
+  --surface-2: #1d2833;
+  --muted: #93a3b3;
+  --line: #27333f;
+  --control: #5b6b7a;
+  --accent: #3cc3b4;
+  --accent-ink: #06201d;
+  --accent-soft: #12332f;
+  --success-bg: #12331f;
+  --success-ink: #5dd496;
+  --warn-bg: #3a2a0a;
+  --warn-ink: #f2b44a;
+  --danger-bg: #3d1714;
+  --danger-ink: #ff8c82;
+  --off-bg: #222d38;
+  --off-ink: #93a3b3;
+  --overlay: rgb(0 0 0 / 0.6);
+  --shadow: 0 1px 2px rgb(0 0 0 / 0.4), 0 8px 24px rgb(0 0 0 / 0.4);
+  color-scheme: dark;
 }
 
 @theme inline {

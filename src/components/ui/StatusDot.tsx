@@ -1,11 +1,12 @@
 import { cx } from "@/lib/ui-classes";
 import { Icon, type IconName } from "./Icon";
 
-export type DotStatus = "paid" | "pending" | "vacant";
+export type DotStatus = "paid" | "pending" | "overdue" | "vacant";
 
 const LOOK: Record<DotStatus, { icon: IconName; classes: string }> = {
   paid: { icon: "check", classes: "bg-success-bg text-success-ink" },
   pending: { icon: "clock", classes: "bg-warn-bg text-warn-ink" },
+  overdue: { icon: "bang", classes: "bg-danger-bg text-danger-ink" },
   vacant: { icon: "dash", classes: "bg-off-bg text-off-ink" },
 };
 
