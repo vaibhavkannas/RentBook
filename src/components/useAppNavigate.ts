@@ -2,7 +2,7 @@
 
 import { usePathname, useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
-import { navAction, previousEntryUrl, type NavigationLike } from "@/lib/app-nav";
+import { hrefWithAddressMonth, navAction, previousEntryUrl, type NavigationLike } from "@/lib/app-nav";
 import { expectBack } from "@/lib/back-refresh";
 import { currentYm, ymKey } from "@/lib/domain/year-month";
 
@@ -19,7 +19,9 @@ export function useAppNavigate() {
   const [loading, startTransition] = useTransition();
   const [target, setTarget] = useState<string | null>(null);
 
-  function onNavigate(href: string, event: { preventDefault: () => void }) {
+  /** `fromAddress`: the link was drawn before the address could be read, so its month is read now, at the tap. */
+  function onNavigate(rawHref: string, event: { preventDefault: () => void }, options: { fromAddress?: boolean } = {}) {
+    const href = options.fromAddress ? hrefWithAddressMonth(rawHref, window.location.search) : rawHref;
     // The Navigation API is not in every browser (nor in the DOM types this project builds with): null then.
     const navigation = (window as unknown as { navigation?: NavigationLike }).navigation;
     const action = navAction({
@@ -28,8 +30,14 @@ export function useAppNavigate() {
       previousUrl: previousEntryUrl(navigation),
       currentKey: ymKey(currentYm(new Date())),
     });
-    // A push is what the Link does itself.
-    if (action === "push") return;
+    // A push is what the Link does itself, unless its own address has no month.
+    if (action === "push") {
+      if (options.fromAddress) {
+        event.preventDefault();
+        router.push(href);
+      }
+      return;
+    }
     event.preventDefault();
     if (action === "none") {
       const calm = window.matchMedia("(prefers-reduced-motion: reduce)").matches;

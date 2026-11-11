@@ -31,8 +31,10 @@ export function BackLink({ href, label }: Props) {
 
 /** The same arrow without the month, for the moment before the address can be read. */
 export function BackLinkFallback({ href, label }: Props) {
+  const { onNavigate } = useAppNavigate();
+  // Tapped before the address can be read, it still leads to the month of the address (read at the tap), not to the current month.
   return (
-    <Link href={href} aria-label={label} className={framedIconButtonClasses()}>
+    <Link href={href} aria-label={label} onNavigate={(event) => onNavigate(href, event, { fromAddress: true })} className={framedIconButtonClasses()}>
       <Icon name="left" />
     </Link>
   );

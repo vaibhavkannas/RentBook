@@ -515,6 +515,7 @@ const refreshButton: Check = {
   },
 };
 
+
 // 5. The reports
 
 const reports: Check = {

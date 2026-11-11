@@ -29,7 +29,7 @@ function PendingDot({ replacing }: { replacing: boolean }) {
 }
 
 /** The bar for a month: the month is in every link, so a tab leads to the same month. */
-function TabBarView({ month }: { month: string | null }) {
+function TabBarView({ month, fromAddress = false }: { month: string | null; fromAddress?: boolean }) {
   const pathname = usePathname();
   const active = tabForPath(pathname);
   const { onNavigate, replacingHref } = useAppNavigate();
@@ -46,7 +46,7 @@ function TabBarView({ month }: { month: string | null }) {
               key={tab.id}
               href={href}
               aria-current={current ? "page" : undefined}
-              onNavigate={(event) => onNavigate(href, event)}
+              onNavigate={(event) => onNavigate(href, event, { fromAddress })}
               className={cx(
                 // The ring is drawn inside the link: the first and the last touch the edge of the screen, which would clip it.
                 "press relative flex min-h-16 flex-1 flex-col items-center justify-center gap-0.5 text-xs font-medium focus-visible:-outline-offset-2",
@@ -71,5 +71,5 @@ export default function TabBar() {
 
 /** The same bar without the month, for the moment before the address can be read. */
 export function TabBarFallback() {
-  return <TabBarView month={null} />;
+  return <TabBarView month={null} fromAddress />;
 }

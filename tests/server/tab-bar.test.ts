@@ -166,7 +166,7 @@ describe("the TabBar source", () => {
 
   it("reads the month from the address inside the Suspense-wrapped component only, and the path in both", () => {
     expect(code.match(/useSearchParams\(\)/g)).toHaveLength(1);
-    expect(code).toMatch(/export function TabBarFallback\(\)\s*\{\s*return <TabBarView month=\{null\} \/>;/);
+    expect(code).toMatch(/export function TabBarFallback\(\)\s*\{\s*return <TabBarView month=\{null\} fromAddress \/>;/);
   });
 
   it("shows the pending dot for a Link navigation with useLinkStatus and for a replace with the hook's transition", () => {
@@ -289,5 +289,15 @@ describe("TabBar icons and active state", () => {
     expect(smallTargets(out)).toEqual([]);
     expect(unpressedTargets(out)).toEqual([]);
     expect(withoutComments(source("src/app/globals.css"))).toMatch(/@utility h-tabbar \{[^}]*env\(safe-area-inset-bottom\)/);
+  });
+});
+
+describe("the bar and the arrow back before the address can be read", () => {
+  const read = (name: string) => readFileSync(new URL(`../../src/components/${name}`, import.meta.url), "utf8");
+
+  it("both read the month from the address when they are tapped, so a quick tap never falls to the current month", () => {
+    expect(read("TabBar.tsx")).toMatch(/onNavigate\(href, event, \{ fromAddress: month === undefined \}\)|fromAddress/);
+    expect(read("ui/BackLink.tsx")).toMatch(/export function BackLinkFallback[\s\S]*fromAddress/);
+    expect(read("useAppNavigate.ts")).toMatch(/hrefWithAddressMonth\(rawHref, window\.location\.search\)/);
   });
 });

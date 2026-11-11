@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  hrefWithAddressMonth,
   monthParam,
   monthScreenHref,
   navAction,
@@ -281,5 +282,19 @@ describe("previousEntryUrl", () => {
         entries: () => [],
       }),
     ).toBeNull();
+  });
+});
+
+describe("hrefWithAddressMonth", () => {
+  // The arrow back and the tab bar are first drawn without the month (they cannot read the address until the page is ready) and
+  // a tap in that moment must still carry the month of the address, not fall to the current month.
+  it("carries the month the address has at the moment of the tap", () => {
+    expect(hrefWithAddressMonth("/", "?month=2026-10")).toBe("/?month=2026-10");
+    expect(hrefWithAddressMonth("/activity", "?foo=1&month=2025-12")).toBe("/activity?month=2025-12");
+  });
+
+  it("leaves the path as it is when the address has no month, or one that is not a month", () => {
+    expect(hrefWithAddressMonth("/", "")).toBe("/");
+    expect(hrefWithAddressMonth("/more", "?month=latest")).toBe("/more");
   });
 });

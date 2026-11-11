@@ -28,6 +28,14 @@ export function withMonth(path: string, monthKey: string | null | undefined): st
   return `${base}?${params.toString()}`;
 }
 
+/**
+ * `path` with the month of an address's query string (`?month=2026-10`), read at the moment of a tap. The arrow back and the tab
+ * bar are drawn without a month until the page can read its address, and a tap in that moment must not fall to the current month.
+ */
+export function hrefWithAddressMonth(path: string, search: string): string {
+  return withMonth(path, monthParam(new URLSearchParams(search).get("month")));
+}
+
 /** The month screen of a month: `/?month=K`, or `/` when there is no month to carry. */
 export function monthScreenHref(monthKey: string | null | undefined): string {
   return withMonth("/", monthKey);
