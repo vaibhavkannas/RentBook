@@ -65,7 +65,7 @@ export default async function DiagnosticsPage({
       <div className="mt-3 space-y-3">
         {sections.map((section) => (
           <Card as="section" key={section.id} aria-labelledby={`diagnostics-${section.id}`}>
-            <h2 id={`diagnostics-${section.id}`} className="font-medium">
+            <h2 id={`diagnostics-${section.id}`} className="font-semibold leading-tight">
               {section.title}
             </h2>
             <ul className="mt-3 space-y-3">

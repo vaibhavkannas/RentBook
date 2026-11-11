@@ -100,3 +100,12 @@ describe("global-error.tsx, the page for an error in the page frame itself", () 
     expect(html()).not.toMatch(/#[0-9a-fA-F]{3,8}\b|\b(?:bg|text)-(?:red|green|blue|gray|slate|white|black)\b/);
   });
 });
+
+describe("the headings of the error pages", () => {
+  it("are drawn in the display face like the rest of the redesigned app", () => {
+    const error = Object.assign(new Error("x"), { digest: "1" });
+    for (const out of [renderToStaticMarkup(ErrorPage({ error, retry: vi.fn() })), renderToStaticMarkup(GlobalError())]) {
+      expect(out).toMatch(/<h1 class="font-display text-2xl font-bold leading-tight">Something went wrong on our side\.<\/h1>/);
+    }
+  });
+});

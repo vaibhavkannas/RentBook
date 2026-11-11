@@ -1,5 +1,6 @@
 "use client";
 
+import { SectionLabel } from "@/components/ui/SectionLabel";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Button } from "@/components/ui/Button";
@@ -46,9 +47,9 @@ export default function SwitchedOffPortions({ portions, onSwitchedOn }: Props) {
   if (portions.length === 0) return null;
   return (
     <section aria-labelledby="switched-off-heading" className="mt-6">
-      <h2 id="switched-off-heading" className="text-sm text-muted">
+      <SectionLabel id="switched-off-heading" className="mb-2 px-0.5">
         Switched off
-      </h2>
+      </SectionLabel>
       <div className="mt-2 space-y-3">
         {portions.map((portion) => (
           <Card key={portion.id}>

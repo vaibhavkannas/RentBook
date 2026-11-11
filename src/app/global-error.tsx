@@ -18,7 +18,7 @@ export default function GlobalError() {
       <body className="min-h-full">
         <title>{BRAND.name}</title>
         <Page center tabBar={false}>
-          <h1 className="text-2xl font-semibold">Something went wrong on our side.</h1>
+          <h1 className="font-display text-2xl font-bold leading-tight">Something went wrong on our side.</h1>
           <p className="mt-2 text-muted">Your data is safe in your Sheet.</p>
           {/* A plain <a>, not next/link: see above. It is drawn with the button's classes, not the Button component. */}
           {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}

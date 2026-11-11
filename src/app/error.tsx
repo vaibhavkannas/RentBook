@@ -11,7 +11,7 @@ import { BRAND } from "@/lib/brand";
 export default function ErrorPage({ retry }: { error: Error & { digest?: string }; retry: () => void }) {
   return (
     <Page center>
-      <h1 className="text-2xl font-semibold">Something went wrong on our side.</h1>
+      <h1 className="font-display text-2xl font-bold leading-tight">Something went wrong on our side.</h1>
       <p className="mt-2 text-muted">Your data is safe in your Sheet.</p>
       <Button size="lg" className="mt-6 w-full" onClick={() => retry()}>
         Try again

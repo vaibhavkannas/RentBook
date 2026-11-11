@@ -30,7 +30,7 @@ export default async function SignInPage({
   return (
     <Page center tabBar={false}>
       <BrandMark size={56} className="text-accent" />
-      <h1 className="mt-4 text-2xl font-semibold tracking-tight">{BRAND.name}</h1>
+      <h1 className="mt-4 font-display text-2xl font-bold tracking-tight">{BRAND.name}</h1>
       <p className="mt-1 text-muted">{BRAND.tagline}</p>
 
       <p className="mt-8">Sign in with the Google account the owner added.</p>

@@ -50,7 +50,7 @@ describe("the sign-in page", () => {
     expect(mark).toContain('width="56"');
     expect(mark).toContain('aria-hidden="true"');
     expect(mark).toMatch(/class="[^"]*\btext-accent\b/);
-    expect(html).toContain(`<h1 class="mt-4 text-2xl font-semibold tracking-tight">${BRAND.name}</h1>`);
+    expect(html).toContain(`<h1 class="mt-4 font-display text-2xl font-bold tracking-tight">${BRAND.name}</h1>`);
     expect(html.match(/<h1/g)).toHaveLength(1);
     expect(html).toMatch(new RegExp(`<p class="[^"]*\\btext-muted\\b[^"]*">${BRAND.tagline}</p>`));
   });

@@ -1,5 +1,6 @@
 "use client";
 
+import { SectionLabel } from "@/components/ui/SectionLabel";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/Button";
@@ -91,9 +92,9 @@ export default function PortionOrder({ portions, onCancel, onSaved }: Props) {
 
   return (
     <section aria-labelledby="order-heading" className="mt-3">
-      <h2 id="order-heading" className="font-medium">
+      <SectionLabel id="order-heading" className="mb-1 px-0.5">
         Change order
-      </h2>
+      </SectionLabel>
       <p className="mt-1 text-sm text-muted">
         Portions show on the month screen in this order. Your Schedule&apos;s columns do not move.
       </p>

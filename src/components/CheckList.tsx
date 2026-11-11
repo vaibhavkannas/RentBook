@@ -26,7 +26,7 @@ export default function CheckList({ checks, extras = {} }: Props) {
         return (
           <Card as="section" key={step} aria-labelledby={`step-${step}`}>
             <div className="flex items-start justify-between gap-3">
-              <h2 id={`step-${step}`} className="min-w-0 font-medium">
+              <h2 id={`step-${step}`} className="min-w-0 font-semibold leading-tight">
                 {`${step}. ${title}`}
               </h2>
               <StatusPill status={stepStatus(checks, step)} />
