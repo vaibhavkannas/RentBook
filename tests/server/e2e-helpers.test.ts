@@ -458,6 +458,7 @@ describe("CHECKS", () => {
       "overdue-state",
       "appearance",
       "save-error",
+      "two-sheets",
       "log-existing",
       "undo",
       "duplicate-replace",

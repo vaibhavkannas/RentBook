@@ -99,7 +99,7 @@ describe("the root layout", () => {
 
   it("wraps the page in the toast provider, so a toast survives a refresh and a replace of the page below it", () => {
     expect(layout).toMatch(/import \{ ToastProvider \} from "@\/components\/ui\/Toast"/);
-    expect(layout).toMatch(/<ToastProvider>\s*\{children\}\s*<\/ToastProvider>/);
+    expect(layout).toMatch(/<ToastProvider>\s*\{children\}[\s\S]*<\/ToastProvider>/);
   });
 
   it("keeps the tab bar after it", () => {

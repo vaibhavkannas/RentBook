@@ -31,6 +31,7 @@ describe("the components that send requests to the server", () => {
       "SwitchedOffPortions.tsx",
       "TenancyForm.tsx",
       "UndoSheet.tsx",
+      "WriteNotices.tsx",
     ]);
   });
 

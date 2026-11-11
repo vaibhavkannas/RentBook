@@ -141,4 +141,6 @@ export type Writes = {
   begin(monthKey: string, change: Change): void;
   settle(monthKey: string, portionId: string): void;
   rollback(monthKey: string, portionId: string): void;
+  /** Whether a change to the portion is still on its way: a second one is not started. */
+  busy(monthKey: string, portionId: string): boolean;
 };

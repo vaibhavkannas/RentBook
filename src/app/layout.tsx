@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Inter, Space_Grotesk } from "next/font/google";
 import { cookies } from "next/headers";
 import { Suspense } from "react";
+import WriteNotices from "@/components/WriteNotices";
 import BackRefresh from "@/components/BackRefresh";
 import ThemeSync from "@/components/ThemeSync";
 import TabBar, { TabBarFallback } from "@/components/TabBar";
@@ -51,7 +52,11 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html lang="en" data-theme={theme} className={`${inter.variable} ${spaceGrotesk.variable} h-full antialiased`}>
       <body className="min-h-full">
-        <ToastProvider>{children}</ToastProvider>
+        <ToastProvider>
+          {children}
+          {/* What a save answered after its sheet was gone still has to tell the owner (it renders nothing otherwise). */}
+          <WriteNotices />
+        </ToastProvider>
         {/* A tap that goes back lands on a kept screen: this loads it again (it renders nothing). */}
         <BackRefresh />
         {/* A remembered Appearance choice the cookie lost is applied after the page loads (it renders nothing). */}

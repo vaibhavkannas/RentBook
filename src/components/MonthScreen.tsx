@@ -10,6 +10,7 @@ import { formatMonthTitle } from "@/lib/format";
 import { canSwitchHere } from "@/lib/month-window";
 import { applyOverlay, beginWrite, liveOverlay, rollbackWrite, savingIds, settleWrite, type Overlay, type Writes } from "@/lib/optimistic";
 import { watchForeground } from "@/lib/foreground-refresh";
+import { closeIfCurrent } from "@/lib/sheet-active";
 import { createRefreshStore } from "@/lib/refresh-status";
 import { monthFromAddress, monthHref, openMonth, sheetKey, shouldStartSwipe, swipeDirection } from "@/lib/month-nav";
 import MonthPicker from "./MonthPicker";
@@ -92,10 +93,15 @@ export default function MonthScreen({ monthKey, currentKey, today, renderedAt, v
       begin: (month, change) => setOverlay((o) => beginWrite(o, month, change, latestViews.current)),
       settle: (month, portionId) => setOverlay((o) => settleWrite(o, month, portionId, latestViews.current)),
       rollback: (month, portionId) => setOverlay((o) => rollbackWrite(o, month, portionId)),
+      busy: (month, portionId) => savingIds(latestOverlay.current, month).has(portionId),
     }),
     [],
   );
   const live = useMemo(() => liveOverlay(overlay, views), [overlay, views]);
+  const latestOverlay = useRef(live);
+  useEffect(() => {
+    latestOverlay.current = live;
+  });
   const titleRef = useRef<HTMLButtonElement>(null);
 
   // The address is the truth about the month on show, so this reads it: a switch writes the address, and a navigation, a
@@ -118,11 +124,14 @@ export default function MonthScreen({ monthKey, currentKey, today, renderedAt, v
   /** The cards of a month as they are now, changes on their way included. */
   const cardsOf = (monthKey: string) => (views[monthKey] ? applyOverlay(views[monthKey], live, monthKey).cards : []);
   const openSheet = (action: RowAction | { mode: "new-tenant"; portionId: null }) => {
+    // A second change to a portion whose change is on its way is not started.
+    if (action.portionId !== null && saving.has(action.portionId)) return;
     opened.current += 1;
     const base = { nonce: opened.current, monthKey: shownKey, monthLabel: title };
     setActive(action.mode === "undo" ? { ...base, mode: "undo", portionId: action.portionId, card: action.card } : { ...base, mode: action.mode, portionId: action.portionId });
   };
-  const closeSheet = useCallback(() => setActive(null), []);
+  /** A sheet closes itself, and only itself: a late answer of an earlier sheet must never close the one that is open now. */
+  const closeSheet = useCallback((nonce: number) => setActive((now) => closeIfCurrent(now, nonce)), []);
   /** Undo, offered on the toast of a payment that was logged: opens the undo sheet for the card as it is now. */
   const undoFromToast = (monthKey: string, portionId: string) => {
     const card = cardsOf(monthKey).find((c) => c.portionId === portionId);
@@ -250,7 +259,7 @@ export default function MonthScreen({ monthKey, currentKey, today, renderedAt, v
             monthKey={active.monthKey}
             monthLabel={active.monthLabel}
             card={active.card}
-            onClose={closeSheet}
+            onClose={() => closeSheet(active.nonce)}
             writes={writes}
           />
         ) : (
@@ -262,7 +271,7 @@ export default function MonthScreen({ monthKey, currentKey, today, renderedAt, v
             cards={cardsOf(active.monthKey)}
             initialPortionId={active.portionId}
             defaultDate={today}
-            onClose={closeSheet}
+            onClose={() => closeSheet(active.nonce)}
             writes={writes}
             onUndo={(portionId) => undoFromToast(active.monthKey, portionId)}
           />

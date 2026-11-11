@@ -20,7 +20,7 @@ import PaymentSheet from "@/components/PaymentSheet";
 import UndoSheet from "@/components/UndoSheet";
 
 const read = (name: string) => withoutComments(readFileSync(new URL(`../../src/components/${name}`, import.meta.url), "utf8"));
-const writes = { begin: vi.fn(), settle: vi.fn(), rollback: vi.fn() };
+const writes = { begin: vi.fn(), settle: vi.fn(), rollback: vi.fn(), busy: vi.fn(() => false) };
 
 const pending: PortionCard = {
   portionId: "p1",
@@ -61,7 +61,7 @@ describe("PaymentSheet with the screen's hooks", () => {
   });
 
   it("offers Try again on a failure, brings the sheet back with what was typed, and lets it go if the offer is not taken", () => {
-    expect(sheet).toMatch(/toast\.show\(step\.message, \{ label: "Try again", onPress: parking\.reopen \}\);\s*return parking\.offerRetry\(\);/);
+    expect(sheet).toMatch(/\{ label: "Try again", onPress: parking\.reopen \}\);\s*return parking\.offerRetry\(\);/);
     expect(read("useParking.ts")).toMatch(/setTimeout\(\(\) => discard\.current\(\), ACTION_TOAST_MS \+ 1000\)/);
   });
 
@@ -118,7 +118,7 @@ describe("UndoSheet with the screen's hooks", () => {
   });
 
   it("offers Try again on a failure, and brings the sheet back with the Retry log entry notice when the entry did not save", () => {
-    expect(sheet).toMatch(/toast\.show\(step\.message, \{ label: "Try again", onPress: parking\.reopen \}\);\s*return parking\.offerRetry\(\);/);
+    expect(sheet).toMatch(/\{ label: "Try again", onPress: parking\.reopen \}\);\s*return parking\.offerRetry\(\);/);
     expect(sheet).toMatch(/if \(body\.logWritten === false\) \{\s*parking\.reopen\(\);/);
   });
 
@@ -148,5 +148,28 @@ describe("the month screen", () => {
   it("shows the change on the cards and the summary from one overlay, and drops it when the server's data arrives", () => {
     expect(screen).toMatch(/liveOverlay\(overlay, views\)/);
     expect(screen).toMatch(/applyOverlay\(shownView, live, shownKey\)/);
+  });
+});
+
+describe("a save answered after its sheet is gone", () => {
+  it("tells the owner outside the sheet, in both sheets, and does not start a second change to a portion that is being saved", () => {
+    for (const name of ["PaymentSheet.tsx", "UndoSheet.tsx"]) {
+      const code = read(name);
+      expect(code, name).toMatch(/const alive = useRef\(true\)/);
+      expect(code, name).toMatch(/if \(!alive\.current && step\.kind !== "saved"\) \{\s*return publishAway\(/);
+      expect(code, name).toMatch(/writes\?\.busy\(monthKey, /);
+      // when the request may have saved, the words say check first, so a look at the Sheet is offered and not a second try
+      expect(code, name).toMatch(/step\.refresh \? \{ label: "Check", onPress: hooks\.refresh \} : \{ label: "Try again"/);
+    }
+    expect(read("PaymentSheet.tsx")).toMatch(/if \(!alive\.current\) return publishAway\(paymentOutcomeAway\(step/);
+    expect(read("UndoSheet.tsx")).toMatch(/body\.logWritten === false && !alive\.current/);
+  });
+
+  it("closes only the sheet that asks, and the notices live in the root layout, which no screen change unmounts", () => {
+    expect(read("MonthScreen.tsx")).toMatch(/onClose=\{\(\) => closeSheet\(active\.nonce\)\}/);
+    expect(read("MonthScreen.tsx")).toMatch(/closeIfCurrent\(now, nonce\)/);
+    const layout = withoutComments(readFileSync(new URL("../../src/app/layout.tsx", import.meta.url), "utf8"));
+    expect(layout).toContain("<WriteNotices />");
+    expect(read("WriteNotices.tsx")).toMatch(/sendJson<LogRetryResponse>\("\/api\/payments\/log-retry", \{ token \}\)/);
   });
 });

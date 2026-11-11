@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { Notice } from "@/components/ui/Notice";
 import { Sheet } from "@/components/ui/Sheet";
+import { publishAway } from "./publishAway";
 import { useParking } from "./useParking";
 import { SlowHint } from "@/components/ui/SlowHint";
 import { useToast } from "@/components/ui/Toast";
@@ -15,6 +16,7 @@ import { LOG_RETRY_UNCONFIRMED_MESSAGE, type LogRetryResponse } from "@/lib/paym
 import { sendJson } from "@/lib/post-json";
 import { sendFailureMessage } from "@/lib/request-copy";
 import { logEntryState, type LogEntryState } from "@/lib/toast-copy";
+import { undoOutcomeAway } from "@/lib/write-outcome";
 import { applyStep, classifyUndo, type WriteHooks } from "@/lib/write-flow";
 import {
   undoConfirmationText,
@@ -50,6 +52,14 @@ export default function UndoSheet({ monthKey, monthLabel, card, onClose, writes 
   const router = useRouter();
   const toast = useToast();
   const parking = useParking(onClose);
+  // A sheet that was let go is gone when its request is answered: what the answer means is then told outside the sheet.
+  const alive = useRef(true);
+  useEffect(() => {
+    alive.current = true;
+    return () => {
+      alive.current = false;
+    };
+  }, []);
   const entry = card.entry!;
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -83,6 +93,7 @@ export default function UndoSheet({ monthKey, monthLabel, card, onClose, writes 
       rollback: () => writes?.rollback(monthKey, card.portionId),
       refresh: () => router.refresh(),
     };
+    if (writes?.busy(monthKey, card.portionId)) return setError("A change to this portion is still being saved. Wait a moment, then try again.");
     setBusy(true);
     setError(null);
     // The card turns pending at once, and the sheet steps aside until the request is answered. A failure puts the card back.
@@ -99,10 +110,14 @@ export default function UndoSheet({ monthKey, monthLabel, card, onClose, writes 
     const step = classifyUndo(sent);
     if (writes || step.kind !== "failed") applyStep(step, hooks);
 
+    if (!alive.current && step.kind !== "saved") {
+      return publishAway(undoOutcomeAway(step, { portion: card.name, monthLabel }), toast, () => {});
+    }
     if (step.kind === "failed") {
       setError(step.message);
       if (!writes) return;
-      toast.show(step.message, { label: "Try again", onPress: parking.reopen });
+      // When the request may have saved, the words say to check first: offer a look at the Sheet, not a second try.
+      toast.show(step.message, step.refresh ? { label: "Check", onPress: hooks.refresh } : { label: "Try again", onPress: parking.reopen });
       return parking.offerRetry();
     }
     if (step.kind === "conflict") {
@@ -113,6 +128,9 @@ export default function UndoSheet({ monthKey, monthLabel, card, onClose, writes 
     // A tenancy the undo opened again has its history settled in the background, one automatic retry at most, as the screens
     // that save tenancy details do: the person is told only when it still cannot be added.
     void settleHistory(body).then((ok) => ok || toast.show(HISTORY_NOT_SAVED));
+    if (body.logWritten === false && !alive.current) {
+      return publishAway(undoOutcomeAway(step, { portion: card.name, monthLabel }), toast, () => {});
+    }
     if (body.logWritten === false) {
       parking.reopen();
       return setPendingToken(body.retryToken ?? "");

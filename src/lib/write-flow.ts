@@ -67,6 +67,8 @@ export function applyStep(step: { kind: string; refresh?: boolean }, hooks: Writ
       hooks.settle();
       hooks.refresh();
       return;
+    // A duplicate means someone else has a payment there: the card goes back and the screen looks again, so it shows it.
+    case "duplicate":
     case "stale":
     case "conflict":
       hooks.rollback();

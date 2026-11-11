@@ -93,10 +93,10 @@ describe("what each ending does to the screen", () => {
     expect(calls).toEqual(["settle", "refresh"]);
   });
 
-  it("puts the card back when a duplicate is found, so the Replace sheet shows the truth and Replace starts a new change", () => {
+  it("puts the card back and loads the real data when a duplicate is found, so the screen shows the payment that is there and Replace starts a new change", () => {
     const { h, calls } = hooks();
     applyStep({ kind: "duplicate" }, h);
-    expect(calls).toEqual(["rollback"]);
+    expect(calls).toEqual(["rollback", "refresh"]);
   });
 
   it("puts the card back and loads the real data when someone else changed it", () => {

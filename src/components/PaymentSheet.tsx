@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { Field, Input, Select } from "@/components/ui/Field";
 import { IconButton } from "@/components/ui/IconButton";
@@ -37,11 +37,16 @@ import { HISTORY_NOT_SAVED, settleHistory } from "@/lib/history-retry";
 import type { Change, Writes } from "@/lib/optimistic";
 import { sendJson } from "@/lib/post-json";
 import { sendFailureMessage } from "@/lib/request-copy";
+import { paymentOutcomeAway } from "@/lib/write-outcome";
 import { applyStep, classifyPayment, type PaymentAnswer, type WriteHooks } from "@/lib/write-flow";
 import { exitToastText, logEntryState, paymentToasts, type LogEntryState, type PaymentToasts } from "@/lib/toast-copy";
 import { newTenantDetails, type NewTenantDetailsForm } from "@/lib/tenancy-input";
 import { useFieldFocus } from "./useFieldFocus";
+import { publishAway } from "./publishAway";
 import { useParking } from "./useParking";
+
+/** Said when a second change to a portion is started while its first is still being saved. */
+const BUSY_MESSAGE = "A change to this portion is still being saved. Wait a moment, then try again.";
 
 export type SheetMode = "log" | "edit" | "new-tenant";
 
@@ -94,6 +99,15 @@ export default function PaymentSheet({
   const router = useRouter();
   const toast = useToast();
   const parking = useParking(onClose);
+  // A sheet that was let go (another sheet was opened, or the person moved on) is gone when its request is answered: what the
+  // answer means is then told outside the sheet (see publishAway).
+  const alive = useRef(true);
+  useEffect(() => {
+    alive.current = true;
+    return () => {
+      alive.current = false;
+    };
+  }, []);
   // In the generic "New tenant" sheet the owner must choose the portion on purpose.
   const [portionId, setPortionId] = useState(initialPortionId ?? "");
   const card = cards.find((c) => c.portionId === portionId);
@@ -190,6 +204,8 @@ export default function PaymentSheet({
     if (mode === "log" && card.next?.startsNewCycle && !overwrite && !confirmedFar && farFromSuggestion(request.body.amount, card.next.suggestedAmount)) {
       return setFarAmount(request.body.amount);
     }
+    // A second change to a portion whose change is still on its way is not started.
+    if (writes?.busy(monthKey, portionId)) return show(plainProblem(BUSY_MESSAGE));
     // The card changes at once, and the sheet steps aside until the request is answered. A failure puts the card back.
     const change: Change | null = writes
       ? mode === "new-tenant"
@@ -215,11 +231,15 @@ export default function PaymentSheet({
     // Without a card to put back, the screen is only told what it always was: a saved payment, or a payment someone else changed.
     if (change || step.kind === "saved" || step.kind === "stale") applyStep(step, hooks);
 
+    if (!alive.current && step.kind !== "saved") {
+      return publishAway(paymentOutcomeAway(step, { portion: card.name, monthLabel }), toast, () => {});
+    }
     if (step.kind === "failed") {
       show(plainProblem(step.message));
       if (!change) return;
-      // The card is back as it was. The sheet is still there with what was typed: Try again brings it back.
-      toast.show(step.message, { label: "Try again", onPress: parking.reopen });
+      // The card is back as it was. The sheet is still there with what was typed: Try again brings it back. When the request may
+      // have saved, the words say to check first, so what is offered is a look at the Sheet, not a second try.
+      toast.show(step.message, step.refresh ? { label: "Check", onPress: hooks.refresh } : { label: "Try again", onPress: parking.reopen });
       return parking.offerRetry();
     }
     if (step.kind === "saved") {
@@ -240,6 +260,7 @@ export default function PaymentSheet({
         toast.show(toasts.saved, mode === "log" && onUndo ? { label: "Undo", onPress: () => onUndo(portionId) } : undefined);
         return onClose();
       }
+      if (!alive.current) return publishAway(paymentOutcomeAway(step, { portion: card.name, monthLabel }), toast, () => {});
       setDoneToasts(toasts);
       setNotice({ retryToken: outcome.retryToken, tenancyNotSaved: outcome.tenancyNotSaved });
       return parking.reopen();

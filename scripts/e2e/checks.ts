@@ -632,6 +632,79 @@ const saveError: Check = {
   },
 };
 
+// 6b. A save that is answered after its sheet is gone
+
+/** Holds the answer of POST /api/payments until `release()`: a slow Google, made to order. */
+const hold = { on: false, gate: Promise.resolve(), release: () => {} };
+let holdInstalled = false;
+
+const twoSheets: Check = {
+  name: "two-sheets",
+  needs: ["save-error"],
+  async run(run) {
+    const { title: monthTitle } = months(run);
+    const actor = await run.actor("owner");
+    const page = actor.page;
+    if (!holdInstalled) {
+      holdInstalled = true;
+      await actor.context.route(/\/api\/payments$/, async (route) => {
+        if (hold.on) await hold.gate;
+        await route.continue();
+      });
+    }
+    const startHold = () => {
+      hold.on = true;
+      hold.gate = new Promise<void>((resolve) => (hold.release = resolve));
+    };
+    const endHold = () => {
+      hold.on = false;
+      hold.release();
+    };
+    await open(run, page, "/");
+    try {
+      // First save: held. The card turns Paid at once. Then a second sheet is opened, and something is typed in it.
+      startHold();
+      const first = await openLog(page, P3);
+      await tap(first.getByRole("button", { name: "Save to Sheet" }), "Save to Sheet (first)");
+      await see(pill(page, P3, "Paid"), `${P3} Paid at once`);
+      const second = await openLog(page, P2);
+      await type(second.getByLabel("Amount received (₹)"), "13000", "the amount of the second sheet");
+      // The first answer comes while the second sheet is open: it must not close it or empty it.
+      endHold();
+      await toast(page, logToastText(P3, 9000, monthTitle));
+      await see(dialog(page).getByRole("heading", { name: "Log payment" }), "the second sheet, still open");
+      if ((await second.getByLabel("Amount received (₹)").inputValue()) !== "13000") throw new Error("The second sheet lost what was typed in it");
+      await tap(second.getByRole("button", { name: "Close", exact: true }), "Close the second sheet");
+      await gone(dialog(page), "the second sheet");
+
+      // Second scenario: the log entry will not save. The answer arrives after the sheet is gone: the owner is still told, and can retry.
+      await expand(page, P3);
+      await tap(card(page, P3).getByRole("button", { name: "Undo", exact: true }), `Undo on ${P3}`);
+      await tap(dialog(page).getByRole("button", { name: "Undo payment", exact: true }), "Undo payment");
+      await see(card(page, P3).getByText(/^(Pending|Overdue)$/), `${P3} unpaid again`);
+      await sleep(300);
+      run.fail({ appendRow: "unavailable" });
+      startHold();
+      const third = await openLog(page, P3);
+      await tap(third.getByRole("button", { name: "Save to Sheet" }), "Save to Sheet (third)");
+      await see(pill(page, P3, "Paid"), `${P3} Paid at once, again`);
+      await openLog(page, P2);
+      endHold();
+      const notice = page.getByRole("alert").filter({ hasText: "Payments Log entry didn't save" });
+      await see(notice, "the Payments Log notice, outside the sheets");
+      await see(dialog(page).getByRole("heading", { name: "Log payment" }), "the second sheet, still open");
+      run.heal();
+      await tap(dialog(page).getByRole("button", { name: "Close", exact: true }), "Close the second sheet");
+      await tap(notice.getByRole("button", { name: "Retry log entry" }), "Retry log entry");
+      await gone(notice, "the notice, after the retry");
+      await toast(page, "Payments Log entry saved");
+    } finally {
+      endHold();
+      run.heal();
+    }
+  },
+};
+
 // 7 to 10. Logging, undoing and replacing a payment
 
 const logExisting: Check = {
@@ -907,6 +980,7 @@ export const CHECKS: readonly Check[] = [
   overdueState,
   appearance,
   saveError,
+  twoSheets,
   logExisting,
   undo,
   duplicateReplace,
