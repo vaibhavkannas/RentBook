@@ -162,10 +162,10 @@ describe("the month screen", () => {
     expect(text).toBe("Needs attention Rent overdue: 2 portions, ₹ 31,335 1 agreement ended 1 agreement ends within 60 days Rent goes up soon for 1 portion");
   });
 
-  it("shows another month from ?month: September 2026, with a Today button and no one else's rent on it", async () => {
+  it("shows another month from ?month: September 2026, with a This month button and no one else's rent on it", async () => {
     const html = await month({ month: "2026-09" });
     expect(textOf(named(html, "h1")[0])).toBe("September 2026");
-    expect(named(html, "button").map((button) => textOf(button))).toContain("Today");
+    expect(named(html, "button").map((button) => textOf(button))).toContain("This month");
     const shown = cards(html).map((card) => card.text);
     expect(shown[0]).toMatch(/^First floor, single bedroom Asha · Payment 3 of 11 ₹ 5,450 Paid /);
     expect(shown[0]).toContain("Later months have entries for this portion. Undo those first.");

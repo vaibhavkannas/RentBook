@@ -12,6 +12,7 @@ vi.mock("next/navigation", () => ({
   useRouter: () => ({ back: vi.fn(), replace: vi.fn(), push: vi.fn(), refresh: vi.fn() }),
 }));
 
+import MonthLoading from "@/app/(month)/loading";
 import ActivityLoading from "@/app/activity/loading";
 import AlertsLoading from "@/app/alerts/loading";
 import DiagnosticsLoading from "@/app/diagnostics/loading";
@@ -25,6 +26,7 @@ import { CARD, CHIP_ROW } from "@/lib/ui-classes";
 const html = (element: Parameters<typeof renderToStaticMarkup>[0]) => renderToStaticMarkup(element);
 
 describe.each([
+  ["month", MonthLoading, "Loading this month"],
   ["activity", ActivityLoading, "Loading activity"],
   ["settings", SettingsLoading, "Loading portion settings"],
   ["set up", SetupLoading, "Loading set up"],
@@ -298,5 +300,29 @@ describe("the pages that read the Sheet up to three times in a row", () => {
     for (const page of ["setup", "diagnostics", "overdue", "year", "alerts"]) {
       expect(existsSync(new URL(`../../src/app/${page}/loading.tsx`, import.meta.url)), page).toBe(true);
     }
+  });
+});
+
+describe("the month loading screen", () => {
+  const out = html(createElement(MonthLoading));
+
+  it("is a screen of its own (the month group), and is never shown by a switch of month: the months are already on the page", () => {
+    expect(existsSync(new URL("../../src/app/(month)/loading.tsx", import.meta.url))).toBe(true);
+    expect(existsSync(new URL("../../src/app/loading.tsx", import.meta.url))).toBe(false);
+  });
+
+  it("lays out the header, the summary card with its ring, the chips and a row for each of the five portions", () => {
+    // the arrows and the refresh button are 44 px squares, the ring is the real ring's 84 px
+    expect(out.match(/\bsize-11\b/g)).toHaveLength(3);
+    expect(out).toMatch(/\bsize-21\b[^"]*rounded-full!/);
+    // four chips, 44 px high
+    expect(out.match(/\bh-11\b[^"]*rounded-full!/g)).toHaveLength(4);
+    // five rows, 64 px minimum like the real ones
+    expect(out.match(/\bmin-h-16\b/g)).toHaveLength(5);
+  });
+
+  it("shows no text but the line a screen reader reads, and no link or button", () => {
+    expect(out.replace(/<p class="sr-only">[^<]*<\/p>/, "").replace(/<[^>]+>/g, "")).toBe("");
+    expect(out).not.toMatch(/<(a|button)\b/);
   });
 });

@@ -92,6 +92,16 @@ describe("the portion rows", () => {
   });
 });
 
+describe("a tap on a row", () => {
+  it("draws the rows that change and not the screen: rows are memoised and read the open row from a store", () => {
+    const row = withoutComments(readFileSync(new URL("../../src/components/PortionRow.tsx", import.meta.url), "utf8"));
+    expect(row).toMatch(/export default memo\(PortionRow\)/);
+    expect(row).toMatch(/useSyncExternalStore\(\s*store\.subscribe/);
+    const boardCode = withoutComments(readFileSync(new URL("../../src/components/PortionBoard.tsx", import.meta.url), "utf8"));
+    expect(boardCode).not.toMatch(/useState<string \| null>/);
+  });
+});
+
 describe("motion on the month screen", () => {
   const css = readFileSync(new URL("../../src/app/globals.css", import.meta.url), "utf8");
 

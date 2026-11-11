@@ -2,19 +2,23 @@
 
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, useTransition, type ReactNode, type TouchEvent } from "react";
+import { Icon } from "@/components/ui/Icon";
 import { IconButton } from "@/components/ui/IconButton";
 import type { MonthView, PortionCard } from "@/lib/domain/types";
 import { addMonths, parseYmKey, ymKey } from "@/lib/domain/year-month";
 import { formatMonthTitle } from "@/lib/format";
 import { canSwitchHere } from "@/lib/month-window";
 import { applyOverlay, beginWrite, liveOverlay, rollbackWrite, savingIds, settleWrite, type Overlay, type Writes } from "@/lib/optimistic";
+import { createRefreshStore } from "@/lib/refresh-status";
 import { monthFromAddress, monthHref, openMonth, sheetKey, shouldStartSwipe, swipeDirection } from "@/lib/month-nav";
 import MonthPicker from "./MonthPicker";
 import MonthSummary from "./MonthSummary";
 import PaymentSheet, { type SheetMode } from "./PaymentSheet";
 import PortionBoard from "./PortionBoard";
 import type { RowAction } from "./PortionRow";
+import RefreshButton from "./RefreshButton";
 import UndoSheet from "./UndoSheet";
+import UpdatedLabel from "./UpdatedLabel";
 
 /** Sent on the window when the month screen has replaced the address itself. */
 const ADDRESS_CHANGED = "rentbook:address-changed";
@@ -61,7 +65,7 @@ type Props = {
  * page does not carry is opened with a navigation to the server, as before, and the screen shows the month asked for while
  * it loads.
  */
-export default function MonthScreen({ monthKey, currentKey, today, views, attention, problem }: Props) {
+export default function MonthScreen({ monthKey, currentKey, today, renderedAt, views, attention, problem }: Props) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [target, setTarget] = useState(monthKey);
@@ -69,6 +73,8 @@ export default function MonthScreen({ monthKey, currentKey, today, views, attent
   const [pickerOpen, setPickerOpen] = useState(false);
   const touchStart = useRef<{ x: number; y: number; ignore: boolean } | null>(null);
   const [active, setActive] = useState<Active | null>(null);
+  const [refreshStore] = useState(createRefreshStore);
+  useEffect(() => () => refreshStore.dispose(), [refreshStore]);
   const opened = useRef(0);
   // Changes on their way to the Sheet: the cards show them at once (see src/lib/optimistic.ts). The data the screen has now is
   // what an answered change waits to be replaced by, and it is kept in a ref so that answering reads the latest.
@@ -165,41 +171,44 @@ export default function MonthScreen({ monthKey, currentKey, today, views, attent
 
   return (
     <div onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
-      {/* The arrows stay level with the title row; the nav grows only while the Today pill is shown. */}
-      <nav aria-label="Month" className="flex items-start justify-between">
-        <IconButton label="Previous month" onClick={() => go(ymKey(addMonths(shown, -1)))}>
-          ‹
-        </IconButton>
-        <div className="flex flex-col items-center">
-          <h1 className="flex text-lg font-semibold">
+      {/* One line: the arrows round the title, and on the right the refresh button, or the way back to this month. It wraps rather than overlap on a very narrow screen. */}
+      <div className="flex flex-wrap items-center justify-between gap-x-2">
+        <nav aria-label="Month" className="flex min-w-0 items-center gap-1">
+          <IconButton framed label="Previous month" onClick={() => go(ymKey(addMonths(shown, -1)))}>
+            <Icon name="left" />
+          </IconButton>
+          <h1 className="min-w-0 font-display text-lg font-bold leading-tight">
             <button
               ref={titleRef}
               type="button"
               aria-haspopup="dialog"
               onClick={() => setPickerOpen(true)}
-              className="press min-h-11 rounded-chip px-3"
+              className="press flex min-h-11 items-center gap-1 rounded-chip px-1.5"
             >
-              {title} <span aria-hidden="true">▾</span>
+              {title}
+              <Icon name="down" className="size-3.5 shrink-0 text-muted" />
             </button>
           </h1>
-          {!atCurrent && (
-            <button
-              type="button"
-              onClick={() => {
-                go(currentKey);
-                // The pill disappears on the current month, so keep focus somewhere that stays.
-                titleRef.current?.focus();
-              }}
-              className="press -mt-1 min-h-11 rounded-full px-3 text-sm font-medium text-accent underline"
-            >
-              Today
-            </button>
-          )}
-        </div>
-        <IconButton label="Next month" onClick={() => go(ymKey(addMonths(shown, 1)))}>
-          ›
-        </IconButton>
-      </nav>
+          <IconButton framed label="Next month" onClick={() => go(ymKey(addMonths(shown, 1)))}>
+            <Icon name="right" />
+          </IconButton>
+        </nav>
+        {atCurrent ? (
+          <RefreshButton store={refreshStore} />
+        ) : (
+          <button
+            type="button"
+            onClick={() => {
+              go(currentKey);
+              // The button disappears on the current month, so keep focus somewhere that stays.
+              titleRef.current?.focus();
+            }}
+            className="press min-h-11 whitespace-nowrap rounded-full bg-accent-soft px-3 text-sm font-medium text-accent"
+          >
+            This month
+          </button>
+        )}
+      </div>
 
       <p role="status" className="sr-only">
         {pending ? `Loading ${title}` : ""}
@@ -216,7 +225,7 @@ export default function MonthScreen({ monthKey, currentKey, today, views, attent
         {problem}
         {view && (
           <div key={shownKey} data-direction={direction ?? undefined} className="month-in">
-            <MonthSummary view={view} />
+            <MonthSummary view={view} status={<UpdatedLabel store={refreshStore} renderedAt={renderedAt} />} />
             {shownKey === currentKey && attention}
             <PortionBoard
               monthKey={shownKey}

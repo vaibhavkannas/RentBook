@@ -234,8 +234,15 @@ async function open(run: Run, page: PwPage, address: string): Promise<void> {
 
 const text = (page: PwPage) => page.locator("body").innerText();
 
-/** The month screen's card of a portion. */
-const card = (page: PwPage, name: string) => page.locator("article").filter({ has: page.getByRole("heading", { name, exact: true }) });
+/** The month screen's row of a portion: the list item whose heading button holds the portion's name. */
+const card = (page: PwPage, name: string) => page.locator("li").filter({ has: page.locator("h2 button").filter({ hasText: name }) });
+
+/** Opens a portion's row (a tap on its line) unless it is open, so that its facts and actions can be reached. */
+async function expand(page: PwPage, portion: string): Promise<void> {
+  const line = card(page, portion).locator("h2 button");
+  if ((await line.first().getAttribute("aria-expanded")) !== "true") await tap(line, `the ${portion} row`);
+  await until(`the ${portion} row to open`, async () => (await line.first().getAttribute("aria-expanded")) === "true");
+}
 
 /** The month screen's title, whichever month it shows. */
 const title = (page: PwPage, month: string) => page.getByRole("heading", { level: 1 }).filter({ hasText: month });
@@ -249,6 +256,7 @@ const onMonth = (key: string | null) => (url: URL) => url.pathname === "/" && ur
 
 /** Opens the Log payment sheet of a portion's card. */
 async function openLog(page: PwPage, portion: string): Promise<PwLocator> {
+  await expand(page, portion);
   await tap(card(page, portion).getByRole("button", { name: "Log payment", exact: true }), `Log payment on ${portion}`);
   await see(dialog(page).getByRole("heading", { name: "Log payment" }), "the Log payment sheet");
   return dialog(page);
@@ -347,11 +355,13 @@ const backKeepsMonth: Check = {
     await tap(page.getByRole("button", { name: "Previous month" }), "the previous-month arrow");
     await backOnMonth("the arrow");
     // The arrow back on a tenant page.
+    await expand(page, P1);
     await tap(details, "the tenant page link");
     await arrive(page, "the tenant page, in that month", (url) => url.pathname === "/tenants/p1" && url.searchParams.get("month") === beforeKey);
     await tap(page.getByRole("link", { name: "Back to month" }), "the arrow back");
     await backOnMonth("the arrow back");
     // The system's Back.
+    await expand(page, P1);
     await tap(details, "the tenant page link, again");
     await arrive(page, "the tenant page, again", (url) => url.pathname === "/tenants/p1");
     await page.goBack();
@@ -361,6 +371,136 @@ const backKeepsMonth: Check = {
     await arrive(page, "Activity, in that month", (url) => url.pathname === "/activity" && url.searchParams.get("month") === beforeKey);
     await tap(tabLink("Month"), "the Month tab");
     await backOnMonth("the Month tab");
+  },
+};
+
+// 4b. Months switch on the spot
+
+/** Counts the requests the router makes to the server for a page (not the quiet prefetches): the page asks for them with the RSC header. */
+const WATCH_PAGE_REQUESTS = `(() => {
+  if (window.__pageRequests) return;
+  window.__pageRequests = [];
+  const original = window.fetch;
+  window.fetch = function (input, init) {
+    try {
+      const headers = new Headers((init && init.headers) || (input && input.headers) || {});
+      if (headers.get("rsc") && !headers.get("next-router-prefetch")) window.__pageRequests.push(String((input && input.url) || input));
+    } catch {}
+    return original.apply(this, arguments);
+  };
+})()`;
+const pageRequests = (page: PwPage) => page.evaluate<number>("window.__pageRequests.length");
+
+/** A finger drawn across the summary card from x to x2, as the touch events a phone sends. */
+const swipe = (from: number, to: number) => `(() => {
+  const target = document.querySelector('[aria-label="Month summary"]');
+  const touch = (x) => new Touch({ identifier: 1, target, clientX: x, clientY: 300 });
+  const send = (type, x, held) => target.dispatchEvent(new TouchEvent(type, { bubbles: true, cancelable: true, touches: held ? [touch(x)] : [], targetTouches: held ? [touch(x)] : [], changedTouches: [touch(x)] }));
+  send("touchstart", ${from}, true);
+  send("touchend", ${to}, false);
+})()`;
+
+const monthSwitch: Check = {
+  name: "month-switch",
+  async run(run) {
+    const { key, title: nowTitle, beforeKey, beforeTitle } = months(run);
+    const twoBefore = addMonths(currentYm(run.now), -2);
+    const { page } = await run.actor("owner");
+    await open(run, page, "/");
+    await page.evaluate(WATCH_PAGE_REQUESTS);
+    // The arrows switch month with no request to the server, and keep the month in the address.
+    await tap(page.getByRole("button", { name: "Previous month" }), "the previous-month arrow");
+    await arrive(page, "the address of last month", onMonth(beforeKey));
+    await see(title(page, beforeTitle), `the heading ${beforeTitle}`);
+    await tap(page.getByRole("button", { name: "Previous month" }), "the previous-month arrow, again");
+    await arrive(page, "the address of two months ago", onMonth(ymKey(twoBefore)));
+    await see(title(page, formatMonthTitle(twoBefore)), `the heading ${formatMonthTitle(twoBefore)}`);
+    // Another month has no Needs attention rows and a way back to this one, instead of the refresh button.
+    if (await page.getByRole("region", { name: "Needs attention" }).count()) throw new Error("Needs attention shows on another month");
+    await see(page.getByRole("button", { name: "This month" }), "the This month button");
+    if (await page.getByRole("button", { name: "Refresh", exact: true }).count()) throw new Error("The refresh button shows on another month");
+    await tap(page.getByRole("button", { name: "This month" }), "This month");
+    await arrive(page, "the plain address of this month", onMonth(null));
+    await see(title(page, nowTitle), `the heading ${nowTitle}`);
+    await see(page.getByRole("button", { name: "Refresh", exact: true }), "the refresh button, back on this month");
+    // A swipe to the left is the next month, and to the right the one before.
+    await page.evaluate(swipe(300, 120));
+    await arrive(page, "the next month, after a swipe", (url) => url.pathname === "/" && url.searchParams.get("month") === ymKey(addMonths(currentYm(run.now), 1)));
+    await page.evaluate(swipe(120, 300));
+    await arrive(page, "this month again, after a swipe back", onMonth(null));
+    // The summary and the rows are the month's own.
+    const switched = await pageRequests(page);
+    if (switched !== 0) throw new Error(`Switching month asked the server for the page ${switched} times, expected none`);
+    // The month picker still opens, and a month far outside the window is a navigation to the server.
+    await tap(page.getByRole("button", { name: new RegExp(`^${escape(nowTitle)}`) }), "the month title");
+    await see(dialog(page).getByRole("heading", { name: "Choose month" }), "the month picker");
+    await tap(dialog(page).getByRole("button", { name: "Previous year" }), "Previous year");
+    await tap(dialog(page).getByRole("button", { name: "Previous year" }), "Previous year, again");
+    await tap(dialog(page).getByRole("button", { name: "Jan", exact: true }), "January");
+    const far = `${Number(key.slice(0, 4)) - 2}-01`;
+    await arrive(page, "the address of a month outside the window", onMonth(far));
+    await see(title(page, formatMonthTitle({ year: Number(far.slice(0, 4)), month: 1 })), "the heading of the far month");
+    if ((await pageRequests(page)) < 1) throw new Error("A month outside the window was shown without asking the server for it");
+  },
+};
+
+// 4c. Rows, chips and the refresh button
+
+const rowsAndChips: Check = {
+  name: "rows-and-chips",
+  async run(run) {
+    const { page } = await run.actor("owner");
+    await open(run, page, "/");
+    const chips = page.getByRole("group", { name: "Filter portions" });
+    const rows = page.locator("h2 button");
+    const rowCount = async () => rows.count();
+    if ((await rowCount()) !== 5) throw new Error(`The month screen has ${await rowCount()} rows, expected 5`);
+    // A chip narrows the rows to its kind and says how many there are.
+    for (const [chip, expected] of [["Pending", 2], ["Paid", 1], ["Vacant", 2], ["All", 5]] as const) {
+      await tap(chips.getByRole("button", { name: new RegExp(`^${chip}`) }), `the ${chip} chip`);
+      await until(`${expected} rows under ${chip}`, async () => (await rowCount()) === expected);
+      if ((await chips.getByRole("button", { name: new RegExp(`^${chip}`) }).getAttribute("aria-pressed")) !== "true") throw new Error(`The ${chip} chip is not pressed`);
+      const label = await chips.getByRole("button", { name: new RegExp(`^${chip}`) }).innerText();
+      if (!label.includes(String(expected))) throw new Error(`The ${chip} chip says "${label.replace(/\n/g, " ")}", expected the count ${expected}`);
+    }
+    // A row opens on a tap, and only one is open at a time.
+    const first = rows.nth(0);
+    const second = rows.nth(1);
+    const open1 = async (row: PwLocator) => (await row.getAttribute("aria-expanded")) === "true";
+    if (await open1(first)) throw new Error("A row is open before it was tapped");
+    await tap(first, "the first row");
+    await until("the first row to open", () => open1(first));
+    await see(page.getByRole("button", { name: "Edit amount", exact: true }), "Edit amount in the open row");
+    await tap(second, "the second row");
+    await until("the second row to open", () => open1(second));
+    if (await open1(first)) throw new Error("Two rows are open at once");
+    // The closed row's actions cannot be reached or read.
+    await until("the closed row's actions to be out of reach", async () => (await page.getByRole("button", { name: "Edit amount", exact: true }).count()) === 0);
+    await tap(second, "the second row, to close it");
+    await until("the second row to close", async () => !(await open1(second)));
+  },
+};
+
+const refreshButton: Check = {
+  name: "refresh-button",
+  async run(run) {
+    const { page } = await run.actor("owner");
+    await open(run, page, "/");
+    const button = page.getByRole("button", { name: "Refresh", exact: true });
+    const summary = page.getByRole("region", { name: "Month summary" });
+    const box = async (locator: PwLocator) => JSON.stringify(await locator.boundingBox());
+    const before = { button: await box(button), summary: await box(summary) };
+    await tap(button, "the refresh button");
+    await until("the refresh to be shown as under way", async () => (await button.getAttribute("aria-busy")) === "true");
+    // Nothing moves while it turns.
+    if ((await box(button)) !== before.button || (await box(summary)) !== before.summary) throw new Error("The layout moved while the refresh button turned");
+    await see(summary.getByText(/Updating…/), "Updating… in the summary");
+    // Then the figures are shown again with the words of how fresh they are, and the button settles back.
+    await until("the refresh to finish", async () => (await button.getAttribute("aria-busy")) === "false", 6000);
+    await see(summary.getByText(/Updated just now/), "Updated just now in the summary");
+    // The check shows for a moment (the button goes green) and goes; the button keeps its place all the way.
+    await until("the check to go", async () => !((await button.getAttribute("class")) ?? "").includes("bg-success-bg") && (await box(button)) === before.button, 4000);
+    if ((await box(summary)) !== before.summary) throw new Error("The summary moved after the refresh");
   },
 };
 
@@ -416,8 +556,13 @@ const saveError: Check = {
     const sheet = await openLog(page, P3);
     run.fail({ updateValues: "unavailable", cloneRow: "unavailable" });
     await tap(sheet.getByRole("button", { name: "Save to Sheet" }), "Save to Sheet");
-    await see(sheet.getByText(unavailable().message), `"${unavailable().message}" in the sheet`);
-    // The form is free again, and nothing was saved.
+    // The card turns Paid at once and the sheet steps aside; when Google fails the card is put back and the toast says so, with Try again.
+    await toast(page, unavailable().message);
+    await see(pill(page, P3, "Pending"), `${P3} back to Pending after the failed save`);
+    await gone(dialog(page), "the sheet, while the toast offers Try again");
+    // Try again brings the sheet back with what was typed and the same words, and the form is free again; nothing was saved.
+    await tap(page.getByRole("status").getByRole("button", { name: "Try again" }), "Try again");
+    await see(dialog(page).getByText(unavailable().message), `"${unavailable().message}" in the sheet`);
     if (await sheet.getByRole("button", { name: "Save to Sheet" }).isDisabled()) throw new Error("The form stays locked after a failed save");
     run.heal();
     await tap(sheet.getByRole("button", { name: "Close", exact: true }), "Close");
@@ -451,6 +596,7 @@ const undo: Check = {
     const { title: monthTitle } = months(run);
     const { page } = await run.actor("owner");
     await open(run, page, "/");
+    await expand(page, P2);
     await tap(card(page, P2).getByRole("button", { name: "Undo", exact: true }), `Undo on ${P2}`);
     const sheet = dialog(page);
     const asked = undoConfirmationText({ tenant: "Bala", count: 1, amount: 13335 } as Parameters<typeof undoConfirmationText>[0], P2, monthTitle);
@@ -517,6 +663,7 @@ const vacant: Check = {
     await open(run, page, "/");
     const since = `Vacant since ${formatDay(firstDayOf({ year: Number(key.slice(0, 4)), month: Number(key.slice(5)) }))}.`;
     await see(card(page, P5).getByText(since), `"${since}" on ${P5}`);
+    await expand(page, P5);
     await tap(card(page, P5).getByRole("button", { name: "Add tenant" }), `Add tenant on ${P5}`);
     const sheet = dialog(page);
     await see(sheet.getByRole("heading", { name: "New tenant" }), "the New tenant sheet");
@@ -541,6 +688,7 @@ const editTenancy: Check = {
     const was = addDays(today, 30);
     const now = addDays(today, 90);
     await open(run, page, "/");
+    await expand(page, P1);
     await tap(page.getByRole("link", { name: new RegExp(`^Details for ${escape(P1)}$`) }), `Details on ${P1}`);
     await arrive(page, "the tenant page", (url) => url.pathname === "/tenants/p1");
     await ready(page);
@@ -656,6 +804,7 @@ const longNames: Check = {
     await tap(page.getByRole("button", { name: "Save settings" }), "Save settings");
     await toast(page, SETTINGS_SAVED_TOAST);
     await open(run, page, "/");
+    await expand(page, P5);
     await tap(card(page, P5).getByRole("button", { name: "Add tenant" }), `Add tenant on ${P5}`);
     const sheet = dialog(page);
     await see(sheet.getByRole("heading", { name: "New tenant" }), "the New tenant sheet");
@@ -690,6 +839,9 @@ export const CHECKS: readonly Check[] = [
   signin,
   tabBar,
   backKeepsMonth,
+  monthSwitch,
+  rowsAndChips,
+  refreshButton,
   reports,
   saveError,
   logExisting,

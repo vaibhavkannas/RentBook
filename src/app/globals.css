@@ -336,3 +336,20 @@ body {
     transition: none;
   }
 }
+
+/* The refresh icon turns once while the page is loaded again: a transform only. */
+@keyframes refresh-turn {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.refresh-turn {
+  animation: refresh-turn 800ms cubic-bezier(0.4, 0, 0.2, 1) 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .refresh-turn {
+    animation: none;
+  }
+}

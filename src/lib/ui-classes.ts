@@ -50,6 +50,17 @@ export const iconButtonClasses = (tone: "default" | "muted" = "default") =>
   );
 
 /**
+ * An icon button with a frame (a border and the surface colour): the month arrows and the refresh button of the month screen. The
+ * same 44 px square, with press feedback; it holds an icon drawn with the Icon component, not a glyph.
+ */
+export const framedIconButtonClasses = (look: "square" | "round" | "round-done" = "square") =>
+  cx(
+    "press grid min-h-11 min-w-11 place-items-center border disabled:opacity-60",
+    look === "square" ? "rounded-control" : "rounded-full",
+    look === "round-done" ? "border-transparent bg-success-bg text-success-ink" : "border-line bg-surface",
+  );
+
+/**
  * What an icon button becomes where it has nowhere to go (the year arrow at the end of the Schedule): the same 44 px square, so
  * the row does not move, muted and dimmed, with no press feedback because there is nothing to press. It is a span, not a button.
  */

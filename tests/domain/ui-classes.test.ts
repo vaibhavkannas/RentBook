@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   buttonClasses,
   CARD,
+  framedIconButtonClasses,
   CHIP_ROW,
   cx,
   FIELD_CONTROL,
@@ -224,5 +225,19 @@ describe("the corners", () => {
   it("come from the radius tokens (rounded-card, rounded-control, rounded-chip), not from a size written out again", () => {
     expect(all).not.toMatch(/\brounded-(?:lg|xl|2xl)\b/);
     for (const token of ["rounded-card", "rounded-control", "rounded-chip"]) expect(all).toContain(token);
+  });
+});
+
+describe("framedIconButtonClasses", () => {
+  it("is the 44 px square of an icon button with a frame and a press, square by default", () => {
+    const classes = framedIconButtonClasses();
+    for (const name of ["press", "min-h-11", "min-w-11", "border", "border-line", "bg-surface", "rounded-control"]) expect(classes).toContain(name);
+  });
+
+  it("is a circle for the refresh button, and green for the moment it shows a check", () => {
+    expect(framedIconButtonClasses("round")).toContain("rounded-full");
+    expect(framedIconButtonClasses("round")).not.toContain("rounded-control");
+    expect(framedIconButtonClasses("round-done")).toContain("bg-success-bg text-success-ink");
+    expect(framedIconButtonClasses("round-done")).not.toContain("bg-surface");
   });
 });
