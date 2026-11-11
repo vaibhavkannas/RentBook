@@ -260,10 +260,10 @@ describe("the bold words of both guides are words on the screens", () => {
 });
 
 describe("USER-GUIDE.md", () => {
-  it("is one to two pages: under 1,300 words", () => {
+  it("is one to two pages: under 1,500 words", () => {
     const words = guide.split(/\s+/).filter(Boolean).length;
     expect(words).toBeGreaterThan(500);
-    expect(words).toBeLessThan(1300);
+    expect(words).toBeLessThan(1500);
   });
 
   it("goes through the subjects in order: signing in to adding the app to the home screen", () => {

@@ -8,13 +8,13 @@ Open the app's address and tap **Sign in with Google**. Use the Google account t
 
 ## The month screen
 
-The title is the month on show. Tap the arrows or swipe to change month, or tap the title to pick one. **Today** comes back to this month. Each portion has a card with a pill: **Paid**, **Pending** or **Vacant**. A paid card also says when the amount was more or less than the usual rent. Above the cards, the summary shows what was received against what is due; a vacant portion adds nothing to what is due.
+The title is the month on show. Tap the arrows or swipe to change month, or tap the title to pick one. **Today** comes back to this month. The bar at the bottom switches between **Month**, **Activity** and **More**. Above the portions, a summary card shows a ring and the amount received against what is due; a vacant portion adds nothing to what is due. Under it, **All**, **Pending**, **Paid** and **Vacant** narrow the list. Each portion is one line: a round mark, its name, who pays, the amount and a pill: **Paid**, **Pending**, **Overdue** or **Vacant**. **Overdue** is a card with no payment whose rent has counted as overdue (from the 6th, see below), shown in red; **Pending** is one not yet overdue, and the **Pending** chip lists both. Tap a line to open it: its facts, any notes and its buttons. A paid card also says when the amount was more or less than the usual rent. A change shows on the card at once and is confirmed with Google in the background; if Google fails, the card goes back and a message offers **Try again**. The screen refreshes itself when you return to the app after a minute or more, and says how old its figures are (**Updated just now**).
 
-**Needs attention** appears on this month only, when something is due: rent overdue, agreements that have ended or end within 60 days, and rent going up soon. Tap a row to see why. **Year at a glance** is a link under the summary. The Back button and the arrows on the other screens return to the month you were looking at.
+**Needs attention** appears on this month only, when something is due: rent overdue, agreements that have ended or end within 60 days, and rent going up soon. Tap a row to see why. **Year at a glance** is a link under the summary. The Back button and the arrows on the other screens return to the month you were looking at. Under **More**, **Appearance** sets the colours: **Auto** follows your phone, **Light** and **Dark** override it, and the choice is remembered on this phone.
 
 ## Logging a payment
 
-Tap **Log payment** on a **Pending** card. The amount starts as the usual rent, the count is set for you, and **Date received** starts as today. Change them if you need to, then tap **Save to Sheet**. The payment goes into your Schedule, and a line with who logged it goes into the Payments Log tab.
+Tap **Log payment** on a **Pending** or **Overdue** card. The amount starts as the usual rent, the count is set for you, and **Date received** starts as today. Change them if you need to, then tap **Save to Sheet**. The payment goes into your Schedule, and a line with who logged it goes into the Payments Log tab.
 
 The first payment of a new cycle starts with the portion's hike. Tap **Round to** or **Keep** if you agreed something else.
 
@@ -32,13 +32,13 @@ On each card, **Details** (or **Add details**, when none are saved) opens the te
 
 ## Activity
 
-**Activity** lists each payment that was logged, changed or undone, under the day it was saved (India time), newest first, with who did it and the day the money was received. **All**, **Logged**, **Changed** and **Undone** narrow it by kind, and a second row narrows it to one portion. It shows the newest 50 that match. When nothing matches, **Show everything** clears the choices.
+**Activity** lists each payment that was logged, changed or undone, in one card for each day it was saved (India time), newest first, each entry with a mark for its kind, who did it and the day the money was received. **All**, **Logged**, **Changed** and **Undone** narrow it by kind, and a second row narrows it to one portion. It shows the newest 50 that match. When nothing matches, **Show everything** clears the choices.
 
 ## Overdue rent, Year at a glance, and Agreements and hikes
 
-These three are under **More**, and only read your Sheet.
+These three are under **More**, and only read your Sheet. Each opens with a summary card at the top.
 
-**Overdue rent** lists who owes what, the most owed first, with the months behind each amount; tap a month to open it. Rent is due on the 1st and counts as overdue from the 6th, five days later. Only the current tenant counts. A month is overdue only when no payment is recorded for it, and it then owes the usual rent. A month with any payment recorded is never overdue, even if the amount is not the usual rent, for example an amount you agreed with the tenant. Vacant months, months paid ahead and the advance are never counted. A tenant who has left keeps showing until you record the move-out.
+**Overdue rent** lists who owes what, the most owed first, with each month behind it as a red chip you tap to open that month. Rent is due on the 1st and counts as overdue from the 6th, five days later. Only the current tenant counts. A month is overdue only when no payment is recorded for it, and it then owes the usual rent. A month with any payment recorded is never overdue, even if the amount is not the usual rent, for example an amount you agreed with the tenant. Vacant months, months paid ahead and the advance are never counted. A tenant who has left keeps showing until you record the move-out.
 
 **Year at a glance** shows each portion's twelve months of a year as a grid, with what was received against what was due. A key under the summary says what each mark means (**Paid**, **Unpaid**, **Vacant**, **Not due yet**); a month with a payment recorded is **Paid** whatever the amount. Tap a month to open it.
 

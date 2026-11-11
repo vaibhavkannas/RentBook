@@ -133,6 +133,19 @@ The wave 4 final fix was merged into wave 5 by merge commit ea0c4c2 (no rebase).
 
 Reviews: every wave had a final whole-branch review with the earlier slices reviewed one by one; no Critical finding was left open at the end of any of them. Waves 3 and 4 were also compared against the code before them on the same fixture Sheets, and your existing numbers and Sheet were identical apart from the documented changes.
 
+## Redesign (branch v1-redesign)
+
+The whole app now looks like the approved mock, in the same palette, type (Inter, with Space Grotesk for numbers and titles), cards, round pills and chips, and 44 px targets. What changed:
+
+- Month screen (sitting R1): a summary card with a progress ring, filter chips, one line for each portion that opens on a tap, a refresh button and "Updated" words, and a skeleton while it loads. R2 adds the red **Overdue** state: a card with no payment (and rent to pay, as on the Overdue screen) whose month is on or before `lastDueMonth` for today in India. No rule or figure changed; the Pending chip still lists these cards.
+- The other screens (sitting R2): a tab bar with icons; Overdue rent and Year at a glance open with a summary card, Overdue's months are red chips that open that month; Agreements and hikes use section labels; the tenant page's History has an icon for each kind of entry; Activity groups entries in one card for each day with round filter chips; More has grouped rows with icon tiles. Settings, Set up, Diagnostics, sign-in and the error pages take the same headings. Every screen's loading skeleton matches its layout.
+- Appearance (More): Auto, Light or Dark. A choice sets `data-theme` on the root and is stored in a cookie (read by the root layout on the server, so the next page paints right with no flash and no inline script, which the nonce policy would block) and in localStorage in try/catch, which `ThemeSync` applies after load if the cookie is gone. Auto removes both. The browser's address bar colour (`theme-color`) still follows the phone, not this choice.
+- The 14-month window: the month page carries 14 months (a year back to a quarter ahead of the current month), all derived from the one snapshot, so arrows and swipes switch month with no request and `?month=` is kept with `history.replaceState`. A month outside the window is opened with a server navigation as before (the fallback), and the screen shows the month asked for while it loads.
+- Optimistic updates: Log, Edit, New tenant and Undo show on the card at once and are confirmed with Google in the background. If the save fails the change is rolled back, the toast says so and offers Try again, which reopens the sheet with what was typed. A change waits to be replaced by the refreshed data, so a quick second tap cannot show a stale card.
+- Quiet refresh: when the app returns to the foreground after more than 60 seconds hidden, the month screen reloads itself without a sound, at most once a minute.
+
+Known limits: the Overdue pill on a card follows the card and the day, so a pending card of a month before a tenant's current run (an earlier tenant) can say Overdue while the Overdue screen skips it (the Year grid has the same difference). The optimistic New tenant card shows payment 1 and no tenancy details until the refresh arrives. The progress ring does not animate (transform and opacity only). The accordion animates the height of a row. Undo on the success toast opens the normal confirmation instead of undoing silently. Safari and iOS, and real Google, were not used with the redesign; the Chromium checks were at 390 and 360 px, light and dark.
+
 ## Not verified (could not be, in the cloud)
 
 - **The write path against real Google.** Read-back, the Payments Log, undo and edit have only run against the in-memory fake. `npm run verify:testcopy` needs your `TEST_SHEET_ID` and credentials, which exist only on your laptop, and I never ran it.
