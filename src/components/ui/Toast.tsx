@@ -1,9 +1,9 @@
 "use client";
 
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
-import { createToastStore, type ToastState } from "@/lib/toast";
+import { createToastStore, type ToastAction, type ToastState } from "@/lib/toast";
 
-type ToastApi = { show: (text: string) => void };
+type ToastApi = { show: (text: string, action?: ToastAction) => void };
 
 const ToastContext = createContext<ToastApi | null>(null);
 
@@ -18,15 +18,32 @@ export function ToastProvider({ children }: { children?: ReactNode }) {
   const [store] = useState(() => createToastStore(setToast));
   useEffect(() => () => store.dispose(), [store]);
   const api = useMemo<ToastApi>(() => ({ show: store.show }), [store]);
+  const press = (action: ToastAction) => {
+    store.hide();
+    action.onPress();
+  };
 
   return (
     <ToastContext value={api}>
       {children}
       <div role="status" className="pointer-events-none fixed inset-x-4 z-50 mx-auto max-w-md bottom-toast toast-region">
         {toast && (
-          <p key={toast.id} className="rounded-control bg-foreground px-4 py-3 text-center text-sm text-background">
-            {toast.text}
-          </p>
+          <div
+            key={toast.id}
+            className="flex items-center justify-center gap-2 rounded-control bg-foreground px-4 py-3 text-center text-sm text-background"
+          >
+            <p>{toast.text}</p>
+            {/* The region lets taps through; the one thing in it that is pressed takes them back. */}
+            {toast.action && (
+              <button
+                type="button"
+                onClick={() => press(toast.action!)}
+                className="press pointer-events-auto -my-3 -mr-3 min-h-11 shrink-0 rounded-control px-3 font-semibold underline"
+              >
+                {toast.action.label}
+              </button>
+            )}
+          </div>
         )}
       </div>
     </ToastContext>

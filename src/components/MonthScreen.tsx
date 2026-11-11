@@ -1,16 +1,20 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useRef, useState, useSyncExternalStore, useTransition, type ReactNode, type TouchEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, useTransition, type ReactNode, type TouchEvent } from "react";
 import { IconButton } from "@/components/ui/IconButton";
-import type { MonthView } from "@/lib/domain/types";
+import type { MonthView, PortionCard } from "@/lib/domain/types";
 import { addMonths, parseYmKey, ymKey } from "@/lib/domain/year-month";
 import { formatMonthTitle } from "@/lib/format";
 import { canSwitchHere } from "@/lib/month-window";
-import { monthFromAddress, monthHref, openMonth, shouldStartSwipe, swipeDirection } from "@/lib/month-nav";
+import { applyOverlay, beginWrite, liveOverlay, rollbackWrite, savingIds, settleWrite, type Overlay, type Writes } from "@/lib/optimistic";
+import { monthFromAddress, monthHref, openMonth, sheetKey, shouldStartSwipe, swipeDirection } from "@/lib/month-nav";
 import MonthPicker from "./MonthPicker";
 import MonthSummary from "./MonthSummary";
+import PaymentSheet, { type SheetMode } from "./PaymentSheet";
 import PortionBoard from "./PortionBoard";
+import type { RowAction } from "./PortionRow";
+import UndoSheet from "./UndoSheet";
 
 /** Sent on the window when the month screen has replaced the address itself. */
 const ADDRESS_CHANGED = "rentbook:address-changed";
@@ -23,6 +27,14 @@ function subscribeToAddress(onChange: () => void) {
     window.removeEventListener(ADDRESS_CHANGED, onChange);
   };
 }
+
+/**
+ * The sheet that is open, with the month it was opened in (a sheet outlives a switch of month while its request is answered).
+ * The nonce makes every opening a new sheet, even for the same portion, so a sheet that was let go cannot come back.
+ */
+type Active =
+  | { nonce: number; mode: SheetMode; portionId: string | null; monthKey: string; monthLabel: string }
+  | { nonce: number; mode: "undo"; portionId: string; card: PortionCard; monthKey: string; monthLabel: string };
 
 type Props = {
   /** The month the server rendered. */
@@ -56,6 +68,24 @@ export default function MonthScreen({ monthKey, currentKey, today, views, attent
   const [direction, setDirection] = useState<"next" | "prev" | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
   const touchStart = useRef<{ x: number; y: number; ignore: boolean } | null>(null);
+  const [active, setActive] = useState<Active | null>(null);
+  const opened = useRef(0);
+  // Changes on their way to the Sheet: the cards show them at once (see src/lib/optimistic.ts). The data the screen has now is
+  // what an answered change waits to be replaced by, and it is kept in a ref so that answering reads the latest.
+  const [overlay, setOverlay] = useState<Overlay>({});
+  const latestViews = useRef(views);
+  useEffect(() => {
+    latestViews.current = views;
+  });
+  const writes = useMemo<Writes>(
+    () => ({
+      begin: (month, change) => setOverlay((o) => beginWrite(o, month, change, latestViews.current)),
+      settle: (month, portionId) => setOverlay((o) => settleWrite(o, month, portionId, latestViews.current)),
+      rollback: (month, portionId) => setOverlay((o) => rollbackWrite(o, month, portionId)),
+    }),
+    [],
+  );
+  const live = useMemo(() => liveOverlay(overlay, views), [overlay, views]);
   const titleRef = useRef<HTMLButtonElement>(null);
 
   // The address is the truth about the month on show, so this reads it: a switch writes the address, and a navigation, a
@@ -71,7 +101,25 @@ export default function MonthScreen({ monthKey, currentKey, today, views, attent
   const shown = parseYmKey(shownKey)!;
   const title = formatMonthTitle(shown);
   const atCurrent = shownKey === currentKey;
-  const view = views[shownKey];
+  const shownView = views[shownKey];
+  const view = useMemo(() => (shownView ? applyOverlay(shownView, live, shownKey) : undefined), [shownView, live, shownKey]);
+  const saving = useMemo(() => savingIds(live, shownKey), [live, shownKey]);
+
+  /** The cards of a month as they are now, changes on their way included. */
+  const cardsOf = (monthKey: string) => (views[monthKey] ? applyOverlay(views[monthKey], live, monthKey).cards : []);
+  const openSheet = (action: RowAction | { mode: "new-tenant"; portionId: null }) => {
+    opened.current += 1;
+    const base = { nonce: opened.current, monthKey: shownKey, monthLabel: title };
+    setActive(action.mode === "undo" ? { ...base, mode: "undo", portionId: action.portionId, card: action.card } : { ...base, mode: action.mode, portionId: action.portionId });
+  };
+  const closeSheet = useCallback(() => setActive(null), []);
+  /** Undo, offered on the toast of a payment that was logged: opens the undo sheet for the card as it is now. */
+  const undoFromToast = (monthKey: string, portionId: string) => {
+    const card = cardsOf(monthKey).find((c) => c.portionId === portionId);
+    if (!card || card.status !== "paid" || card.undoBlockedReason !== null) return;
+    opened.current += 1;
+    setActive({ nonce: opened.current, mode: "undo", portionId, card, monthKey, monthLabel: formatMonthTitle(parseYmKey(monthKey)!) });
+  };
 
   function go(key: string) {
     setPickerOpen(false);
@@ -170,10 +218,42 @@ export default function MonthScreen({ monthKey, currentKey, today, views, attent
           <div key={shownKey} data-direction={direction ?? undefined} className="month-in">
             <MonthSummary view={view} />
             {shownKey === currentKey && attention}
-            <PortionBoard monthKey={shownKey} monthLabel={title} cards={view.cards} defaultDate={today} />
+            <PortionBoard
+              monthKey={shownKey}
+              cards={view.cards}
+              defaultDate={today}
+              saving={saving}
+              onAct={openSheet}
+              onNewTenant={() => openSheet({ mode: "new-tenant", portionId: null })}
+            />
           </div>
         )}
       </div>
+
+      {active &&
+        (active.mode === "undo" ? (
+          <UndoSheet
+            key={`${active.nonce}-${sheetKey(active.monthKey, "undo", active.portionId)}`}
+            monthKey={active.monthKey}
+            monthLabel={active.monthLabel}
+            card={active.card}
+            onClose={closeSheet}
+            writes={writes}
+          />
+        ) : (
+          <PaymentSheet
+            key={`${active.nonce}-${sheetKey(active.monthKey, active.mode, active.portionId)}`}
+            mode={active.mode}
+            monthKey={active.monthKey}
+            monthLabel={active.monthLabel}
+            cards={cardsOf(active.monthKey)}
+            initialPortionId={active.portionId}
+            defaultDate={today}
+            onClose={closeSheet}
+            writes={writes}
+            onUndo={(portionId) => undoFromToast(active.monthKey, portionId)}
+          />
+        ))}
 
       {pickerOpen && (
         <MonthPicker shownKey={shownKey} currentKey={currentKey} onPick={go} onClose={() => setPickerOpen(false)} />

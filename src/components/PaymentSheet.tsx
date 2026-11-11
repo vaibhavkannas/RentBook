@@ -28,18 +28,20 @@ import { isVacantCard } from "@/lib/month-summary";
 import {
   amountFromText,
   buildPaymentRequest,
-  existingEntryFrom,
   LOG_RETRY_UNCONFIRMED_MESSAGE,
   logRetryFailureMessage,
   paymentOutcome,
   TENANCY_NOT_SAVED_MESSAGE,
 } from "@/lib/payment-request";
 import { HISTORY_NOT_SAVED, settleHistory } from "@/lib/history-retry";
+import type { Change, Writes } from "@/lib/optimistic";
 import { sendJson } from "@/lib/post-json";
-import { PAYMENT_NO_CONFIRMATION, sendFailureMessage } from "@/lib/request-copy";
+import { sendFailureMessage } from "@/lib/request-copy";
+import { applyStep, classifyPayment, type PaymentAnswer, type WriteHooks } from "@/lib/write-flow";
 import { exitToastText, logEntryState, paymentToasts, type LogEntryState, type PaymentToasts } from "@/lib/toast-copy";
 import { newTenantDetails, type NewTenantDetailsForm } from "@/lib/tenancy-input";
 import { useFieldFocus } from "./useFieldFocus";
+import { useParking } from "./useParking";
 
 export type SheetMode = "log" | "edit" | "new-tenant";
 
@@ -51,6 +53,13 @@ type Props = {
   initialPortionId: string | null;
   defaultDate: string;
   onClose: () => void;
+  /**
+   * What the month screen changes a card with while the request is on its way. With it, Save to Sheet changes the card at once
+   * and the sheet goes out of sight until the answer; without it the sheet waits for the answer, as it always did.
+   */
+  writes?: Writes;
+  /** Offers Undo on the toast of a payment that was logged. Opens the screen's own undo sheet, so the undo's guard stays. */
+  onUndo?: (portionId: string) => void;
 };
 
 type ApiError = { code: string; message: string; details?: Record<string, unknown> };
@@ -79,9 +88,12 @@ export default function PaymentSheet({
   initialPortionId,
   defaultDate,
   onClose,
+  writes,
+  onUndo,
 }: Props) {
   const router = useRouter();
   const toast = useToast();
+  const parking = useParking(onClose);
   // In the generic "New tenant" sheet the owner must choose the portion on purpose.
   const [portionId, setPortionId] = useState(initialPortionId ?? "");
   const card = cards.find((c) => c.portionId === portionId);
@@ -178,15 +190,40 @@ export default function PaymentSheet({
     if (mode === "log" && card.next?.startsNewCycle && !overwrite && !confirmedFar && farFromSuggestion(request.body.amount, card.next.suggestedAmount)) {
       return setFarAmount(request.body.amount);
     }
+    // The card changes at once, and the sheet steps aside until the request is answered. A failure puts the card back.
+    const change: Change | null = writes
+      ? mode === "new-tenant"
+        ? { kind: "new-tenant", portionId, tenant: tenantName.trim(), amount: request.body.amount }
+        : { kind: mode, portionId, amount: request.body.amount }
+      : null;
+    const hooks: WriteHooks = {
+      begin: () => change && writes?.begin(monthKey, change),
+      settle: () => writes?.settle(monthKey, portionId),
+      rollback: () => change && writes?.rollback(monthKey, portionId),
+      refresh: () => router.refresh(),
+    };
     setBusy(true);
     setProblem(null);
-    const sent = await sendJson<ApiBody>("/api/payments", request.body);
+    if (change) {
+      hooks.begin();
+      parking.park();
+    }
+    const sent = await sendJson<PaymentAnswer>("/api/payments", request.body);
     setBusy(false);
 
-    if (sent.kind !== "answer") return show(plainProblem(sendFailureMessage(sent, PAYMENT_NO_CONFIRMATION)));
-    const body = sent.body;
-    if (body.ok) {
-      router.refresh();
+    const step = classifyPayment(sent);
+    // Without a card to put back, the screen is only told what it always was: a saved payment, or a payment someone else changed.
+    if (change || step.kind === "saved" || step.kind === "stale") applyStep(step, hooks);
+
+    if (step.kind === "failed") {
+      show(plainProblem(step.message));
+      if (!change) return;
+      // The card is back as it was. The sheet is still there with what was typed: Try again brings it back.
+      toast.show(step.message, { label: "Try again", onPress: parking.reopen });
+      return parking.offerRetry();
+    }
+    if (step.kind === "saved") {
+      const body = step.body;
       const toasts = paymentToasts({
         mode,
         replaced: overwrite,
@@ -200,20 +237,18 @@ export default function PaymentSheet({
       void settleHistory(body).then((ok) => ok || toast.show(HISTORY_NOT_SAVED));
       const outcome = paymentOutcome(body);
       if (outcome.done) {
-        toast.show(toasts.saved);
+        toast.show(toasts.saved, mode === "log" && onUndo ? { label: "Undo", onPress: () => onUndo(portionId) } : undefined);
         return onClose();
       }
       setDoneToasts(toasts);
-      return setNotice({ retryToken: outcome.retryToken, tenancyNotSaved: outcome.tenancyNotSaved });
+      setNotice({ retryToken: outcome.retryToken, tenancyNotSaved: outcome.tenancyNotSaved });
+      return parking.reopen();
     }
-    const failure = body.error;
-    const duplicate = failure?.code === "conflict" ? existingEntryFrom(failure.details) : null;
-    if (duplicate) return setConflict(duplicate);
-    // Someone else changed this payment, so the screen behind this sheet is out of date.
-    if (failure?.code === "conflict") router.refresh();
+    parking.reopen();
+    if (step.kind === "duplicate") return setConflict(step.entry);
     // The details are in the collapsed section, so open it when the server found something wrong in them.
-    if (failure?.code === "validation" && request.body.tenancy) setDetailsOpen(true);
-    show(serverProblem(failure, known));
+    if (step.error?.code === "validation" && request.body.tenancy) setDetailsOpen(true);
+    show(serverProblem(step.error, known));
   }
 
   async function retryLog() {
@@ -235,6 +270,9 @@ export default function PaymentSheet({
       ),
     );
   }
+
+  // While the request is on its way the card behind shows the change, and the sheet is out of sight.
+  if (!parking.visible) return null;
 
   return (
     <Sheet labelledBy="sheet-title" onClose={finish} canClose={!busy} closeOnBackdrop={false}>

@@ -1,52 +1,41 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { FilterChip } from "@/components/ui/FilterChip";
 import type { PortionCard } from "@/lib/domain/types";
 import { createOpenRowStore } from "@/lib/open-row";
 import { FILTERS, filterCards, filterCounts, filterLabel, type Filter } from "@/lib/portion-filter";
-import { sheetKey } from "@/lib/month-nav";
 import { CHIP_ROW } from "@/lib/ui-classes";
-import PaymentSheet, { type SheetMode } from "./PaymentSheet";
 import PortionRow, { type RowAction } from "./PortionRow";
-import UndoSheet from "./UndoSheet";
 
 type Props = {
   monthKey: string;
-  monthLabel: string;
   cards: PortionCard[];
   defaultDate: string;
+  /** The portions whose change is on its way to the Sheet and not confirmed yet. */
+  saving?: ReadonlySet<string>;
+  /** A row asked for a sheet (Log payment, Edit amount, Undo, Add tenant). */
+  onAct?: (action: RowAction) => void;
+  /** The New tenant button was pressed. */
+  onNewTenant?: () => void;
 };
 
-/**
- * The undo sheet keeps the paid card, month key and label as they were when Undo was tapped. After
- * a successful undo the refreshed card is no longer paid, but the sheet may still have to show its
- * "Retry log entry" step, and it must only ever undo the entry the person was shown.
- */
-type Active =
-  | { mode: SheetMode; portionId: string | null }
-  | { mode: "undo"; portionId: string; card: PortionCard; monthKey: string; monthLabel: string }
-  | null;
+const NOBODY = () => {};
+const NONE: ReadonlySet<string> = new Set();
 
-export default function PortionBoard({ monthKey, monthLabel, cards, defaultDate }: Props) {
-  const [active, setActive] = useState<Active>(null);
+/**
+ * The month's portions: the filter chips and one row for each portion, and the New tenant button. It draws what it is given and
+ * says what was asked for; the sheets, and the changes that are on their way, are the month screen's (so a sheet outlives a
+ * switch of month while its request is answered).
+ */
+export default function PortionBoard({ monthKey, cards, defaultDate, saving = NONE, onAct = NOBODY, onNewTenant = NOBODY }: Props) {
   const [filter, setFilter] = useState<Filter>("all");
   // Which row is open lives in a store the rows read, so a tap on a row does not draw the board again.
   const [openRow] = useState(createOpenRowStore);
 
   const counts = useMemo(() => filterCounts(cards), [cards]);
   const shown = useMemo(() => filterCards(cards, filter), [cards, filter]);
-
-  const act = useCallback(
-    (action: RowAction) =>
-      setActive(
-        action.mode === "undo"
-          ? { mode: "undo", portionId: action.portionId, card: action.card, monthKey, monthLabel }
-          : { mode: action.mode, portionId: action.portionId },
-      ),
-    [monthKey, monthLabel],
-  );
 
   return (
     <>
@@ -78,44 +67,18 @@ export default function PortionBoard({ monthKey, monthLabel, cards, defaultDate 
               monthKey={monthKey}
               defaultDate={defaultDate}
               store={openRow}
-              saving={false}
-              onAction={act}
+              saving={saving.has(card.portionId)}
+              onAction={onAct}
             />
           ))}
         </ul>
       )}
 
       <div className="mt-4">
-        <Button
-          variant="secondary"
-          className="w-full"
-          onClick={() => setActive({ mode: "new-tenant", portionId: null })}
-        >
+        <Button variant="secondary" className="w-full" onClick={onNewTenant}>
           New tenant
         </Button>
       </div>
-
-      {active &&
-        (active.mode === "undo" ? (
-          <UndoSheet
-            key={sheetKey(active.monthKey, "undo", active.portionId)}
-            monthKey={active.monthKey}
-            monthLabel={active.monthLabel}
-            card={active.card}
-            onClose={() => setActive(null)}
-          />
-        ) : (
-          <PaymentSheet
-            key={sheetKey(monthKey, active.mode, active.portionId)}
-            mode={active.mode}
-            monthKey={monthKey}
-            monthLabel={monthLabel}
-            cards={cards}
-            initialPortionId={active.portionId}
-            defaultDate={defaultDate}
-            onClose={() => setActive(null)}
-          />
-        ))}
     </>
   );
 }

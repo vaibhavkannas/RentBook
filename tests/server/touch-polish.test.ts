@@ -141,7 +141,7 @@ const item = (overrides: Partial<ActivityItem> = {}): ActivityItem => ({
 const SCREENS: Array<[string, () => Promise<string> | string]> = [
   [
     "PortionBoard",
-    () => html(createElement(PortionBoard, { monthKey: "2026-10", monthLabel: "October 2026", cards: CARDS, defaultDate: "2026-10-05" })),
+    () => html(createElement(PortionBoard, { monthKey: "2026-10", cards: CARDS, defaultDate: "2026-10-05" })),
   ],
   ["PaymentSheet, log", () => html(createElement(PaymentSheet, { ...sheetProps, mode: "log", initialPortionId: "p1" }))],
   [

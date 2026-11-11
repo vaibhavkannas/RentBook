@@ -69,7 +69,7 @@ describe("the components that send requests to the server", () => {
     expect(code).not.toMatch(/Number\(amount\b/);
     const build = code.indexOf("buildPaymentRequest(");
     const refuse = code.indexOf("if (!request.ok) return show(fieldProblem(request.message, request.field, known));");
-    const send = code.indexOf('sendJson<ApiBody>("/api/payments", request.body)');
+    const send = code.indexOf('sendJson<PaymentAnswer>("/api/payments", request.body)');
     expect(build).toBeGreaterThan(-1);
     expect(refuse).toBeGreaterThan(build);
     expect(send).toBeGreaterThan(refuse);

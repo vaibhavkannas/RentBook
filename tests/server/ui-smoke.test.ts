@@ -55,7 +55,7 @@ const html = (element: Parameters<typeof renderToStaticMarkup>[0]) => renderToSt
 
 function board(cards: PortionCard[]) {
   return html(
-    createElement(PortionBoard, { monthKey: "2026-10", monthLabel: "October 2026", cards, defaultDate: "2026-10-05" }),
+    createElement(PortionBoard, { monthKey: "2026-10", cards, defaultDate: "2026-10-05" }),
   );
 }
 
@@ -107,7 +107,7 @@ describe("PortionBoard", () => {
 
   it("carries the month the card is shown in, so the tenant page can lead back to it", () => {
     const other = html(
-      createElement(PortionBoard, { monthKey: "2026-09", monthLabel: "September 2026", cards: [card()], defaultDate: "2026-09-05" }),
+      createElement(PortionBoard, { monthKey: "2026-09", cards: [card()], defaultDate: "2026-09-05" }),
     );
     expect(other).toContain('href="/tenants/p1?month=2026-09"');
     expect(other).not.toContain("2026-10");
@@ -132,7 +132,7 @@ describe("PortionBoard: an agreement that has ended", () => {
     html(
       createElement(PortionBoard, {
         monthKey: "2026-10",
-        monthLabel: "October 2026",
+       
         cards: [card({ tenancy: { ...SUMMARY, agreementEnd } })],
         defaultDate: day,
       }),
@@ -220,7 +220,7 @@ describe("PortionBoard: a portion with no tenant", () => {
     expect(out).toContain('aria-label="Past tenants of Ground floor"');
     expect(out).toMatch(/<a [^>]*aria-label="Past tenants of Ground floor"[^>]*class="[^"]*min-h-11[^"]*"|<a [^>]*class="[^"]*min-h-11[^"]*"[^>]*aria-label="Past tenants of Ground floor"/);
     const other = html(
-      createElement(PortionBoard, { monthKey: "2026-12", monthLabel: "December 2026", cards: [vacant({ portionId: "first floor/2" })], defaultDate: "2026-12-05" }),
+      createElement(PortionBoard, { monthKey: "2026-12", cards: [vacant({ portionId: "first floor/2" })], defaultDate: "2026-12-05" }),
     );
     expect(other).toContain('href="/tenants/first%20floor%2F2?month=2026-12"');
   });
@@ -323,6 +323,7 @@ describe("PaymentSheet", () => {
   const props = {
     monthKey: "2026-10",
     monthLabel: "October 2026",
+   
     cards: [card({ status: "needs-tenant", next: null })],
     initialPortionId: "p1",
     defaultDate: "2026-10-05",
@@ -538,6 +539,7 @@ describe("a portion that is switched off", () => {
           mode: "new-tenant",
           monthKey: "2026-10",
           monthLabel: "October 2026",
+         
           cards: [card({ portionId: "p1", name: "Ground floor" }), card({ ...paidOff(), portionId: "p2", name: "Back room" })],
           initialPortionId: null,
           defaultDate: "2026-10-05",

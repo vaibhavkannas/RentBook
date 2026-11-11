@@ -78,3 +78,26 @@ describe("a toast", () => {
     expect(last()).toEqual({ id: 2, text: "Two" });
   });
 });
+
+describe("a toast with an action", () => {
+  it("carries the action, and stays eight seconds, long enough to read it and reach it", () => {
+    const { toasts, last } = store();
+    const onPress = vi.fn();
+    toasts.show("Couldn't save to Google. Nothing was changed.", { label: "Try again", onPress });
+    expect(last()).toEqual({ id: 1, text: "Couldn't save to Google. Nothing was changed.", action: { label: "Try again", onPress } });
+    vi.advanceTimersByTime(7999);
+    expect(last()).not.toBeNull();
+    vi.advanceTimersByTime(1);
+    expect(last()).toBeNull();
+  });
+
+  it("can be taken away at once, when its action was pressed, and its timer does not take a later toast away", () => {
+    const { toasts, last } = store();
+    toasts.show("One", { label: "Undo", onPress: () => {} });
+    toasts.hide();
+    expect(last()).toBeNull();
+    toasts.show("Two");
+    vi.advanceTimersByTime(3999);
+    expect(last()).toEqual({ id: 2, text: "Two" });
+  });
+});

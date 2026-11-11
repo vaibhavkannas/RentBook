@@ -109,7 +109,7 @@ describe("a sheet that stopped on a notice", () => {
   it("says what is true on the way out of the undo sheet: saved after the undo and after a retry that worked, unsaved after Skip for now or Escape, not confirmed when the last retry got no answer", () => {
     const sheet = code("UndoSheet");
     // the undo went through and its log entry saved
-    expect(sheet).toMatch(/if \(body\.logWritten === false\) return setPendingToken\(body\.retryToken \?\? ""\);\s*return done\("saved"\);/);
+    expect(sheet).toMatch(/if \(body\.logWritten === false\) \{\s*parking\.reopen\(\);\s*return setPendingToken\(body\.retryToken \?\? ""\);\s*\}\s*return done\("saved"\);/);
     // a retry that worked
     expect(sheet).toMatch(/if \(body\?\.ok && body\.logWritten\) return done\("saved"\);/);
     // how the last retry ended

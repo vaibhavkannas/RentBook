@@ -55,21 +55,22 @@ describe("where each screen asks", () => {
 
   it("PaymentSheet: after a payment was saved, which carries the history of a new tenant's details", () => {
     const code = read("PaymentSheet.tsx");
-    const saved = code.indexOf("if (body.ok) {");
+    const saved = code.indexOf('if (step.kind === "saved") {');
     expect(saved).toBeGreaterThan(-1);
     expect(code.search(SETTLE)).toBeGreaterThan(saved);
-    expect(code.search(SETTLE)).toBeLessThan(code.indexOf("const failure = body.error;"));
+    expect(code.search(SETTLE)).toBeLessThan(code.indexOf("const outcome = paymentOutcome(body);"));
   });
 });
 
 describe("UndoSheet", () => {
   it("asks after the undo was saved, and before the Payments Log retry notice may take over", () => {
     const code = read("UndoSheet.tsx");
-    const saved = code.indexOf("if (body.ok) {");
+    // The answer is told apart before this (a conflict is its own step, see classifyUndo), so the history is asked after the undo
+    // was saved: with the saved step's body, and before the Payments Log retry notice may take over.
+    const saved = code.indexOf("const body = step.body;");
     expect(saved).toBeGreaterThan(-1);
     expect(code.search(SETTLE)).toBeGreaterThan(saved);
     expect(code.search(SETTLE)).toBeLessThan(code.indexOf("if (body.logWritten === false)"));
-    expect(code.search(SETTLE)).toBeLessThan(code.indexOf('body.error?.code === "conflict"'));
   });
 
   it("types the two history fields of the answer", () => {

@@ -31,7 +31,7 @@ const card = (portionId: string, status: PortionCard["status"], overrides: Parti
 
 const CARDS = [card("p1", "paid"), card("p2", "pending"), card("p3", "pending"), card("p4", "vacant", { vacancy: null }), card("p5", "needs-tenant")];
 const board = (cards = CARDS) =>
-  renderToStaticMarkup(createElement(PortionBoard, { monthKey: "2026-10", monthLabel: "October 2026", cards, defaultDate: "2026-10-05" }));
+  renderToStaticMarkup(createElement(PortionBoard, { monthKey: "2026-10", cards, defaultDate: "2026-10-05" }));
 
 describe("the filter chips", () => {
   const out = board();

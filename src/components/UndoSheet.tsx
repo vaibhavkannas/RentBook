@@ -5,14 +5,17 @@ import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { Notice } from "@/components/ui/Notice";
 import { Sheet } from "@/components/ui/Sheet";
+import { useParking } from "./useParking";
 import { SlowHint } from "@/components/ui/SlowHint";
 import { useToast } from "@/components/ui/Toast";
 import type { PortionCard } from "@/lib/domain/types";
 import { HISTORY_NOT_SAVED, settleHistory } from "@/lib/history-retry";
+import type { Writes } from "@/lib/optimistic";
 import { LOG_RETRY_UNCONFIRMED_MESSAGE, type LogRetryResponse } from "@/lib/payment-request";
 import { sendJson } from "@/lib/post-json";
-import { apiErrorMessage, sendFailureMessage, UNDO_NO_CONFIRMATION } from "@/lib/request-copy";
+import { sendFailureMessage } from "@/lib/request-copy";
 import { logEntryState, type LogEntryState } from "@/lib/toast-copy";
+import { applyStep, classifyUndo, type WriteHooks } from "@/lib/write-flow";
 import {
   undoConfirmationText,
   undoLogRetryFailureMessage,
@@ -26,6 +29,11 @@ type Props = {
   /** The paid card as it was when Undo was tapped. It must have an entry. */
   card: PortionCard;
   onClose: () => void;
+  /**
+   * What the month screen changes a card with while the request is on its way. With it, Undo payment turns the card pending at
+   * once and the sheet goes out of sight until the answer; without it the sheet waits for the answer, as it always did.
+   */
+  writes?: Writes;
 };
 
 type ApiBody = LogRetryResponse & {
@@ -38,9 +46,10 @@ type ApiBody = LogRetryResponse & {
   historyRetryToken?: string;
 };
 
-export default function UndoSheet({ monthKey, monthLabel, card, onClose }: Props) {
+export default function UndoSheet({ monthKey, monthLabel, card, onClose, writes }: Props) {
   const router = useRouter();
   const toast = useToast();
+  const parking = useParking(onClose);
   const entry = card.entry!;
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -68,29 +77,47 @@ export default function UndoSheet({ monthKey, monthLabel, card, onClose }: Props
   }, [conflicted, logPending]);
 
   async function undo() {
+    const hooks: WriteHooks = {
+      begin: () => writes?.begin(monthKey, { kind: "undo", portionId: card.portionId }),
+      settle: () => writes?.settle(monthKey, card.portionId),
+      rollback: () => writes?.rollback(monthKey, card.portionId),
+      refresh: () => router.refresh(),
+    };
     setBusy(true);
     setError(null);
+    // The card turns pending at once, and the sheet steps aside until the request is answered. A failure puts the card back.
+    if (writes) {
+      hooks.begin();
+      parking.park();
+    }
     const sent = await sendJson<ApiBody>("/api/payments/undo", {
       month: monthKey,
       portionId: card.portionId,
       expected: entry,
     });
     setBusy(false);
-    if (sent.kind !== "answer") return setError(sendFailureMessage(sent, UNDO_NO_CONFIRMATION));
-    const body = sent.body;
-    if (body.ok) {
-      router.refresh();
-      // A tenancy the undo opened again has its history settled in the background, one automatic retry at most, as the screens
-      // that save tenancy details do: the person is told only when it still cannot be added.
-      void settleHistory(body).then((ok) => ok || toast.show(HISTORY_NOT_SAVED));
-      if (body.logWritten === false) return setPendingToken(body.retryToken ?? "");
-      return done("saved");
+    const step = classifyUndo(sent);
+    if (writes || step.kind !== "failed") applyStep(step, hooks);
+
+    if (step.kind === "failed") {
+      setError(step.message);
+      if (!writes) return;
+      toast.show(step.message, { label: "Try again", onPress: parking.reopen });
+      return parking.offerRetry();
     }
-    if (body.error?.code === "conflict") {
-      router.refresh();
+    if (step.kind === "conflict") {
+      parking.reopen();
       return setConflicted(true);
     }
-    setError(apiErrorMessage(body.error));
+    const body = step.body;
+    // A tenancy the undo opened again has its history settled in the background, one automatic retry at most, as the screens
+    // that save tenancy details do: the person is told only when it still cannot be added.
+    void settleHistory(body).then((ok) => ok || toast.show(HISTORY_NOT_SAVED));
+    if (body.logWritten === false) {
+      parking.reopen();
+      return setPendingToken(body.retryToken ?? "");
+    }
+    return done("saved");
   }
 
   async function retryLog() {
@@ -107,6 +134,9 @@ export default function UndoSheet({ monthKey, monthLabel, card, onClose }: Props
         : sendFailureMessage(sent, LOG_RETRY_UNCONFIRMED_MESSAGE),
     );
   }
+
+  // While the request is on its way the card behind shows the change, and the sheet is out of sight.
+  if (!parking.visible) return null;
 
   return (
     <Sheet
