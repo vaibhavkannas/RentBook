@@ -26,6 +26,7 @@ describe("maxDuration", () => {
   it("finds the pages and routes that use the Sheet", () => {
     const names = entries.filter((entry) => touchesTheSheet(entry.source)).map((entry) => entry.name).sort();
     expect(names).toEqual([
+      "(month)/page.tsx",
       "activity/page.tsx",
       "alerts/page.tsx",
       "api/payments/log-retry/route.ts",
@@ -41,7 +42,6 @@ describe("maxDuration", () => {
       "api/tenancies/route.ts",
       "diagnostics/page.tsx",
       "overdue/page.tsx",
-      "page.tsx",
       "settings/page.tsx",
       "setup/page.tsx",
       "tenants/[portionId]/page.tsx",

@@ -254,3 +254,35 @@ body {
   color: var(--foreground);
   font-family: var(--font-geist-sans), system-ui, sans-serif;
 }
+
+/*
+ * A month that is switched to slides in from the side it came from: a short transform and fade, nothing that moves the layout.
+ * The first draw of the page has no direction, so it does not animate.
+ */
+@keyframes month-in-next {
+  from {
+    opacity: 0;
+    transform: translate3d(12px, 0, 0);
+  }
+}
+
+@keyframes month-in-prev {
+  from {
+    opacity: 0;
+    transform: translate3d(-12px, 0, 0);
+  }
+}
+
+.month-in[data-direction="next"] {
+  animation: month-in-next 220ms ease-out;
+}
+
+.month-in[data-direction="prev"] {
+  animation: month-in-prev 220ms ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .month-in {
+    animation: none !important;
+  }
+}

@@ -48,7 +48,7 @@ vi.mock("@/lib/server/context", async (importOriginal) => ({
 
 import AlertsPage from "@/app/alerts/page";
 import DiagnosticsPage from "@/app/diagnostics/page";
-import Home from "@/app/page";
+import Home from "@/app/(month)/page";
 import OverduePage from "@/app/overdue/page";
 import SetupPage from "@/app/setup/page";
 import SettingsPage from "@/app/settings/page";

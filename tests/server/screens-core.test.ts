@@ -54,7 +54,7 @@ vi.mock("next/server", () => ({ connection: async () => {} }));
 import ActivityPage from "@/app/activity/page";
 import ErrorPage from "@/app/error";
 import GlobalError from "@/app/global-error";
-import Home from "@/app/page";
+import Home from "@/app/(month)/page";
 import MorePage from "@/app/more/page";
 import NotFound from "@/app/not-found";
 import SettingsPage from "@/app/settings/page";

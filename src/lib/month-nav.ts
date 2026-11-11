@@ -1,4 +1,4 @@
-import { monthName, ymKey } from "@/lib/domain/year-month";
+import { monthName, parseYmKey, ymKey } from "@/lib/domain/year-month";
 
 export type PickerCell = { key: string; label: string };
 
@@ -12,6 +12,12 @@ export function monthPickerCells(year: number): PickerCell[] {
 /** The current month lives at "/"; any other month at "/?month=YYYY-MM". */
 export function monthHref(key: string, currentKey: string): string {
   return key === currentKey ? "/" : `/?month=${key}`;
+}
+
+/** The month an address names (`?month=2026-03`), or the current month when it names none, or not a month. */
+export function monthFromAddress(search: string, currentKey: string): string {
+  const named = new URLSearchParams(search).get("month");
+  return named !== null && parseYmKey(named) !== null ? named : currentKey;
 }
 
 /**

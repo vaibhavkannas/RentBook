@@ -29,7 +29,7 @@ vi.mock("@/lib/server/auth-guard", () => ({ getViewer: mocks.getViewer }));
 vi.mock("@/lib/server/context", () => ({ getSheetsContext: () => ({}) }));
 vi.mock("@/lib/server/freshness", () => ({ loadMonthView: mocks.loadMonthView, loadPageSnapshot: mocks.loadPageSnapshot }));
 
-import Home from "@/app/page";
+import Home from "@/app/(month)/page";
 
 function card(overrides: Partial<PortionCard> = {}): PortionCard {
   return {
@@ -194,11 +194,11 @@ describe("the Needs attention card", () => {
     expect(mocks.loadMonthView.mock.invocationCallOrder[0]).toBeLessThan(mocks.loadPageSnapshot.mock.invocationCallOrder[0]);
   });
 
-  it("has no card for another month, and does not read the snapshot for one", async () => {
+  it("has no card for another month, though the page reads the snapshot for one (it carries the months around it)", async () => {
     for (const month of ["2026-09", "2026-11", "2025-10"]) {
       expect(await render({ month })).not.toContain("Needs attention");
     }
-    expect(mocks.loadPageSnapshot).not.toHaveBeenCalled();
+    expect(mocks.loadPageSnapshot).toHaveBeenCalledTimes(3);
   });
 
   it("has no card when nothing is due", async () => {

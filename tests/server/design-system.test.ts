@@ -78,7 +78,7 @@ describe("the screens and components", () => {
     const names = files.map((entry) => entry.file);
     expect(names).toEqual(
       expect.arrayContaining([
-        "src/app/page.tsx",
+        "src/app/(month)/page.tsx",
         "src/app/signin/page.tsx",
         "src/components/PortionBoard.tsx",
         "src/components/ui/Button.tsx",

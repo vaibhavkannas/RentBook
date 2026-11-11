@@ -139,7 +139,7 @@ describe("the pages and routes under src/app", () => {
     const files = entries.map((entry) => entry.file);
     expect(files).toEqual(
       expect.arrayContaining([
-        "page.tsx",
+        "(month)/page.tsx",
         "activity/page.tsx",
         "alerts/page.tsx",
         "diagnostics/page.tsx",

@@ -42,7 +42,7 @@ vi.mock("@/lib/sheets/tenancy-service", async (importOriginal) => ({
 }));
 
 import ActivityPage from "@/app/activity/page";
-import Home from "@/app/page";
+import Home from "@/app/(month)/page";
 import SettingsPage from "@/app/settings/page";
 import LoadProblem from "@/components/LoadProblem";
 import TenantsPage from "@/app/tenants/[portionId]/page";

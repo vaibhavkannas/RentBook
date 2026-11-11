@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  monthFromAddress,
   monthHref,
   monthPickerCells,
   openMonth,
@@ -148,5 +149,19 @@ describe("shouldCloseOnBackdrop", () => {
     expect(
       shouldCloseOnBackdrop({ downOnBackdrop: true, upOnBackdrop: true, clickOnBackdrop: false }),
     ).toBe(false);
+  });
+});
+
+describe("monthFromAddress", () => {
+  it("reads the month the address names", () => {
+    expect(monthFromAddress("?month=2026-03", "2026-10")).toBe("2026-03");
+    expect(monthFromAddress("?foo=1&month=2025-12", "2026-10")).toBe("2025-12");
+  });
+
+  it("is the current month when the address names none, or names something that is not a month", () => {
+    expect(monthFromAddress("", "2026-10")).toBe("2026-10");
+    expect(monthFromAddress("?month=", "2026-10")).toBe("2026-10");
+    expect(monthFromAddress("?month=2026-13", "2026-10")).toBe("2026-10");
+    expect(monthFromAddress("?month=latest", "2026-10")).toBe("2026-10");
   });
 });

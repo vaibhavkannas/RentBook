@@ -40,8 +40,8 @@ describe("the threat model's claim about the sign-in and sign-out buttons", () =
   });
 
   it("no longer finds a Sign out on the home page, which has no Server Action left", () => {
-    expect(read("src/app/page.tsx")).not.toContain('"use server"');
-    expect(read("src/app/page.tsx")).not.toContain("signOut");
+    expect(read("src/app/(month)/page.tsx")).not.toContain('"use server"');
+    expect(read("src/app/(month)/page.tsx")).not.toContain("signOut");
   });
 });
 

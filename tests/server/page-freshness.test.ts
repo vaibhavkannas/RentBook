@@ -46,7 +46,7 @@ vi.mock("@/lib/sheets/tenancy-service", async (importOriginal) => ({
 vi.mock("@/lib/sheets/tenancy-log-read", () => ({ readTenancyHistory: mocks.readTenancyHistory }));
 
 import ActivityPage from "@/app/activity/page";
-import Home from "@/app/page";
+import Home from "@/app/(month)/page";
 import SettingsPage from "@/app/settings/page";
 import TenantsPage from "@/app/tenants/[portionId]/page";
 

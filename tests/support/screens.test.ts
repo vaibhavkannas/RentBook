@@ -41,7 +41,7 @@ vi.mock("@/lib/server/context", async (importOriginal) => ({
   getSheetsContext: () => h.ctx(),
 }));
 
-import Home from "@/app/page";
+import Home from "@/app/(month)/page";
 
 beforeEach(() => {
   captureLogs();
