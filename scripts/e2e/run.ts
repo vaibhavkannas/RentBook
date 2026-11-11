@@ -328,7 +328,7 @@ async function main(): Promise<number> {
         const key = `${who}-${scheme}`;
         let actor = actors.get(key);
         if (!actor) {
-          const context = await browser.newContext({ viewport: PHONE, isMobile: true, hasTouch: true, deviceScaleFactor: 2, colorScheme: scheme });
+          const context = await browser.newContext({ viewport: { width: Number(process.env.E2E_WIDTH ?? PHONE.width) || PHONE.width, height: PHONE.height }, isMobile: true, hasTouch: true, deviceScaleFactor: 2, colorScheme: scheme });
           context.setDefaultTimeout(8000);
           context.setDefaultNavigationTimeout(20_000);
           const label = `${who} ${scheme}`;

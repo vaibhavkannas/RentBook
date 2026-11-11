@@ -444,7 +444,7 @@ describe("consoleProblem", () => {
 describe("CHECKS", () => {
   const names = CHECKS.map((check) => check.name);
 
-  it("are the sweep and the plan's fifteen journeys (and the three of the redesigned month screen) in the order they run, then the check of the longest names", () => {
+  it("are the sweep and the plan's fifteen journeys (and the three of the redesigned month screen, the Overdue state and the Appearance control) in the order they run, then the check of the longest names", () => {
     expect(names).toEqual([
       "load-error",
       "sweep",
@@ -455,6 +455,8 @@ describe("CHECKS", () => {
       "rows-and-chips",
       "refresh-button",
       "reports",
+      "overdue-state",
+      "appearance",
       "save-error",
       "log-existing",
       "undo",

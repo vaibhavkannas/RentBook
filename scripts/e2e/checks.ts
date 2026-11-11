@@ -2,6 +2,7 @@ import path from "node:path";
 import { toActivityEntry } from "@/lib/activity-view";
 import { TABS } from "@/lib/app-nav";
 import { BRAND } from "@/lib/brand";
+import { lastDueMonth } from "@/lib/domain/rent-due";
 import { firstVacantMonth } from "@/lib/domain/vacancy";
 import { addDays, addMonths, currentYm, firstDayOf, todayIso, ymKey } from "@/lib/domain/year-month";
 import { CONNECTION_NEEDS_ATTENTION, unavailable } from "@/lib/errors";
@@ -97,7 +98,8 @@ const SETTLED = `document.querySelectorAll("h1").length === 1 && document.queryS
 type Probe = { h1: number; main: number; width: number; dark: boolean; where: string };
 
 /** The width of the phone: a page wider than this scrolls sideways. */
-const PHONE_WIDTH = 390;
+// The width the pages are checked at: 390 by default; E2E_WIDTH=360 looks at the narrowest phone.
+const PHONE_WIDTH = Number(process.env.E2E_WIDTH ?? 390) || 390;
 
 /** Opens one page as `actor` and returns what is wrong with it, each with who saw it where. */
 async function inspect(run: Run, actor: Actor, address: string, expected: Expected, name: string): Promise<string[]> {
@@ -262,8 +264,12 @@ async function openLog(page: PwPage, portion: string): Promise<PwLocator> {
   return dialog(page);
 }
 
-/** The pill of a card ("Paid", "Pending", "Vacant"). */
-const pill = (page: PwPage, portion: string, word: string) => card(page, portion).getByText(word, { exact: true });
+/**
+ * The pill of a card ("Paid", "Pending", "Overdue", "Vacant"). "Unpaid" is a card with no payment, which says Pending until its
+ * rent counts as overdue (from the 6th) and Overdue after: the checks do not depend on the day they run.
+ */
+const pill = (page: PwPage, portion: string, word: string) =>
+  card(page, portion).getByText(word === "Unpaid" ? /^(Pending|Overdue)$/ : word, word === "Unpaid" ? {} : { exact: true });
 
 // 1. A Sheet that cannot be read
 
@@ -473,6 +479,11 @@ const rowsAndChips: Check = {
     await see(page.getByRole("button", { name: "Edit amount", exact: true }), "Edit amount in the open row");
     await tap(second, "the second row");
     await until("the second row to open", () => open1(second));
+    // The open row, for a look (only when screenshots were asked for): the accordion has finished moving after a moment.
+    if (run.shots !== null) {
+      await sleep(400);
+      await page.screenshot({ path: path.join(run.shots, "owner-light-open-row.png") });
+    }
     if (await open1(first)) throw new Error("Two rows are open at once");
     // The closed row's actions cannot be reached or read.
     await until("the closed row's actions to be out of reach", async () => (await page.getByRole("button", { name: "Edit amount", exact: true }).count()) === 0);
@@ -545,6 +556,56 @@ const reports: Check = {
   },
 };
 
+
+// 5b. Overdue on the month screen, and the Appearance control
+
+const overdueState: Check = {
+  name: "overdue-state",
+  async run(run) {
+    const { key } = months(run);
+    const { page } = await run.actor("owner");
+    await open(run, page, "/");
+    // Rent counts as overdue from the 6th, so what a card with no payment says depends on the day: Overdue when its month is
+    // on or before the last due month, Pending after. Bala's card in this month has no payment in the world of the run.
+    const overdue = ymKey(lastDueMonth(todayIso(run.now))) >= key;
+    await see(pill(page, P2, overdue ? "Overdue" : "Pending"), `${P2} marked ${overdue ? "Overdue" : "Pending"} on ${todayIso(run.now)}`);
+    // The month before is always overdue for a card with no payment: Chitra paid nothing for it.
+    await open(run, page, `/?month=${months(run).beforeKey}`);
+    await see(pill(page, P3, "Overdue"), `${P3} Overdue last month`);
+    // The Pending chip still lists the overdue card.
+    await tap(page.getByRole("button", { name: /^Pending/ }), "the Pending chip");
+    await see(card(page, P3), `${P3} under the Pending chip`);
+  },
+};
+
+const appearance: Check = {
+  name: "appearance",
+  async run(run) {
+    const { page } = await run.actor("owner", "light");
+    const theme = () => page.evaluate<string>(`document.documentElement.getAttribute("data-theme") || "none"`);
+    const background = () => page.evaluate<string>(`getComputedStyle(document.body).backgroundColor`);
+    await open(run, page, "/more");
+    if ((await theme()) !== "none") throw new Error("A first visit has a theme chosen");
+    const light = await background();
+    await tap(page.getByRole("button", { name: "Dark", exact: true }), "Dark");
+    await until("the page to turn dark", async () => (await theme()) === "dark");
+    const dark = await background();
+    if (dark === light) throw new Error("Dark changed no colour");
+    if ((await page.getByRole("button", { name: "Dark", exact: true }).first().getAttribute("aria-pressed")) !== "true") throw new Error("Dark is not marked as chosen");
+    // It is remembered: the next page the server draws is dark from the first paint, and More shows Dark pressed.
+    await open(run, page, "/activity");
+    if ((await theme()) !== "dark") throw new Error("The choice was not remembered on the next page");
+    await open(run, page, "/more");
+    if ((await page.getByRole("button", { name: "Dark", exact: true }).first().getAttribute("aria-pressed")) !== "true") throw new Error("More does not show Dark after a reload");
+    await tap(page.getByRole("button", { name: "Light", exact: true }), "Light");
+    await until("the page to turn light", async () => (await theme()) === "light" && (await background()) === light);
+    await tap(page.getByRole("button", { name: "Auto", exact: true }), "Auto");
+    await until("Auto to take the attribute off", async () => (await theme()) === "none");
+    await open(run, page, "/more");
+    if ((await theme()) !== "none") throw new Error("Auto left a choice behind");
+  },
+};
+
 // 6. A save that fails
 
 const saveError: Check = {
@@ -558,7 +619,7 @@ const saveError: Check = {
     await tap(sheet.getByRole("button", { name: "Save to Sheet" }), "Save to Sheet");
     // The card turns Paid at once and the sheet steps aside; when Google fails the card is put back and the toast says so, with Try again.
     await toast(page, unavailable().message);
-    await see(pill(page, P3, "Pending"), `${P3} back to Pending after the failed save`);
+    await see(pill(page, P3, "Unpaid"), `${P3} back to Pending after the failed save`);
     await gone(dialog(page), "the sheet, while the toast offers Try again");
     // Try again brings the sheet back with what was typed and the same words, and the form is free again; nothing was saved.
     await tap(page.getByRole("status").getByRole("button", { name: "Try again" }), "Try again");
@@ -567,7 +628,7 @@ const saveError: Check = {
     run.heal();
     await tap(sheet.getByRole("button", { name: "Close", exact: true }), "Close");
     await gone(dialog(page), "the sheet");
-    await see(pill(page, P3, "Pending"), `${P3} still Pending`);
+    await see(pill(page, P3, "Unpaid"), `${P3} still Pending`);
   },
 };
 
@@ -603,7 +664,7 @@ const undo: Check = {
     await see(sheet.getByText(asked), "the undo question");
     await tap(sheet.getByRole("button", { name: "Undo payment", exact: true }), "Undo payment");
     await toast(page, undoToastText(P2));
-    await see(pill(page, P2, "Pending"), `${P2} Pending again`);
+    await see(pill(page, P2, "Unpaid"), `${P2} Pending again`);
   },
 };
 
@@ -617,7 +678,7 @@ const duplicateReplace: Check = {
     const member = (await run.actor("member")).page;
     // The owner's screen shows the month; then a member logs the same portion on theirs.
     await open(run, owner, "/");
-    await see(pill(owner, P2, "Pending"), `${P2} Pending for the owner`);
+    await see(pill(owner, P2, "Unpaid"), `${P2} Pending for the owner`);
     await open(run, member, "/");
     const theirs = await openLog(member, P2);
     await tap(theirs.getByRole("button", { name: "Save to Sheet" }), "Save to Sheet (member)");
@@ -843,6 +904,8 @@ export const CHECKS: readonly Check[] = [
   rowsAndChips,
   refreshButton,
   reports,
+  overdueState,
+  appearance,
   saveError,
   logExisting,
   undo,
