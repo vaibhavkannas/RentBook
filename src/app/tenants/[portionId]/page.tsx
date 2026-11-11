@@ -4,8 +4,10 @@ import LoadProblem from "@/components/LoadProblem";
 import MoveOutForm from "@/components/MoveOutForm";
 import TenancyForm from "@/components/TenancyForm";
 import { Card } from "@/components/ui/Card";
+import { Icon, type IconName } from "@/components/ui/Icon";
 import { Notice } from "@/components/ui/Notice";
 import { Page } from "@/components/ui/Page";
+import { SectionLabel } from "@/components/ui/SectionLabel";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { monthParam, withMonth } from "@/lib/app-nav";
 import { todayIso } from "@/lib/domain/year-month";
@@ -24,6 +26,7 @@ import {
   historyEntries,
   historyOverLimitNote,
   historyProblemNotice,
+  type HistoryEntry,
 } from "@/lib/tenancy-history";
 import { showChangedNotice, tenantsPagePath, TENANCY_CONFLICT_MESSAGE } from "@/lib/tenancy-response";
 import {
@@ -41,6 +44,14 @@ import {
 
 // A Google call gives up after 10 seconds; the whole request is cut off after 15.
 export const maxDuration = 15;
+
+/** The round icon of each kind of History entry, with its tint: the icon says the kind, the title says it in words. */
+const HISTORY_LOOK: Record<HistoryEntry["kind"], { icon: IconName; tint: string }> = {
+  added: { icon: "user", tint: "bg-accent-soft text-accent" },
+  edited: { icon: "list", tint: "bg-accent-soft text-accent" },
+  "moved-out": { icon: "out", tint: "bg-warn-bg text-warn-ink" },
+  other: { icon: "dots", tint: "bg-surface-2 text-muted" },
+};
 
 /** One label and value of the current tenancy. An empty value reads "Not added". */
 function Detail({ label, children }: { label: string; children?: ReactNode }) {
@@ -184,9 +195,7 @@ export default async function TenantsPage({
       {vacantSince && <p className="mt-2 text-sm font-medium">{vacantSinceNote(vacantSince, today, portion.inactive)}</p>}
 
       <Card as="section" aria-labelledby="current-heading" className="mt-4">
-        <h2 id="current-heading" className="font-medium">
-          Current tenancy
-        </h2>
+        <SectionLabel id="current-heading" className="mb-1">Current tenancy</SectionLabel>
 
         {current ? (
           <>
@@ -246,9 +255,7 @@ export default async function TenantsPage({
 
       {current && (
         <Card as="section" aria-labelledby="move-out-heading" className="mt-4">
-          <h2 id="move-out-heading" className="font-medium">
-            Move out
-          </h2>
+          <SectionLabel id="move-out-heading" className="mb-1">Move out</SectionLabel>
           <p className="mt-1 break-words text-sm text-muted">{moveOutHint(current.tenant, portion.name)}</p>
           <MoveOutForm
             key={`move-out-${current.id}`}
@@ -270,9 +277,7 @@ export default async function TenantsPage({
 
       {canRecordMoveOut && (
         <Card as="section" aria-labelledby="move-out-heading" className="mt-4">
-          <h2 id="move-out-heading" className="font-medium">
-            Move out
-          </h2>
+          <SectionLabel id="move-out-heading" className="mb-1">Move out</SectionLabel>
           <p className="mt-1 break-words text-sm text-muted">{recordMoveOutHint(scheduleTenant)}</p>
           <MoveOutForm
             key={`record-move-out-${scheduleTenant}`}
@@ -287,10 +292,8 @@ export default async function TenantsPage({
         </Card>
       )}
 
-      <section aria-labelledby="past-heading" className="mt-4">
-        <h2 id="past-heading" className="font-medium">
-          Past tenants
-        </h2>
+      <section aria-labelledby="past-heading" className="mt-5">
+        <SectionLabel id="past-heading" className="mb-2 mt-1 px-0.5">Past tenants</SectionLabel>
         {past.length === 0 ? (
           <p className="mt-2 text-sm text-muted">No past tenants yet.</p>
         ) : (
@@ -309,10 +312,8 @@ export default async function TenantsPage({
         )}
       </section>
 
-      <section aria-labelledby="history-heading" className="mt-4">
-        <h2 id="history-heading" className="font-medium">
-          History
-        </h2>
+      <section aria-labelledby="history-heading" className="mt-5">
+        <SectionLabel id="history-heading" className="mb-2 mt-1 px-0.5">History</SectionLabel>
         {history.problem !== undefined ? (
           <Notice tone="warn" className="mt-2">
             {historyProblemNotice(history.problem)}
@@ -327,18 +328,23 @@ export default async function TenantsPage({
             <Card className="mt-2">
               <ol className="divide-y divide-line">
                 {historyItems.map((entry, index) => (
-                  <li key={index} className="min-w-0 break-words py-3 first:pt-0 last:pb-0">
-                    <p className="text-sm font-medium">{entry.title}</p>
-                    {entry.lines.length > 0 && (
-                      <ul className="mt-1 space-y-0.5">
-                        {entry.lines.map((line, lineIndex) => (
-                          <li key={lineIndex} className="text-sm">
-                            {line}
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                    <p className="mt-1 text-sm text-muted">{entry.meta}</p>
+                  <li key={index} className="grid min-w-0 grid-cols-[2.125rem_minmax(0,1fr)] gap-3 break-words py-3 first:pt-0 last:pb-0">
+                    <span aria-hidden="true" className={`grid size-[2.125rem] place-items-center rounded-full ${HISTORY_LOOK[entry.kind].tint}`}>
+                      <Icon name={HISTORY_LOOK[entry.kind].icon} className="size-4.5 shrink-0" />
+                    </span>
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium">{entry.title}</p>
+                      {entry.lines.length > 0 && (
+                        <ul className="mt-1 space-y-0.5">
+                          {entry.lines.map((line, lineIndex) => (
+                            <li key={lineIndex} className="text-sm">
+                              {line}
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                      <p className="mt-1 text-sm text-muted">{entry.meta}</p>
+                    </div>
                   </li>
                 ))}
               </ol>

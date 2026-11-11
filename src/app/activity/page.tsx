@@ -1,9 +1,9 @@
 import { redirect } from "next/navigation";
 import LoadProblem from "@/components/LoadProblem";
 import { ButtonLink } from "@/components/ui/Button";
-import { Card } from "@/components/ui/Card";
 import { ChipRow, type Chip } from "@/components/ui/ChipRow";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { Icon, type IconName } from "@/components/ui/Icon";
 import { Page } from "@/components/ui/Page";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Pill } from "@/components/ui/Pill";
@@ -15,6 +15,7 @@ import {
   parseActivityFilters,
   portionsIn,
   toActivityEntry,
+  type ActivityEntry,
   withKnownPortion,
   type ActivityFilters,
   type ActivityShow,
@@ -59,32 +60,46 @@ function filterRows(filters: ActivityFilters, portions: string[], month: string 
   };
 }
 
-/** The entries of one day: a heading that stays under the notch while the day scrolls, and a card for each entry. */
+/** The icon of each kind of entry (by the pill's tone): the icon says the kind, the pill says it in words. */
+const ENTRY_ICON: Record<ActivityEntry["tone"], { icon: IconName; tint: string }> = {
+  success: { icon: "check", tint: "bg-success-bg text-success-ink" },
+  warn: { icon: "list", tint: "bg-accent-soft text-accent" },
+  danger: { icon: "rotate", tint: "bg-warn-bg text-warn-ink" },
+  neutral: { icon: "dots", tint: "bg-surface-2 text-muted" },
+};
+
+/** The entries of one day: a heading that stays under the notch while the day scrolls, and one card with a row for each entry. */
 function Day({ dayKey, heading, items, viewerEmail }: { dayKey: string; heading: string; items: ActivityItem[]; viewerEmail: string }) {
   const headingId = `day-${dayKey}`;
   return (
     <section aria-labelledby={headingId} className="mt-2">
-      <h2 id={headingId} className="sticky top-safe z-10 bg-background py-2 text-sm font-medium text-muted">
+      <h2 id={headingId} className="sticky top-safe z-10 bg-background py-2 font-display text-xs font-semibold uppercase tracking-wider text-muted">
         {heading}
       </h2>
-      <ol className="space-y-3">
+      <ol className="divide-y divide-line overflow-hidden rounded-card border border-line bg-surface">
         {items.map((item, index) => {
           const entry = toActivityEntry(item, viewerEmail);
+          const look = ENTRY_ICON[entry.tone];
           return (
-            <Card as="li" key={`${item.savedAt}-${index}`}>
-              <div className="flex items-start justify-between gap-3">
-                <p className="min-w-0 break-words font-medium">{entry.portion}</p>
-                <Pill tone={entry.tone}>{entry.label}</Pill>
+            <li key={`${item.savedAt}-${index}`} className="grid grid-cols-[2.125rem_minmax(0,1fr)] gap-3 px-3 py-3">
+              <span aria-hidden="true" className={cx("grid size-[2.125rem] place-items-center rounded-full", look.tint)}>
+                <Icon name={look.icon} className="size-4.5 shrink-0" />
+              </span>
+              <div className="min-w-0">
+                <div className="flex items-start justify-between gap-3">
+                  <p className="min-w-0 break-words font-medium">{entry.portion}</p>
+                  <Pill tone={entry.tone}>{entry.label}</Pill>
+                </div>
+                <p className="mt-1 break-words text-sm">{entry.summary}</p>
+                {entry.amount !== null && (
+                  <p className={cx("mt-1 font-display text-lg font-semibold tabular-nums", entry.struck && "text-muted line-through")}>
+                    {entry.struck && <span className="sr-only">removed </span>}
+                    {entry.amount}
+                  </p>
+                )}
+                <p className="mt-1 break-words text-sm text-muted">{entry.meta}</p>
               </div>
-              <p className="mt-1 break-words text-sm">{entry.summary}</p>
-              {entry.amount !== null && (
-                <p className={cx("mt-1 text-lg font-medium", entry.struck && "text-muted line-through")}>
-                  {entry.struck && <span className="sr-only">removed </span>}
-                  {entry.amount}
-                </p>
-              )}
-              <p className="mt-1 break-words text-sm text-muted">{entry.meta}</p>
-            </Card>
+            </li>
           );
         })}
       </ol>

@@ -577,7 +577,7 @@ describe("the tenant details page: History", () => {
 
   it("has a History section after Past tenants", async () => {
     const html = await render();
-    expect(html).toMatch(/<section aria-labelledby="history-heading"[^>]*><h2 id="history-heading" class="font-medium">History<\/h2>/);
+    expect(html).toMatch(/<section aria-labelledby="history-heading"[^>]*><h2 id="history-heading" class="[^"]*\buppercase\b[^"]*">History<\/h2>/);
     expect(html.indexOf("Past tenants")).toBeLessThan(html.indexOf(">History<"));
   });
 
@@ -620,6 +620,19 @@ describe("the tenant details page: History", () => {
     expect(html).toMatch(/<p class="text-sm font-medium">Details changed for Asha\.<\/p>/);
     expect(html).toMatch(/<li class="text-sm">Phone number changed\.<\/li>/);
     expect(html).toMatch(/<p class="mt-1 text-sm text-muted">[^<]* · by owner@example\.com<\/p>/);
+  });
+
+  it("puts a round icon at the start of each entry, a different one for a move-out than for added details, hidden from a screen reader", async () => {
+    history(
+      log({ savedAt: "2026-11-05T05:00:00.000Z", action: "Moved out", field: "Move-out date", newValue: "2026-11-30" }),
+      log({ savedAt: "2026-11-01T05:00:00.000Z", action: "Added" }),
+    );
+    const html = await render();
+    const icons = [...html.matchAll(/<span aria-hidden="true" class="grid size-\[2\.125rem\][^"]*rounded-full[^"]*"><svg[\s\S]*?<\/svg><\/span>/g)].map((m) => m[0]);
+    expect(icons).toHaveLength(2);
+    expect(icons[0]).toContain("bg-warn-bg");
+    expect(icons[1]).toContain("bg-accent-soft");
+    expect(icons[0].match(/<path[^>]*>/)![0]).not.toBe(icons[1].match(/<path[^>]*>/)![0]);
   });
 
   it("names the tenant from the page's tenancies, the current one and the past ones", async () => {

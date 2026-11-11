@@ -313,3 +313,14 @@ describe("the words around the list", () => {
     );
   });
 });
+
+describe("the kind of an entry, for the icon beside it", () => {
+  it("is added, edited, moved-out (a move-out or a closing) or other", () => {
+    const kind = (rows: TenancyLogItem[]) => one(rows)[0].kind;
+    expect(kind([item({ action: "Added" })])).toBe("added");
+    expect(kind([item({ field: "Phone" })])).toBe("edited");
+    expect(kind([item({ action: "Moved out", field: "Move-out date", newValue: "2026-10-05" })])).toBe("moved-out");
+    expect(kind([item({ action: "Closed", field: "Move-out date", newValue: "2026-10-05" })])).toBe("moved-out");
+    expect(kind([item({ action: null })])).toBe("other");
+  });
+});

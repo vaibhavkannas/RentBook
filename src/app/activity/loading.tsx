@@ -1,4 +1,3 @@
-import { Card } from "@/components/ui/Card";
 import { Page } from "@/components/ui/Page";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Skeleton } from "@/components/ui/Skeleton";
@@ -12,7 +11,7 @@ const CHIP_ROWS = [
 
 /**
  * Shown straight away when the Activity tab is tapped, while the page reads the Payments Log. It is the page without
- * its words: the header, the two rows of filter chips, a day heading and three entries, each the height of the real
+ * its words: the header, the two rows of filter chips, a day heading and one card of three entry rows, each the height of the real
  * one (a two line sentence), so nothing moves when the entries arrive. Activity is a tab, so there is no arrow back.
  */
 export default function Loading() {
@@ -25,7 +24,7 @@ export default function Loading() {
         {CHIP_ROWS.map((widths, row) => (
           <div key={row} className={CHIP_ROW}>
             {widths.map((width, chip) => (
-              <Skeleton key={chip} className={`h-11 ${width} shrink-0`} />
+              <Skeleton key={chip} className={`h-11 ${width} shrink-0 rounded-full`} />
             ))}
           </div>
         ))}
@@ -33,24 +32,27 @@ export default function Loading() {
 
       <div aria-hidden="true" className="mt-2">
         <div className="py-2">
-          <Skeleton className="h-5 w-28" />
+          <Skeleton className="h-4 w-28" />
         </div>
-        <div className="space-y-3">
+        <div className="divide-y divide-line overflow-hidden rounded-card border border-line bg-surface">
           {[0, 1, 2].map((entry) => (
-            <Card key={entry} className="space-y-1">
-              <div className="flex items-start justify-between gap-3">
-                <Skeleton className="h-6 w-36" />
-                <Skeleton className="h-5 w-14" />
+            <div key={entry} className="grid grid-cols-[2.125rem_minmax(0,1fr)] gap-3 px-3 py-3">
+              <Skeleton className="size-[2.125rem] rounded-full" />
+              <div className="space-y-1">
+                <div className="flex items-start justify-between gap-3">
+                  <Skeleton className="h-6 w-36" />
+                  <Skeleton className="h-5 w-14 rounded-full" />
+                </div>
+                <div className="space-y-2">
+                  <Skeleton className="h-4 w-full" />
+                  <Skeleton className="h-4 w-2/3" />
+                </div>
+                <div className="py-1">
+                  <Skeleton className="h-5 w-24" />
+                </div>
+                <Skeleton className="h-5 w-1/2" />
               </div>
-              <div className="space-y-2">
-                <Skeleton className="h-4 w-full" />
-                <Skeleton className="h-4 w-2/3" />
-              </div>
-              <div className="py-1">
-                <Skeleton className="h-5 w-24" />
-              </div>
-              <Skeleton className="h-5 w-1/2" />
-            </Card>
+            </div>
           ))}
         </div>
       </div>

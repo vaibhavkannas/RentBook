@@ -76,18 +76,20 @@ describe("the Activity loading screen", () => {
     expect(out).not.toMatch(/class="[^"]*\bh-8\b/);
   });
 
-  it("shows a day heading the height of the sticky one (36 px) under the chips, then three entry cards", () => {
-    expect(out.match(new RegExp(`class="${CARD}`, "g"))).toHaveLength(3);
-    expect(out).toMatch(/<div class="py-2"><div aria-hidden="true" class="[^"]*\bh-5\b[^"]*"><\/div><\/div>/);
+  it("shows a day heading the height of the sticky one under the chips, then one day card of three entry rows", () => {
+    const dayCard = "divide-y divide-line overflow-hidden rounded-card border border-line bg-surface";
+    expect(out.match(new RegExp(`class="${dayCard}"`, "g"))).toHaveLength(1);
+    expect(out.match(/grid-cols-\[2\.125rem_minmax\(0,1fr\)\]/g)).toHaveLength(3);
+    expect(out).toMatch(/<div class="py-2"><div aria-hidden="true" class="[^"]*\bh-4\b[^"]*"><\/div><\/div>/);
     const chipsAt = out.lastIndexOf(" h-11 ");
     const headingAt = out.indexOf('<div class="py-2">');
-    const cardAt = out.indexOf(`class="${CARD}`);
+    const cardAt = out.indexOf("divide-y divide-line overflow-hidden");
     expect(chipsAt).toBeLessThan(headingAt);
     expect(headingAt).toBeLessThan(cardAt);
   });
 
-  it("lays each card out like a real entry: the portion row, a two line sentence, the amount, the meta line", () => {
-    const cards = out.split(`class="${CARD} space-y-1"`).slice(1);
+  it("lays each row out like a real entry: a round icon, the portion row, a two line sentence, the amount, the meta line", () => {
+    const cards = out.split('<div class="space-y-1">').slice(1);
     expect(cards).toHaveLength(3);
     for (const card of cards) {
       expect(card).toMatch(/\bh-6\b/);

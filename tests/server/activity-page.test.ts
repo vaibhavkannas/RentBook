@@ -4,9 +4,10 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ACTIVITY_SHOWN_LIMIT } from "@/lib/activity-view";
 import type { ActivityItem } from "@/lib/sheets/service";
-import { CARD, pillClasses } from "@/lib/ui-classes";
+import { pillClasses } from "@/lib/ui-classes";
 import { withoutComments } from "../support/source-scan";
 import { smallTargets, unpressedTargets } from "../support/tap-targets";
+import { wrapProblems } from "../support/wrapping";
 
 // The Activity page: a diary of the Payments Log. Entries are grouped under the day they were saved on, each says in a
 // sentence who did what and for how much, and two rows of chips narrow it by kind of entry and by portion.
@@ -142,12 +143,12 @@ describe("the Activity page", () => {
       mocks.readActivity.mockResolvedValue(rows());
       const html = await render();
       const tag = /<h2\b[^>]*>/.exec(html)![0];
-      for (const name of ["sticky", "top-safe", "text-sm", "font-medium", "text-muted", "bg-background"]) {
+      for (const name of ["sticky", "top-safe", "text-xs", "uppercase", "font-semibold", "text-muted", "bg-background"]) {
         expect(tag, name).toMatch(new RegExp(`class="[^"]*\\b${name}\\b`));
       }
     });
 
-    it("follows each heading with an ordered list of cards, so a heading holds only its own day's entries", async () => {
+    it("follows each heading with one card holding an ordered list of rows, so a heading holds only its own day's entries", async () => {
       mocks.readActivity.mockResolvedValue(rows());
       const html = await render();
       const sections = html.split("<section").slice(1);
@@ -157,7 +158,8 @@ describe("the Activity page", () => {
         expect(section).toMatch(/<\/h2><ol\b/);
         expect(section.match(/<ol\b/g)).toHaveLength(1);
       }
-      expect(html.match(new RegExp(`<li class="${CARD}`, "g"))).toHaveLength(5);
+      expect(html.match(/<li class="grid grid-cols-\[2\.125rem_minmax\(0,1fr\)\]/g)).toHaveLength(5);
+      expect(html.match(/<ol class="divide-y divide-line overflow-hidden rounded-card border border-line bg-surface">/g)).toHaveLength(4);
     });
 
     it("keeps the newest-first order inside a day", async () => {
@@ -210,13 +212,13 @@ describe("the Activity page", () => {
   });
 
   describe("an entry", () => {
-    it("is a card with the portion and the kind of entry as a pill, the sentence, the amount, and when and who", async () => {
+    it("is a row of its day's card with a round icon, the portion and the kind of entry as a pill, the sentence, the amount, and when and who", async () => {
       const html = await render();
-      expect(html).toContain(`<li class="${CARD}">`);
+      expect(html).toMatch(/<li class="grid grid-cols-\[2\.125rem_minmax\(0,1fr\)\][^"]*"><span aria-hidden="true" class="grid size-\[2\.125rem\][^"]*bg-success-bg[^"]*"><svg/);
       expect(html).toMatch(/<p class="[^"]*\bfont-medium\b[^"]*">Ground floor<\/p>/);
       expect(html).toContain(`<span class="${pillClasses("success")}">Logged</span>`);
       expect(html).toContain("Logged ₹ 10,000 from Asha for October 2026 (payment 4).");
-      expect(html).toMatch(/<p class="mt-1 text-lg font-medium">₹ 10,000<\/p>/);
+      expect(html).toMatch(/<p class="mt-1 font-display text-lg font-semibold tabular-nums">₹.10,000<\/p>/);
       expect(html).toContain("10:00 am · by owner@example.com · received 5 Oct");
     });
 
@@ -248,7 +250,7 @@ describe("the Activity page", () => {
       expect(html).toContain(`<span class="${pillClasses("danger")}">Undone</span>`);
       expect(html).toContain("Undid Asha&#x27;s October 2026 payment of ₹ 10,000.");
       expect(html).toMatch(
-        /<p class="mt-1 text-lg font-medium text-muted line-through"><span class="sr-only">removed <\/span>₹ 10,000<\/p>/,
+        /<p class="mt-1 font-display text-lg font-semibold tabular-nums text-muted line-through"><span class="sr-only">removed <\/span>₹ 10,000<\/p>/,
       );
       expect(html).not.toContain("received");
     });
@@ -344,9 +346,9 @@ describe("the Activity page", () => {
       mocks.readActivity.mockResolvedValue(many);
       const html = await render({ show: "logged" });
       const [all, logged] = chips(html, "Show");
-      expect(logged.attrs).toContain("bg-accent");
-      expect(all.attrs).not.toContain("bg-accent");
-      expect(all.attrs).toContain("border-control");
+      expect(logged.attrs).toContain("bg-foreground");
+      expect(all.attrs).not.toContain("bg-foreground");
+      expect(all.attrs).toContain("border-line");
     });
 
     it("replace the history entry and keep the scroll position, so a filter is not a page to go back through", async () => {
@@ -366,7 +368,7 @@ describe("the Activity page", () => {
       expect(smallTargets(html)).toEqual([]);
       expect(unpressedTargets(html)).toEqual([]);
       expect(html).toMatch(/<div role="group" aria-label="Portion" class="[^"]*\boverflow-x-auto\b/);
-      for (const chip of row) expect(chip.attrs).toMatch(/class="[^"]*\bshrink-0\b[^"]*\bwhitespace-nowrap\b/);
+      for (const chip of row) expect(chip.attrs).toMatch(/class="[^"]*\bflex-none\b[^"]*\bwhitespace-nowrap\b/);
     });
 
     it("count the portions of the whole scan, not only of the entries that the other filter keeps", async () => {
@@ -583,6 +585,21 @@ describe("the Activity page", () => {
       const html = await render(params);
       expect(smallTargets(html)).toEqual([]);
       expect(unpressedTargets(html)).toEqual([]);
+    });
+  });
+
+  describe("the redesigned rows", () => {
+    it("wraps a very long portion name, tenant and address inside its row", async () => {
+      const portion = "Third".padEnd(60, "x") + "floor";
+      mocks.readActivity.mockResolvedValue([item({ portion, tenant: "Asha".padEnd(50, "y"), loggedBy: "a-very-long-address".padEnd(50, "z") + "@example.com" })]);
+      expect(wrapProblems(await render(), [portion])).toEqual([]);
+    });
+
+    it("tints the icon of each kind of entry differently, so the kind is not told by the pill's colour alone", async () => {
+      mocks.readActivity.mockResolvedValue([item(), item({ action: "Edited" }), item({ action: "Undone" })]);
+      const tints = [...(await render()).matchAll(/<span aria-hidden="true" class="grid size-\[2\.125rem\][^"]*"><svg[\s\S]*?<path d="([^"]*)"/g)].map((m) => m[1]);
+      expect(tints).toHaveLength(3);
+      expect(new Set(tints).size).toBe(3);
     });
   });
 });

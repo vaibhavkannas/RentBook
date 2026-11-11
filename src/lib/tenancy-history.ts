@@ -27,6 +27,8 @@ export const historyOverLimitNote = () =>
 export const historyProblemNotice = (reason: string) => `The history can't be shown right now. ${reason}`;
 
 export type HistoryEntry = {
+  /** What kind of save it was, for the icon beside it. */
+  kind: "added" | "edited" | "moved-out" | "other";
   /** What was done and for whom: "Details changed for Asha." */
   title: string;
   /** One line for each field the save changed. */
@@ -113,7 +115,7 @@ function toEntry(rows: readonly TenancyLogItem[], names: ReadonlyMap<string, str
   const when = indiaDayKey(first.savedAt) === null ? "Time not recorded" : formatSavedAt(first.savedAt);
   const meta = `${when} · ${whoText(first.changedBy, viewerEmail)}`;
   if (first.action === null) {
-    return { title: first.field === "" ? "Change recorded." : `Change recorded: ${first.field}.`, lines: [], meta };
+    return { kind: "other", title: first.field === "" ? "Change recorded." : `Change recorded: ${first.field}.`, lines: [], meta };
   }
 
   const tenant = names.get(first.tenancyId)?.trim() || PAST_TENANT;
@@ -139,7 +141,8 @@ function toEntry(rows: readonly TenancyLogItem[], names: ReadonlyMap<string, str
   }
   // The title says what an Added row means and the day of a move-out or a closing; every other row is a line.
   const lines = first.action === "Added" ? [] : rows.filter((row) => row !== moved?.row).map(fieldLine);
-  return { title, lines, meta };
+  const kind = first.action === "Added" ? "added" : first.action === "Edited" ? "edited" : "moved-out";
+  return { kind, title, lines, meta };
 }
 
 /**
