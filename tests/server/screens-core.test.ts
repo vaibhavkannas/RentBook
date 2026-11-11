@@ -399,7 +399,7 @@ describe("More", () => {
       ["Set up Check each part of the connection to your Sheet", "/setup"],
       ["Diagnostics How the app and your Sheet are doing", "/diagnostics"],
     ]);
-    expect(named(html, "button").map((button) => textOf(button))).toEqual(["Sign out"]);
+    expect(named(html, "button").map((button) => textOf(button))).toEqual(["Auto", "Light", "Dark", "Sign out"]);
     expect(pageText(html)).toContain("RentBook · Version 0.1.0");
   });
 
@@ -411,7 +411,7 @@ describe("More", () => {
     expect(html).not.toContain("Portion settings");
     expect(html).not.toContain("Set up");
     expect(html).not.toContain("Diagnostics");
-    expect(named(html, "button").map((button) => textOf(button))).toEqual(["Sign out"]);
+    expect(named(html, "button").map((button) => textOf(button))).toEqual(["Auto", "Light", "Dark", "Sign out"]);
   });
 
   it("keeps the month in every link", async () => {

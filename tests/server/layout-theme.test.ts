@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { createElement, type ReactElement } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -19,6 +20,7 @@ vi.mock("next/font/google", () => ({
 }));
 
 import RootLayout from "@/app/layout";
+import { withoutComments } from "../support/source-scan";
 
 async function htmlProps(cookie: string | undefined) {
   state.cookie = cookie;
@@ -41,5 +43,26 @@ describe("the root layout's theme", () => {
 
   it("ignores a cookie that is not a choice", async () => {
     expect((await htmlProps("javascript:alert(1)"))["data-theme"]).toBeUndefined();
+  });
+});
+
+describe("how the choice is applied and remembered", () => {
+  const source = (path: string) => readFileSync(new URL(`../../${path}`, import.meta.url), "utf8");
+
+  it("uses no inline script anywhere in the layout, which the nonce-based policy would block", () => {
+    expect(withoutComments(source("src/app/layout.tsx"))).not.toMatch(/dangerouslySetInnerHTML|<script/);
+  });
+
+  it("draws ThemeSync in the layout, which applies a remembered choice only when the page has none", () => {
+    expect(source("src/app/layout.tsx")).toMatch(/<ThemeSync \/>/);
+    const sync = withoutComments(source("src/components/ThemeSync.tsx"));
+    expect(sync).toMatch(/hasAttribute\("data-theme"\)/);
+    expect(sync).toMatch(/adoptStoredTheme\(browserThemeEnv\(\)\)/);
+  });
+
+  it("makes each button of the Appearance control choose its theme, and reads what the page has on <html>", () => {
+    const control = withoutComments(source("src/components/Appearance.tsx"));
+    expect(control).toMatch(/onClick=\{\(\) => chooseTheme\(browserThemeEnv\(\), name\)\}/);
+    expect(control).toMatch(/useSyncExternalStore\(subscribeTheme, currentTheme, \(\) => initial\)/);
   });
 });

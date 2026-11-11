@@ -62,6 +62,19 @@ export function adoptStoredTheme(env: ThemeEnv): Theme | null {
   return theme;
 }
 
+/** Sent on the window when the page's theme was set, so a control that shows it can follow. */
+const THEME_EVENT = "rentbook:theme";
+
+export function subscribeTheme(onChange: () => void): () => void {
+  window.addEventListener(THEME_EVENT, onChange);
+  return () => window.removeEventListener(THEME_EVENT, onChange);
+}
+
+/** The choice on the page now: what <html> says (nothing is Auto). */
+export function currentTheme(): Theme {
+  return parseTheme(document.documentElement.getAttribute("data-theme"));
+}
+
 /** The real browser, behind the same small interface. The storage getter is guarded: the property itself can throw. */
 export function browserThemeEnv(): ThemeEnv {
   let storage: Storage | null = null;
@@ -74,6 +87,7 @@ export function browserThemeEnv(): ThemeEnv {
     setRoot: (value) => {
       if (value === undefined) document.documentElement.removeAttribute("data-theme");
       else document.documentElement.setAttribute("data-theme", value);
+      window.dispatchEvent(new Event(THEME_EVENT));
     },
     writeCookie: (text) => {
       document.cookie = text;

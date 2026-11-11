@@ -9,6 +9,7 @@ import { smallTargets, unpressedTargets } from "../support/tap-targets";
 // The More screen: who is signed in, the owner's way to the portion settings, Set up and Diagnostics, Sign out, and the version.
 
 const mocks = vi.hoisted(() => ({
+  theme: undefined as string | undefined,
   getViewer: vi.fn(),
   signOut: vi.fn(),
   redirect: vi.fn((to: string) => {
@@ -16,6 +17,9 @@ const mocks = vi.hoisted(() => ({
   }),
 }));
 
+vi.mock("next/headers", () => ({
+  cookies: async () => ({ get: (name: string) => (name === "rentbook-theme" && mocks.theme !== undefined ? { name, value: mocks.theme } : undefined) }),
+}));
 vi.mock("next/navigation", () => ({ redirect: mocks.redirect }));
 vi.mock("@/auth", () => ({ signOut: mocks.signOut }));
 vi.mock("@/lib/server/auth-guard", () => ({ getViewer: mocks.getViewer }));
@@ -42,6 +46,7 @@ const asMember = () => mocks.getViewer.mockResolvedValue({ email: "member@exampl
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mocks.theme = undefined;
   asMember();
 });
 
@@ -87,7 +92,7 @@ describe("the More page", () => {
         const link = new RegExp(`<a [^>]*href="${path}\\?month=2026-10"[^>]*>[\\s\\S]*?</a>`).exec(html)?.[0] ?? "";
         expect(link).toContain(`>${title}<`);
         expect(link).toContain(hint);
-        expect(link).toMatch(/class="[^"]*\bmin-h-11\b/);
+        expect(link).toMatch(/class="[^"]*\bmin-h-1[12]\b/);
         expect(link).toMatch(/class="[^"]*\bpress\b/);
       }
     });
@@ -136,7 +141,7 @@ describe("the More page", () => {
     expect(link).toContain("Portion settings");
     expect(link).toContain("Cycles, hikes, and adding or switching off portions");
     expect(link).not.toContain("Cycle length");
-    expect(link).toMatch(/class="[^"]*\bmin-h-11\b/);
+    expect(link).toMatch(/class="[^"]*\bmin-h-1[12]\b/);
   });
 
   it("links to the portion settings without a month when there is none", async () => {
@@ -160,7 +165,7 @@ describe("the More page", () => {
     const link = new RegExp(`<a [^>]*href="${path}\\?month=2026-10"[^>]*>[\\s\\S]*?</a>`).exec(html)?.[0] ?? "";
     expect(link).toContain(`>${title}<`);
     expect(link).toContain(hint);
-    expect(link).toMatch(/class="[^"]*\bmin-h-11\b/);
+    expect(link).toMatch(/class="[^"]*\bmin-h-1[12]\b/);
     expect(link).toMatch(/class="[^"]*\bpress\b/);
     expect(await render()).toContain(`href="${path}"`);
     expect(await render({ month: "garbage" })).toContain(`href="${path}"`);
@@ -200,5 +205,54 @@ describe("the More page", () => {
 
   it("makes room for the tab bar", async () => {
     expect(await render()).toMatch(/^<main class="[^"]*\bpb-tabbar\b/);
+  });
+});
+
+describe("the redesigned More screen", () => {
+  it("groups the rent screens in one card, with an icon tile in each row and an arrow", async () => {
+    const html = await render();
+    const group = /<section aria-labelledby="rent-heading">[\s\S]*?<\/section>/.exec(html)![0];
+    expect(group).toContain("divide-y divide-line overflow-hidden rounded-card");
+    expect(group.match(/<span aria-hidden="true" class="grid size-9 [^"]*rounded-control/g)).toHaveLength(3);
+    expect(group.match(/<a /g)).toHaveLength(3);
+  });
+
+  it("gives the owner an Owner group with its three rows, and a member none", async () => {
+    asOwner();
+    const owner = await render();
+    const group = /<section aria-labelledby="owner-heading">[\s\S]*?<\/section>/.exec(owner)![0];
+    expect(group.match(/<a /g)).toHaveLength(3);
+    asMember();
+    expect(await render()).not.toContain("owner-heading");
+  });
+
+  it("has an Appearance control with Auto, Light and Dark as 44 px buttons, Auto pressed when nothing was chosen", async () => {
+    const html = await render();
+    const section = /<section aria-labelledby="appearance-heading">[\s\S]*?<\/section>/.exec(html)![0];
+    expect(section).toContain('role="group" aria-label="Appearance"');
+    expect(section.match(/<button [^>]*>(Auto|Light|Dark)<\/button>/g)).toHaveLength(3);
+    expect(section).toMatch(/<button type="button" aria-pressed="true"[^>]*>Auto<\/button>/);
+    expect(section).toMatch(/aria-pressed="false"[^>]*>Light<\/button>/);
+    expect(smallTargets(section)).toEqual([]);
+    expect(unpressedTargets(section)).toEqual([]);
+  });
+
+  it.each([
+    ["dark", "Dark"],
+    ["light", "Light"],
+  ])("shows %s pressed when the cookie says so, and Auto for anything else", async (cookie, label) => {
+    mocks.theme = cookie;
+    const section = /<section aria-labelledby="appearance-heading">[\s\S]*?<\/section>/.exec(await render())![0];
+    expect(section).toMatch(new RegExp(`aria-pressed="true"[^>]*>${label}</button>`));
+    expect(section).toMatch(/aria-pressed="false"[^>]*>Auto<\/button>/);
+    mocks.theme = "<script>";
+    expect(/<section aria-labelledby="appearance-heading">[\s\S]*?<\/section>/.exec(await render())![0]).toMatch(/aria-pressed="true"[^>]*>Auto<\/button>/);
+  });
+
+  it("puts Appearance after the owner's rows and before Sign out", async () => {
+    asOwner();
+    const html = await render();
+    expect(html.indexOf("Appearance")).toBeGreaterThan(html.indexOf("Diagnostics"));
+    expect(html.indexOf("Sign out")).toBeGreaterThan(html.indexOf(">Dark<"));
   });
 });

@@ -30,6 +30,7 @@ vi.mock("next/font/google", () => ({
   Inter: () => ({ variable: "--font-inter" }),
   Space_Grotesk: () => ({ variable: "--font-space-grotesk" }),
 }));
+vi.mock("next/headers", () => ({ cookies: async () => ({ get: () => undefined }) }));
 vi.mock("@/auth", () => ({ signIn: vi.fn(), signOut: vi.fn() }));
 vi.mock("@/lib/server/auth-guard", () => ({ getViewer: state.getViewer }));
 vi.mock("@/lib/server/context", () => ({ getSheetsContext: () => ({}) }));

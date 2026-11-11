@@ -3,6 +3,7 @@ import { Inter, Space_Grotesk } from "next/font/google";
 import { cookies } from "next/headers";
 import { Suspense } from "react";
 import BackRefresh from "@/components/BackRefresh";
+import ThemeSync from "@/components/ThemeSync";
 import TabBar, { TabBarFallback } from "@/components/TabBar";
 import { ToastProvider } from "@/components/ui/Toast";
 import { BRAND } from "@/lib/brand";
@@ -53,6 +54,8 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
         <ToastProvider>{children}</ToastProvider>
         {/* A tap that goes back lands on a kept screen: this loads it again (it renders nothing). */}
         <BackRefresh />
+        {/* A remembered Appearance choice the cookie lost is applied after the page loads (it renders nothing). */}
+        <ThemeSync />
         {/* The bar reads the month from the address, so it is drawn inside Suspense, with the month-less bar as its fallback. */}
         <Suspense fallback={<TabBarFallback />}>
           <TabBar />
