@@ -16,9 +16,9 @@ The title is the month on show. Tap the arrows or swipe to change month, or tap 
 
 Tap **Log payment** on a **Pending** card. The amount starts as the usual rent, the count is set for you, and **Date received** starts as today. Change them if you need to, then tap **Save to Sheet**. The payment goes into your Schedule, and a line with who logged it goes into the Payments Log tab.
 
-The first payment of a new cycle carries the portion's hike, and the amount starts with it. Tap **Round to** a round figure, or **Keep** the old rent, if you agreed something else.
+The first payment of a new cycle starts with the portion's hike. Tap **Round to** or **Keep** if you agreed something else.
 
-The rent RentBook suggests is the first payment of the current hike cycle. A different amount in another month is treated as agreed for that month: it does not change the suggestion and is never overdue. After a hike, the first payment you log is taken as the new rent, rounded or not. If the rent changes for good in the middle of a cycle, its card shows the difference each month until the next cycle starts. But on a portion whose count never resets there is no hike cycle, so the suggestion follows the last payment.
+The rent RentBook suggests is the first payment of the current hike cycle. A different amount in another month is treated as agreed for that month: it does not change the suggestion and is never overdue. After a hike, the first payment you log is taken as the new rent, rounded or not. A mistake in it lasts the whole cycle, so RentBook asks you to confirm one far from the suggestion. If the rent changes for good mid-cycle, the old rent is still suggested, each month shows a difference, Overdue counts unpaid months at the old rent and the next hike is worked from it, until the next cycle. Where the count never resets, the suggestion follows the last payment.
 
 If the month already has a payment (someone logged it a moment ago), RentBook says so and offers **Replace amount** or **Go back**. To change a payment, tap **Edit amount** on a **Paid** card. To take one back, tap **Undo** and confirm with **Undo payment**. The Schedule is cleared, and the Payments Log keeps a record. A payment cannot be undone while later months have payments.
 

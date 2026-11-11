@@ -9,7 +9,7 @@ import { LiveNotice, Notice } from "@/components/ui/Notice";
 import { Sheet } from "@/components/ui/Sheet";
 import { SlowHint } from "@/components/ui/SlowHint";
 import { useToast } from "@/components/ui/Toast";
-import { roundedChoices } from "@/lib/domain/rent-rules";
+import { farFromSuggestion, roundedChoices } from "@/lib/domain/rent-rules";
 import type { TenancyFields } from "@/lib/domain/tenancy";
 import type { PortionCard, PortionEntry } from "@/lib/domain/types";
 import {
@@ -106,6 +106,8 @@ export default function PaymentSheet({
   const known = mode === "new-tenant" ? NEW_TENANT_FIELDS : LOG_FIELDS;
   // The payment a duplicate warning named: the Replace it offers is checked against this entry.
   const [conflict, setConflict] = useState<PortionEntry | null>(null);
+  /** The amount typed for the first payment of a new cycle that is far from the suggestion, waiting for a yes. */
+  const [farAmount, setFarAmount] = useState<number | null>(null);
   const [notice, setNotice] = useState<AfterSave | null>(null);
   // What the toast will say once the sheet closes. The payment is saved, but a notice (the log entry or the tenancy
   // details did not save) keeps the sheet open, and the toast waits for the person to be done with it. It has two texts:
@@ -148,7 +150,7 @@ export default function PaymentSheet({
    */
   const finish = () => finishWith(logEntryState(notice?.retryToken != null, retryUnanswered));
 
-  async function submit(overwrite: boolean) {
+  async function submit(overwrite: boolean, confirmedFar = false) {
     if (!card) return show(fieldProblem("Choose a portion first.", "portion", known));
     // The sheet decides whether tenancy details are sent: only when the person filled in or changed something.
     let tenancy: TenancyFields | undefined;
@@ -172,6 +174,10 @@ export default function PaymentSheet({
     // The first thing wrong, in the order the fields are on the screen: the tenant's name and the amount, then the details box.
     if (!request.ok) return show(fieldProblem(request.message, request.field, known));
     if (detailsProblem) return show(detailsProblem);
+    // The first payment of a new cycle is the rent of the whole cycle: a far amount needs a yes first.
+    if (mode === "log" && card.next?.startsNewCycle && !overwrite && !confirmedFar && farFromSuggestion(request.body.amount, card.next.suggestedAmount)) {
+      return setFarAmount(request.body.amount);
+    }
     setBusy(true);
     setProblem(null);
     const sent = await sendJson<ApiBody>("/api/payments", request.body);
@@ -282,6 +288,33 @@ export default function PaymentSheet({
               Close
             </Button>
           )}
+          <SlowHint busy={busy} />
+        </div>
+      ) : farAmount !== null && card?.next ? (
+        <div className="mt-4 space-y-3">
+          <Notice tone="warn">
+            This will become the rent for the whole cycle: {formatRupees(farAmount)} (suggested {formatRupees(card.next.suggestedAmount)}).
+            Every later month in the cycle will suggest {formatRupees(farAmount)} and the next hike is worked from it.
+          </Notice>
+          {problem && (
+            <Notice tone="danger" role="alert">
+              {problem.message}
+            </Notice>
+          )}
+          <Button size="lg" className="w-full" onClick={() => submit(false, true)} pending={busy} pendingLabel="Saving…">
+            Yes, use {formatRupees(farAmount)}
+          </Button>
+          <Button
+            variant="quiet"
+            className="w-full"
+            onClick={() => {
+              setFarAmount(null);
+              setProblem(null);
+            }}
+            disabled={busy}
+          >
+            Change amount
+          </Button>
           <SlowHint busy={busy} />
         </div>
       ) : conflict ? (

@@ -306,7 +306,9 @@ describe("USER-GUIDE.md", () => {
     expect(guide).toContain("The rent RentBook suggests is the first payment of the current hike cycle.");
     expect(guide).toContain("A different amount in another month is treated as agreed for that month: it does not change the suggestion and is never overdue.");
     expect(guide).toContain("After a hike, the first payment you log is taken as the new rent, rounded or not.");
-    expect(guide).toContain("on a portion whose count never resets there is no hike cycle, so the suggestion follows the last payment");
+    expect(guide).toContain("count never resets, the suggestion follows the last payment");
+    expect(guide).toContain("RentBook asks you to confirm one far from the suggestion");
+    expect(guide).toMatch(/Overdue counts unpaid months at the old rent and the next hike is worked from it/);
     // the old rule, a few rupees of allowance, is gone
     expect(guide).not.toMatch(/within ₹ ?10|counts as rounded|as extra or short/);
   });

@@ -44,6 +44,13 @@ describe("SETUP.md: how the suggested rent is worked out", () => {
     expect(settings).not.toMatch(/within ₹ ?10|counts as rounded/);
   });
 
+  it("says what a mid-cycle change and a mistaken first payment cost, and what lowering the cycle length does", () => {
+    expect(settings).toMatch(/keeps suggesting the old rent[\s\S]*unpaid months at the old rent in Overdue[\s\S]*next hike is worked from the old rent/);
+    expect(settings).toContain("type the count as 1 in the Sheet, which also moves the hike date");
+    expect(settings).toContain("asks you to confirm one more than 5% from the suggestion");
+    expect(settings).toContain("Lowering the cycle length in Settings after payments exist");
+  });
+
   it("says a portion whose count never resets keeps following the last payment, and why", () => {
     expect(settings).toMatch(/Count never resets[\s\S]*no hike cycle[\s\S]*follows the last payment/);
   });

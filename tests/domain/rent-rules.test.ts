@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  farFromSuggestion,
+  HIKE_CONFIRM_PERCENT,
   nextCount,
   roundedChoices,
   startsNewCycle,
@@ -122,5 +124,18 @@ describe("sumAmounts", () => {
   it("treats missing amounts as zero", () => {
     expect(sumAmounts([5450, null, 9000, undefined])).toBe(14450);
     expect(sumAmounts([])).toBe(0);
+  });
+});
+
+describe("farFromSuggestion", () => {
+  it("asks for confirmation from more than 5 percent away from the suggestion, either side", () => {
+    expect(HIKE_CONFIRM_PERCENT).toBe(5);
+    expect(farFromSuggestion(10500, 10500)).toBe(false);
+    expect(farFromSuggestion(10503 + 525, 10503)).toBe(false);
+    expect(farFromSuggestion(10503 + 526, 10503)).toBe(true);
+    expect(farFromSuggestion(10000 * 0.95, 10000)).toBe(false);
+    expect(farFromSuggestion(9499, 10000)).toBe(true);
+    expect(farFromSuggestion(15000, 10000)).toBe(true);
+    expect(farFromSuggestion(5700, 5723)).toBe(false);
   });
 });

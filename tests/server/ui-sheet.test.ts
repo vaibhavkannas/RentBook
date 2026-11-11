@@ -223,6 +223,17 @@ describe("PaymentSheet on Sheet", () => {
     expect(out).toContain(`class="${buttonClasses("outline", "md")} w-full">Keep ₹ 10,000</button>`);
   });
 
+  it("asks to confirm a far amount on a new cycle before saving, and not otherwise", () => {
+    const src = source("src/components/PaymentSheet.tsx");
+    expect(src).toContain("farFromSuggestion(");
+    expect(src).toContain("This will become the rent for the whole cycle");
+    expect(src).toContain("Every later month in the cycle will suggest");
+    expect(src).toContain("Yes, use ");
+    expect(src).toContain("Change amount");
+    // only a log on a new cycle, and not a replace or an edit
+    expect(src).toMatch(/mode === "log" && card\.next\?\.startsNewCycle && !overwrite && !confirmedFar/);
+  });
+
   it("says that what is logged on a new cycle becomes the rent for the cycle, with no allowance of a few rupees", () => {
     const hike = card({
       status: "pending",
