@@ -26,7 +26,10 @@ vi.mock("next/navigation", () => ({
   useSearchParams: () => new URLSearchParams(""),
 }));
 // The real font loader only works inside a Next build; the layout is imported here only for its viewport.
-vi.mock("next/font/google", () => ({ Geist: () => ({ variable: "--font-geist-sans" }) }));
+vi.mock("next/font/google", () => ({
+  Inter: () => ({ variable: "--font-inter" }),
+  Space_Grotesk: () => ({ variable: "--font-space-grotesk" }),
+}));
 vi.mock("@/auth", () => ({ signIn: vi.fn(), signOut: vi.fn() }));
 vi.mock("@/lib/server/auth-guard", () => ({ getViewer: state.getViewer }));
 vi.mock("@/lib/server/context", () => ({ getSheetsContext: () => ({}) }));

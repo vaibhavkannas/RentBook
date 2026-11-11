@@ -168,8 +168,8 @@ export default function MonthScreen({ monthKey, currentKey, today, views, attent
         {problem}
         {view && (
           <div key={shownKey} data-direction={direction ?? undefined} className="month-in">
-            {shownKey === currentKey && attention}
             <MonthSummary view={view} />
+            {shownKey === currentKey && attention}
             <PortionBoard monthKey={shownKey} monthLabel={title} cards={view.cards} defaultDate={today} />
           </div>
         )}

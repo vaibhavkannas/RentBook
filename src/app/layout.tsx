@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Geist } from "next/font/google";
+import { Inter, Space_Grotesk } from "next/font/google";
 import { Suspense } from "react";
 import BackRefresh from "@/components/BackRefresh";
 import TabBar, { TabBarFallback } from "@/components/TabBar";
@@ -7,8 +7,15 @@ import { ToastProvider } from "@/components/ui/Toast";
 import { BRAND } from "@/lib/brand";
 import "./globals.css";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+// Inter for text, Space Grotesk for numbers and headings (the `font-display` class). Both are fetched when the app is built and
+// served from the app's own address, so the page's content security policy needs no outside source for them.
+const inter = Inter({
+  variable: "--font-inter",
+  subsets: ["latin", "latin-ext"],
+});
+
+const spaceGrotesk = Space_Grotesk({
+  variable: "--font-space-grotesk",
   subsets: ["latin", "latin-ext"],
 });
 
@@ -36,7 +43,7 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="en" className={`${geistSans.variable} h-full antialiased`}>
+    <html lang="en" className={`${inter.variable} ${spaceGrotesk.variable} h-full antialiased`}>
       <body className="min-h-full">
         <ToastProvider>{children}</ToastProvider>
         {/* A tap that goes back lands on a kept screen: this loads it again (it renders nothing). */}

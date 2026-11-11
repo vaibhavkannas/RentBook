@@ -3,7 +3,6 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import AttentionCard from "@/components/AttentionCard";
 import type { AttentionItem } from "@/lib/report-copy";
-import { CARD } from "@/lib/ui-classes";
 import { smallTargets, unpressedTargets } from "../support/tap-targets";
 
 // The home screen's "Needs attention" card: a row for each thing that is due, each a link to the screen that explains it. It is
@@ -23,17 +22,16 @@ describe("AttentionCard", () => {
     expect(html([])).toBe("");
   });
 
-  it("is a section named Needs attention, in a card, with a visible heading", () => {
+  it("is a section named Needs attention, with a heading only a screen reader reads (the rows are the card)", () => {
     const out = html(ITEMS);
     expect(out).toMatch(/^<section aria-label="Needs attention" class="[^"]*">/);
-    expect(out).toContain(`class="${CARD}`);
-    expect(out).toMatch(/<h2 class="[^"]*">Needs attention<\/h2>/);
+    expect(out).toMatch(/<h2 class="sr-only">Needs attention<\/h2>/);
   });
 
   it("has a row for each item, in order, each a link to its screen with its words", () => {
     const links = [...html(ITEMS).matchAll(/<a [^>]*href="([^"]*)"[^>]*>([\s\S]*?)<\/a>/g)].map((match) => ({
       href: match[1],
-      text: match[2].replace(/<[^>]+>/g, "").replace(/ ?›$/, "").trim(),
+      text: match[2].replace(/<[^>]+>/g, "").trim(),
     }));
     expect(links).toEqual(ITEMS.map((item) => ({ href: item.href.replace(/&/g, "&amp;"), text: item.text })));
   });
@@ -51,15 +49,16 @@ describe("AttentionCard", () => {
     expect(unpressedTargets(out)).toEqual([]);
   });
 
-  it("draws a dot in the colour of the tone and an arrow, both hidden from a screen reader, so the words alone say what it is", () => {
+  it("tints each row in the colour of its tone and gives it an icon and an arrow, both hidden from a screen reader, so the words alone say what it is", () => {
+    const rows = html(ITEMS).match(/<a [^>]*>/g) ?? [];
+    expect(rows[0]).toContain("bg-danger-bg text-danger-ink");
+    expect(rows[1]).toContain("bg-danger-bg text-danger-ink");
+    expect(rows[2]).toContain("bg-warn-bg text-warn-ink");
+    expect(rows[3]).toContain("bg-accent-soft text-accent");
+    // Each row has two svgs (its icon and the arrow), and neither is read out.
     const out = html(ITEMS);
-    const dots = [...out.matchAll(/<span aria-hidden="true" class="([^"]*\bsize-2\.5\b[^"]*)"><\/span>/g)].map((match) => match[1]);
-    expect(dots).toHaveLength(4);
-    expect(dots[0]).toContain("bg-danger-ink");
-    expect(dots[1]).toContain("bg-danger-ink");
-    expect(dots[2]).toContain("bg-warn-ink");
-    expect(dots[3]).toContain("bg-muted");
-    expect(out.match(/<span aria-hidden="true" class="[^"]*">›<\/span>/g)).toHaveLength(4);
+    expect(out.match(/<svg aria-hidden="true"/g)).toHaveLength(8);
+    expect(out.match(/<svg(?! aria-hidden="true")/g)).toBeNull();
   });
 
   it("lists the rows in a list, so a screen reader says how many there are", () => {

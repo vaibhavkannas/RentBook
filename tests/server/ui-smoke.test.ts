@@ -116,8 +116,10 @@ describe("PortionBoard", () => {
     expect(encoded).toContain('href="/tenants/first%20floor%2F2?month=2026-10"');
   });
 
-  it("keeps the amount line's spacing below the details row", () => {
-    expect(board([card()])).toContain('<p class="mt-2 text-lg font-medium">');
+  it("draws the amount in the row, in the display face with figures of one width, and again among the facts", () => {
+    const out = board([card()]);
+    expect(out).toContain('<span class="whitespace-nowrap font-display font-semibold tabular-nums">₹\u00a010,000</span>');
+    expect(out).toContain('<dd class="font-display font-semibold tabular-nums">₹\u00a010,000</dd>');
   });
 
   it("gives the link a tap target of at least 44 px", () => {
@@ -150,8 +152,9 @@ describe("PortionBoard: an agreement that has ended", () => {
 describe("PortionBoard on the shared pieces", () => {
   const paid = card({ status: "paid", entry: { tenant: "Asha", count: 3, amount: 10000 }, next: null, tenancy: SUMMARY });
 
-  it("draws each card as a Card, and the status as a Pill in the tone of its colour", () => {
-    expect(board([card()])).toContain(`<article class="${CARD}">`);
+  it("draws each portion as a row of a list, and the status as a Pill in the tone of its colour", () => {
+    expect(board([card()])).toMatch(/<li class="overflow-hidden rounded-card border [^"]*bg-surface[^"]*">/);
+    expect(board([card()])).not.toContain(`<article class="${CARD}">`);
     expect(board([card()])).toContain(`<span class="${pillClasses("warn")}">Pending</span>`);
     expect(board([paid])).toContain(`<span class="${pillClasses("success")}">Paid</span>`);
     // deliberate (3-9): the "No tenant" pill is now "Vacant", for a portion that never had a tenant as for one whose tenant left
@@ -165,13 +168,13 @@ describe("PortionBoard on the shared pieces", () => {
   });
 
   it("draws the buttons with Button: Log payment primary, Edit amount secondary, Undo as red text, New tenant secondary and wide", () => {
-    expect(board([card()])).toContain(`class="${buttonClasses("primary", "md")} flex-1">Log payment</button>`);
+    expect(board([card()])).toContain(`class="${buttonClasses("primary", "md")} flex-1 basis-36">Log payment</button>`);
     const out = board([paid]);
-    expect(out).toContain(`class="${buttonClasses("secondary", "md")} flex-1">Edit amount</button>`);
+    expect(out).toContain(`class="${buttonClasses("secondary", "md")} flex-1 basis-28">Edit amount</button>`);
     expect(out).toContain(`class="${buttonClasses("dangerText", "md")}">Undo</button>`);
     expect(board([card()])).toContain(`class="${buttonClasses("secondary", "md")} w-full">New tenant</button>`);
     expect(board([card({ status: "needs-tenant", next: null })])).toContain(
-      `class="${buttonClasses("primary", "md")} flex-1">Add tenant</button>`,
+      `class="${buttonClasses("primary", "md")} flex-1 basis-36">Add tenant</button>`,
     );
   });
 
@@ -223,7 +226,7 @@ describe("PortionBoard: a portion with no tenant", () => {
   });
 
   it("gives a vacant card an Add tenant button, as a card that never had a tenant has", () => {
-    expect(board([vacant()])).toContain(`class="${buttonClasses("primary", "md")} flex-1">Add tenant</button>`);
+    expect(board([vacant()])).toContain(`class="${buttonClasses("primary", "md")} flex-1 basis-36">Add tenant</button>`);
   });
 
   it("keeps a card that never had a tenant as it was, with the Vacant pill: no link, since there are no past tenants", () => {
@@ -258,15 +261,10 @@ describe("PortionBoard: rent against the amount received", () => {
       rentDifference,
     });
 
-  /** The amount line and everything after it up to the buttons. */
-  const lines = (out: string) => out.match(/<p class="mt-2 text-lg font-medium">[\s\S]*?<div class="mt-3/)?.[0] ?? "";
-
-  it("says how much more than the rent a paid card received, in a small muted line under the amount", () => {
+  it("says how much more than the rent a paid card received, among the facts, next to what was received", () => {
     const out = board([paid(10030, 10000, 30)]);
-    expect(lines(out)).toContain('<p class="mt-2 text-lg font-medium">₹ 10,030</p>');
-    expect(lines(out)).toMatch(
-      /<\/p><p class="[^"]*text-sm[^"]*text-muted[^"]*">₹ 30 more than rent \(₹ 10,000\)<\/p>/,
-    );
+    expect(out).toContain('<dt class="text-muted">Received</dt><dd class="font-display font-semibold tabular-nums">₹\u00a010,030</dd>');
+    expect(out).toContain('<dt class="text-muted">Compared with rent</dt><dd class="font-medium">₹\u00a030 more than rent (₹\u00a010,000)</dd>');
   });
 
   it("says how much less, with no minus sign", () => {
@@ -483,12 +481,12 @@ describe("a portion that is switched off", () => {
   const paidOff = () =>
     card({ status: "paid", entry: { tenant: "Dev", count: 2, amount: 7000 }, next: null, rentReference: 7000, rentDifference: 0, inactive: true });
 
-  it("says so on its card, in muted text, and still offers Edit amount and Undo", () => {
+  it("says so on its card, among its notes, and still offers Edit amount and Undo", () => {
     const out = board([paidOff()]);
     expect(out).toContain("Switched off in Portion settings.");
     expect(out).toContain("Edit amount");
     expect(out).toContain("Undo");
-    expect(out).toMatch(/<p class="[^"]*text-muted[^"]*">Switched off in Portion settings\.<\/p>/);
+    expect(out).toMatch(/<p class="[^"]*">Switched off in Portion settings\.<\/p>/);
   });
 
   it("keeps Log payment on its card while the rent is owed (a pending card), with the same line", () => {

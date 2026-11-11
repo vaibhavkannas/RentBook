@@ -96,7 +96,9 @@ const tenant = async (portionId: string, search: Record<string, string | string[
 
 /** The month screen's cards: each one's name and everything it says. */
 function cards(html: string) {
-  return named(html, "article").map((article) => ({ name: textOf(inside(article, "h2")[0]), text: textOf(article) }));
+  return named(html, "li")
+    .filter((row) => inside(row, "h2").length > 0)
+    .map((row) => ({ name: textOf(inside(row, "h2")[0]), text: textOf(row) }));
 }
 
 /** The text of one section of a page, named by its heading's id or its aria-label. */
@@ -112,18 +114,18 @@ describe("the month screen", () => {
     expect(named(html, "h1").map((heading) => textOf(heading))).toEqual(["October 2026"]);
     const shown = cards(html).map((card) => card.text);
     expect(shown).toHaveLength(5);
-    expect(shown[0]).toMatch(/^First floor, single bedroom Paid Asha · Payment 4 of 11/);
+    expect(shown[0]).toMatch(/^First floor, single bedroom Asha · Payment 4 of 11 ₹ 5,450 Paid /);
     // The chips of the tenancy: the advance, and the agreement that ends in 30 days (for p3, one that ended a week ago).
-    expect(shown[0]).toContain("Advance ₹ 10,900 held Agreement ends 16 Nov 2026 Details ₹ 5,450");
-    expect(shown[0]).toMatch(/Edit amount Undo$/);
-    expect(shown[1]).toMatch(/^First floor, double bedroom Pending Bala · Payment 1 of 11/);
+    expect(shown[0]).toContain("Advance ₹ 10,900 held Agreement ends 16 Nov 2026");
+    expect(shown[0]).toMatch(/Edit amount Undo Details$/);
+    expect(shown[1]).toMatch(/^First floor, double bedroom Bala · Payment 1 of 11 ₹ 13,335 Pending /);
     expect(shown[1]).toContain("₹ 13,335");
     expect(shown[1]).toContain("New cycle. Suggested rent includes the hike (was ₹ 12,700).");
-    expect(shown[1]).toMatch(/Log payment$/);
-    expect(shown[2]).toMatch(/^Second floor, single bedroom Pending Chitra · Payment 5 of 11/);
-    expect(shown[2]).toContain("Advance ₹ 18,000 held Agreement ended 10 Oct 2026 Details ₹ 9,000");
-    expect(shown[3]).toMatch(/^Second floor, double bedroom Vacant No tenant recorded yet\. Add tenant$/);
-    expect(shown[4]).toMatch(/^Third floor, hall and kitchen Vacant Vacant since 1 Oct 2026\. Esha moved out\. Past tenants Add tenant$/);
+    expect(shown[1]).toMatch(/Log payment Details$/);
+    expect(shown[2]).toMatch(/^Second floor, single bedroom Chitra · Payment 5 of 11 ₹ 9,000 Pending /);
+    expect(shown[2]).toContain("Advance ₹ 18,000 held Agreement ended 10 Oct 2026");
+    expect(shown[3]).toMatch(/^Second floor, double bedroom No tenant recorded yet\. Vacant Add tenant$/);
+    expect(shown[4]).toMatch(/^Third floor, hall and kitchen Vacant since 1 Oct 2026\. Esha moved out\. Vacant Add tenant Past tenants$/);
   });
 
   it("keeps suggesting the true rent after an amount agreed for one month: Bala paid 12,000 for payment 11, and the hike is still worked from 12,700", async () => {
@@ -135,7 +137,7 @@ describe("the month screen", () => {
     expect(shown[1]).toContain("New cycle. Suggested rent includes the hike (was ₹ 12,700).");
     // last month's card still says how the agreed amount compares with the rent, and nothing else changed
     const last = cards(await month({ month: "2026-09" })).map((card) => card.text);
-    expect(last[1]).toContain("₹ 12,000 ₹ 700 less than rent (₹ 12,700)");
+    expect(last[1]).toContain("Compared with rent ₹ 700 less than rent (₹ 12,700)");
   });
 
   it("colours each card's pill by its state, not only by its words", async () => {
@@ -148,7 +150,7 @@ describe("the month screen", () => {
   it("sums the month in a summary that says what summaryText says", async () => {
     const view = await getMonthView(screenContext("main").ctx, { year: 2026, month: 10 });
     const html = await month();
-    expect(summaryText(view)).toBe("1 of 3 portions · 2 vacant");
+    expect(summaryText(view)).toBe("1 of 3 portions paid · 2 vacant");
     const text = section(html, "Month summary");
     expect(text).toContain(summaryText(view));
     expect(text).toContain("₹ 5,450 of ₹ 27,785");
@@ -165,13 +167,13 @@ describe("the month screen", () => {
     expect(textOf(named(html, "h1")[0])).toBe("September 2026");
     expect(named(html, "button").map((button) => textOf(button))).toContain("Today");
     const shown = cards(html).map((card) => card.text);
-    expect(shown[0]).toMatch(/^First floor, single bedroom Paid Asha · Payment 3 of 11/);
+    expect(shown[0]).toMatch(/^First floor, single bedroom Asha · Payment 3 of 11 ₹ 5,450 Paid /);
     expect(shown[0]).toContain("Later months have entries for this portion. Undo those first.");
-    expect(shown[1]).toMatch(/^First floor, double bedroom Paid Bala · Payment 11 of 11/);
+    expect(shown[1]).toMatch(/^First floor, double bedroom Bala · Payment 11 of 11 /);
     expect(shown[1]).toContain("Last payment of this cycle.");
-    expect(shown[2]).toMatch(/^Second floor, single bedroom Pending Chitra/);
-    expect(shown[3]).toMatch(/^Second floor, double bedroom Vacant/);
-    expect(shown[4]).toMatch(/^Third floor, hall and kitchen Paid Esha · Payment 2 of 11/);
+    expect(shown[2]).toMatch(/^Second floor, single bedroom Chitra/);
+    expect(shown[3]).toMatch(/^Second floor, double bedroom No tenant recorded yet\. Vacant/);
+    expect(shown[4]).toMatch(/^Third floor, hall and kitchen Esha · Payment 2 of 11 /);
     expect(link(html, "Year at a glance")?.attrs.href).toBe("/year?year=2026&month=2026-09");
     expect(html).not.toContain("Needs attention");
   });
@@ -186,7 +188,7 @@ describe("the month screen", () => {
         "Second floor, single bedroom",
         "Second floor, double bedroom",
         "Third floor, hall and kitchen",
-      ].map((name) => `${name} Vacant No tenant recorded yet. Add tenant`),
+      ].map((name) => `${name} No tenant recorded yet. Vacant Add tenant`),
     );
     const text = section(html, "Month summary");
     expect(text).toContain("All portions are vacant");

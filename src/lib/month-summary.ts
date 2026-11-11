@@ -15,10 +15,10 @@ export function summaryCounts(view: Pick<MonthView, "cards" | "paidCount">): { p
   return { paid: view.paidCount, vacant, let: view.cards.length - vacant };
 }
 
-/** "3 of 4 portions · 1 vacant": what has been paid of the portions that are let, and how many are vacant. */
+/** "3 of 4 portions paid · 1 vacant": what has been paid of the portions that are let, and how many are vacant. */
 export function summaryText(view: Pick<MonthView, "cards" | "paidCount">): string {
   const counts = summaryCounts(view);
   if (counts.let === 0 && counts.vacant > 0) return "All portions are vacant";
-  const paid = `${counts.paid} of ${counts.let} portions`;
+  const paid = `${counts.paid} of ${counts.let} portions paid`;
   return counts.vacant > 0 ? `${paid} · ${counts.vacant} vacant` : paid;
 }

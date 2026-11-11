@@ -12,21 +12,26 @@
 
 :root {
   color-scheme: light dark;
-  --background: #f6f5f1;
-  --foreground: #1b1b18;
+  --background: #f3f5f7;
+  --foreground: #14202b;
   --surface: #ffffff;
-  --muted: #6b6a63;
-  --line: #e4e2da;
-  --control: #8f8d84;
-  --accent: #1f5f4a;
+  --surface-2: #eaeef2;
+  --muted: #5c6b7a;
+  --line: #dbe2e9;
+  --control: #7b8794;
+  --accent: #0f766e;
   --accent-ink: #ffffff;
-  --success-bg: #e3f1e8;
-  --success-ink: #1d5a37;
-  --warn-bg: #fbefd5;
-  --warn-ink: #7a4f0a;
-  --danger-bg: #fbe4e1;
-  --danger-ink: #8f2a1f;
+  --accent-soft: #d9f1ee;
+  --success-bg: #dff3e8;
+  --success-ink: #17703f;
+  --warn-bg: #fdecc8;
+  --warn-ink: #9a5b00;
+  --danger-bg: #fbdedb;
+  --danger-ink: #b4281f;
+  --off-bg: #e8edf1;
+  --off-ink: #55646f;
   --overlay: rgb(0 0 0 / 0.4);
+  --shadow: 0 1px 2px rgb(20 32 43 / 0.06), 0 8px 24px rgb(20 32 43 / 0.08);
   --focus: var(--accent);
   /* The height of the tab bar, without the home indicator below it. */
   --tabbar-h: 4rem;
@@ -34,21 +39,26 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #121311;
-    --foreground: #ecebe5;
-    --surface: #1b1c19;
-    --muted: #a3a299;
-    --line: #2e2f2a;
-    --control: #6c6b63;
-    --accent: #6fc2a0;
-    --accent-ink: #0d1f18;
-    --success-bg: #1e3a2a;
-    --success-ink: #9fdcb8;
-    --warn-bg: #40320f;
-    --warn-ink: #f0cf8a;
-    --danger-bg: #4a1f1a;
-    --danger-ink: #f4b3aa;
+    --background: #0c1218;
+    --foreground: #e8eef4;
+    --surface: #151d26;
+    --surface-2: #1d2833;
+    --muted: #93a3b3;
+    --line: #27333f;
+    --control: #5b6b7a;
+    --accent: #3cc3b4;
+    --accent-ink: #06201d;
+    --accent-soft: #12332f;
+    --success-bg: #12331f;
+    --success-ink: #5dd496;
+    --warn-bg: #3a2a0a;
+    --warn-ink: #f2b44a;
+    --danger-bg: #3d1714;
+    --danger-ink: #ff8c82;
+    --off-bg: #222d38;
+    --off-ink: #93a3b3;
     --overlay: rgb(0 0 0 / 0.6);
+    --shadow: 0 1px 2px rgb(0 0 0 / 0.4), 0 8px 24px rgb(0 0 0 / 0.4);
   }
 }
 
@@ -56,23 +66,29 @@
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
   --color-muted: var(--muted);
   --color-line: var(--line);
   --color-control: var(--control);
   --color-accent: var(--accent);
   --color-accent-ink: var(--accent-ink);
+  --color-accent-soft: var(--accent-soft);
   --color-success-bg: var(--success-bg);
   --color-success-ink: var(--success-ink);
   --color-warn-bg: var(--warn-bg);
   --color-warn-ink: var(--warn-ink);
   --color-danger-bg: var(--danger-bg);
   --color-danger-ink: var(--danger-ink);
+  --color-off-bg: var(--off-bg);
+  --color-off-ink: var(--off-ink);
   --color-overlay: var(--overlay);
   --color-focus: var(--focus);
   --radius-card: 1rem;
   --radius-control: 0.75rem;
   --radius-chip: 0.5rem;
-  --font-sans: var(--font-geist-sans);
+  --shadow-card: var(--shadow);
+  --font-sans: var(--font-inter);
+  --font-display: var(--font-space-grotesk);
 }
 
 @layer base {
@@ -252,7 +268,7 @@ html.sheet-open .toast-region {
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: var(--font-geist-sans), system-ui, sans-serif;
+  font-family: var(--font-inter), system-ui, sans-serif;
 }
 
 /*
@@ -284,5 +300,39 @@ body {
 @media (prefers-reduced-motion: reduce) {
   .month-in {
     animation: none !important;
+  }
+}
+
+/*
+ * A portion row's details open and close by their height: a grid whose one row goes between 0fr and 1fr, so no height is
+ * measured and nothing else on the screen is touched while it moves. Closed, the details are not visible, so no control in
+ * them can be reached by Tab or read out; the visibility change waits for the close to finish.
+ */
+.accordion {
+  display: grid;
+  grid-template-rows: 0fr;
+  visibility: hidden;
+  transition:
+    grid-template-rows 200ms ease,
+    visibility 0s linear 200ms;
+}
+
+.accordion[data-open="true"] {
+  grid-template-rows: 1fr;
+  visibility: visible;
+  transition:
+    grid-template-rows 200ms ease,
+    visibility 0s;
+}
+
+.accordion > div {
+  min-height: 0;
+  overflow: hidden;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .accordion,
+  .accordion[data-open="true"] {
+    transition: none;
   }
 }

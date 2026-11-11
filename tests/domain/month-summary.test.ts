@@ -49,16 +49,16 @@ describe("summaryCounts", () => {
 });
 
 describe("summaryText", () => {
-  it("says how many portions have paid, as it always did, when none is vacant", () => {
-    expect(summaryText(view(["paid", "pending", "pending"]))).toBe("1 of 3 portions");
-    expect(summaryText(view(["paid"]))).toBe("1 of 1 portions");
-    expect(summaryText(view([]))).toBe("0 of 0 portions");
+  it("says how many portions have paid when none is vacant", () => {
+    expect(summaryText(view(["paid", "pending", "pending"]))).toBe("1 of 3 portions paid");
+    expect(summaryText(view(["paid"]))).toBe("1 of 1 portions paid");
+    expect(summaryText(view([]))).toBe("0 of 0 portions paid");
   });
 
   it("counts only the portions that are let, and says how many are vacant", () => {
-    expect(summaryText(view(["paid", "paid", "paid", "pending", "vacant"]))).toBe("3 of 4 portions · 1 vacant");
-    expect(summaryText(view(["paid", "paid", "paid", "paid", "needs-tenant"]))).toBe("4 of 4 portions · 1 vacant");
-    expect(summaryText(view(["pending", "vacant", "needs-tenant"]))).toBe("0 of 1 portions · 2 vacant");
+    expect(summaryText(view(["paid", "paid", "paid", "pending", "vacant"]))).toBe("3 of 4 portions paid · 1 vacant");
+    expect(summaryText(view(["paid", "paid", "paid", "paid", "needs-tenant"]))).toBe("4 of 4 portions paid · 1 vacant");
+    expect(summaryText(view(["pending", "vacant", "needs-tenant"]))).toBe("0 of 1 portions paid · 2 vacant");
   });
 
   it("says all portions are vacant when none is let", () => {

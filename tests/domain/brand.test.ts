@@ -16,11 +16,11 @@ describe("BRAND", () => {
       tagline: "Rent receipts, straight into your own Google Sheet.",
       description: "Record monthly rent receipts into your Google Sheet.",
       colors: {
-        accent: "#1f5f4a",
+        accent: "#0f766e",
         accentInk: "#ffffff",
-        background: "#f6f5f1",
-        accentDark: "#6fc2a0",
-        backgroundDark: "#121311",
+        background: "#f3f5f7",
+        accentDark: "#3cc3b4",
+        backgroundDark: "#0c1218",
       },
     });
   });
@@ -52,20 +52,24 @@ describe("globals.css", () => {
     expect(valueOf(dark, "--background")).toBe(BRAND.colors.backgroundDark);
   });
 
-  it("keeps every colour token it had", () => {
+  it("carries every colour token, in the palette of the redesign", () => {
     const tokens: Record<string, [string, string]> = {
-      "--foreground": ["#1b1b18", "#ecebe5"],
-      "--surface": ["#ffffff", "#1b1c19"],
-      "--muted": ["#6b6a63", "#a3a299"],
-      "--line": ["#e4e2da", "#2e2f2a"],
-      "--control": ["#8f8d84", "#6c6b63"],
-      "--accent-ink": ["#ffffff", "#0d1f18"],
-      "--success-bg": ["#e3f1e8", "#1e3a2a"],
-      "--success-ink": ["#1d5a37", "#9fdcb8"],
-      "--warn-bg": ["#fbefd5", "#40320f"],
-      "--warn-ink": ["#7a4f0a", "#f0cf8a"],
-      "--danger-bg": ["#fbe4e1", "#4a1f1a"],
-      "--danger-ink": ["#8f2a1f", "#f4b3aa"],
+      "--foreground": ["#14202b", "#e8eef4"],
+      "--surface": ["#ffffff", "#151d26"],
+      "--surface-2": ["#eaeef2", "#1d2833"],
+      "--muted": ["#5c6b7a", "#93a3b3"],
+      "--line": ["#dbe2e9", "#27333f"],
+      "--control": ["#7b8794", "#5b6b7a"],
+      "--accent-ink": ["#ffffff", "#06201d"],
+      "--accent-soft": ["#d9f1ee", "#12332f"],
+      "--success-bg": ["#dff3e8", "#12331f"],
+      "--success-ink": ["#17703f", "#5dd496"],
+      "--warn-bg": ["#fdecc8", "#3a2a0a"],
+      "--warn-ink": ["#9a5b00", "#f2b44a"],
+      "--danger-bg": ["#fbdedb", "#3d1714"],
+      "--danger-ink": ["#b4281f", "#ff8c82"],
+      "--off-bg": ["#e8edf1", "#222d38"],
+      "--off-ink": ["#55646f", "#93a3b3"],
     };
     for (const [name, [lightValue, darkValue]] of Object.entries(tokens)) {
       expect(valueOf(light, name), `${name} (light)`).toBe(lightValue);

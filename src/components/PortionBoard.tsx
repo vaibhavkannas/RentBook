@@ -1,19 +1,15 @@
 "use client";
 
-import Link from "next/link";
-import { useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { Button } from "@/components/ui/Button";
-import { Card } from "@/components/ui/Card";
-import { Pill } from "@/components/ui/Pill";
+import { FilterChip } from "@/components/ui/FilterChip";
 import type { PortionCard } from "@/lib/domain/types";
-import { formatDay, formatRupees } from "@/lib/format";
-import { isVacantCard } from "@/lib/month-summary";
+import { createOpenRowStore } from "@/lib/open-row";
+import { FILTERS, filterCards, filterCounts, filterLabel, type Filter } from "@/lib/portion-filter";
 import { sheetKey } from "@/lib/month-nav";
-import { cardDifferenceText } from "@/lib/rent-difference";
-import { tenancyChips } from "@/lib/tenancy-chips";
-import { tenantsPagePath } from "@/lib/tenancy-response";
-import type { PillTone } from "@/lib/ui-classes";
+import { CHIP_ROW } from "@/lib/ui-classes";
 import PaymentSheet, { type SheetMode } from "./PaymentSheet";
+import PortionRow, { type RowAction } from "./PortionRow";
 import UndoSheet from "./UndoSheet";
 
 type Props = {
@@ -33,159 +29,61 @@ type Active =
   | { mode: "undo"; portionId: string; card: PortionCard; monthKey: string; monthLabel: string }
   | null;
 
-const PILL_TONE: Record<PortionCard["status"], PillTone> = {
-  paid: "success",
-  pending: "warn",
-  "needs-tenant": "neutral",
-  vacant: "neutral",
-};
-
-const PILL_LABEL = {
-  paid: "Paid",
-  pending: "Pending",
-  "needs-tenant": "Vacant",
-  vacant: "Vacant",
-} as const;
-
 export default function PortionBoard({ monthKey, monthLabel, cards, defaultDate }: Props) {
   const [active, setActive] = useState<Active>(null);
+  const [filter, setFilter] = useState<Filter>("all");
+  // Which row is open lives in a store the rows read, so a tap on a row does not draw the board again.
+  const [openRow] = useState(createOpenRowStore);
+
+  const counts = useMemo(() => filterCounts(cards), [cards]);
+  const shown = useMemo(() => filterCards(cards, filter), [cards, filter]);
+
+  const act = useCallback(
+    (action: RowAction) =>
+      setActive(
+        action.mode === "undo"
+          ? { mode: "undo", portionId: action.portionId, card: action.card, monthKey, monthLabel }
+          : { mode: action.mode, portionId: action.portionId },
+      ),
+    [monthKey, monthLabel],
+  );
 
   return (
     <>
-      <ul className="mt-3 space-y-3">
-        {cards.map((card) => {
-          const count = card.entry?.count ?? card.next?.count;
-          const tenant = card.entry?.tenant ?? card.next?.tenant;
-          const lastOfCycle =
-            card.cycleLength !== null && count !== undefined && count === card.cycleLength;
-          // A vacant card, like one that never had a tenant, has no rent to show and nothing to log.
-          const noTenant = isVacantCard(card);
-          const linkLabel = card.tenancy ? "Details" : card.inactive ? "Tenant page" : "Add details";
-          // Only a paid card says how the amount received compares with the rent.
-          const rentLine =
-            card.status === "paid" ? cardDifferenceText(card.rentDifference, card.rentReference) : null;
-          return (
-            <li key={card.portionId}>
-              <Card as="article">
-                <div className="flex items-start justify-between gap-3">
-                  <h2 className="min-w-0 break-words font-medium">{card.name}</h2>
-                  <Pill tone={PILL_TONE[card.status]}>{PILL_LABEL[card.status]}</Pill>
-                </div>
+      {/* The chips scroll sideways when they do not fit, so a swipe that starts on them is theirs, not the month's. */}
+      <div role="group" aria-label="Filter portions" data-no-swipe className={`${CHIP_ROW} mt-2`}>
+        {FILTERS.map((name) => (
+          <FilterChip
+            key={name}
+            selected={filter === name}
+            count={counts[name]}
+            onClick={() => {
+              openRow.close();
+              setFilter(name);
+            }}
+          >
+            {filterLabel(name)}
+          </FilterChip>
+        ))}
+      </div>
 
-                {card.status === "vacant" && card.vacancy ? (
-                  <p className="mt-1 break-words text-sm text-muted">
-                    {`Vacant since ${formatDay(card.vacancy.since)}. ${card.vacancy.previousTenant} moved out.`}
-                  </p>
-                ) : noTenant ? (
-                  <p className="mt-1 text-sm text-muted">No tenant recorded yet.</p>
-                ) : (
-                  <p className="mt-1 break-words text-sm text-muted">
-                    {tenant} · Payment {count}
-                    {card.cycleLength !== null ? ` of ${card.cycleLength}` : ""}
-                  </p>
-                )}
-
-                {card.inactive && <p className="mt-1 text-sm text-muted">Switched off in Portion settings.</p>}
-
-                {card.status === "vacant" && (
-                  <Link
-                    href={tenantsPagePath(card.portionId, monthKey)}
-                    aria-label={`Past tenants of ${card.name}`}
-                    className="press inline-flex min-h-11 min-w-11 items-center text-sm text-muted underline"
-                  >
-                    Past tenants
-                  </Link>
-                )}
-
-                {!noTenant && (
-                  <>
-                    <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
-                      {card.tenancy &&
-                        tenancyChips(card.tenancy, defaultDate).map((chip) => (
-                          <Pill key={chip} tone="neutral">
-                            {chip}
-                          </Pill>
-                        ))}
-                      {/* A switched-off portion takes no new details (the tenant page refuses them), but its page is where a move-out is recorded. */}
-                      <Link
-                        href={tenantsPagePath(card.portionId, monthKey)}
-                        aria-label={`${linkLabel} for ${card.name}`}
-                        className="press inline-flex min-h-11 min-w-11 items-center text-sm text-muted underline"
-                      >
-                        {linkLabel}
-                      </Link>
-                    </div>
-                    <p className="mt-2 text-lg font-medium">
-                      {formatRupees(card.entry?.amount ?? card.next!.suggestedAmount)}
-                    </p>
-                    {rentLine && <p className="mt-0.5 text-sm text-muted">{rentLine}</p>}
-                  </>
-                )}
-
-                {card.status === "pending" && card.next?.startsNewCycle && (
-                  <p className="mt-1 text-sm text-muted">
-                    New cycle. Suggested rent includes the hike (was{" "}
-                    {formatRupees(card.next.previousAmount)}).
-                  </p>
-                )}
-                {lastOfCycle && (
-                  <p className="mt-1 text-sm text-muted">Last payment of this cycle.</p>
-                )}
-
-                <div className="mt-3 flex gap-2">
-                  {card.status === "pending" && (
-                    <Button
-                      className="flex-1"
-                      onClick={() => setActive({ mode: "log", portionId: card.portionId })}
-                    >
-                      Log payment
-                    </Button>
-                  )}
-                  {card.status === "paid" && (
-                    <>
-                      <Button
-                        variant="secondary"
-                        className="flex-1"
-                        onClick={() => setActive({ mode: "edit", portionId: card.portionId })}
-                      >
-                        Edit amount
-                      </Button>
-                      {card.undoBlockedReason === null && (
-                        <Button
-                          variant="dangerText"
-                          onClick={() =>
-                            setActive({
-                              mode: "undo",
-                              portionId: card.portionId,
-                              card,
-                              monthKey,
-                              monthLabel,
-                            })
-                          }
-                        >
-                          Undo
-                        </Button>
-                      )}
-                    </>
-                  )}
-                  {noTenant && (
-                    <Button
-                      className="flex-1"
-                      onClick={() => setActive({ mode: "new-tenant", portionId: card.portionId })}
-                    >
-                      Add tenant
-                    </Button>
-                  )}
-                </div>
-
-                {card.status === "paid" && card.undoBlockedReason && (
-                  <p className="mt-2 text-sm text-muted">{card.undoBlockedReason}</p>
-                )}
-              </Card>
-            </li>
-          );
-        })}
-      </ul>
+      {shown.length === 0 ? (
+        <p className="py-7 text-center text-sm text-muted">Nothing here for this filter.</p>
+      ) : (
+        <ul className="grid gap-2">
+          {shown.map((card) => (
+            <PortionRow
+              key={card.portionId}
+              card={card}
+              monthKey={monthKey}
+              defaultDate={defaultDate}
+              store={openRow}
+              saving={false}
+              onAction={act}
+            />
+          ))}
+        </ul>
+      )}
 
       <div className="mt-4">
         <Button

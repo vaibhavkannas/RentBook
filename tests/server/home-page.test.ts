@@ -111,13 +111,13 @@ describe("the home page without a footer", () => {
 describe("the link to the Year screen", () => {
   const link = (html: string) => /<a [^>]*href="\/year\?[^"]*"[^>]*>[\s\S]*?<\/a>/.exec(html)?.[0] ?? "";
 
-  it("sits in the month summary, under the progress bar, as a quiet 44 px link", async () => {
+  it("sits in the month summary, under its figures, as a 44 px link with an icon", async () => {
     const out = summary(await render());
     const year = link(out);
-    expect(year).toContain(">Year at a glance</a>");
+    expect(year).toContain("Year at a glance</a>");
     expect(year).toMatch(/class="[^"]*\bmin-h-11\b/);
-    expect(year).toMatch(/class="[^"]*\btext-muted\b[^"]*\bunderline\b|class="[^"]*\bunderline\b[^"]*\btext-muted\b/);
-    expect(out.indexOf('role="presentation"')).toBeLessThan(out.indexOf("Year at a glance"));
+    expect(year).toContain("<svg");
+    expect(out.indexOf("portions paid")).toBeLessThan(out.indexOf("Year at a glance"));
     expect(smallTargets(year)).toEqual([]);
     expect(unpressedTargets(year)).toEqual([]);
   });
@@ -155,7 +155,7 @@ describe("the Needs attention card", () => {
   const rowsIn = (html: string) =>
     [...card(html).matchAll(/<a [^>]*href="([^"]*)"[^>]*>([\s\S]*?)<\/a>/g)].map((match) => ({
       href: match[1],
-      text: match[2].replace(/<[^>]+>/g, "").replace(/ ?›$/, "").trim(),
+      text: match[2].replace(/<[^>]+>/g, "").trim(),
     }));
 
   beforeEach(() => {
@@ -181,10 +181,11 @@ describe("the Needs attention card", () => {
     ]);
   });
 
-  it("sits between the month header and the summary", async () => {
+  it("sits between the month summary and the portions", async () => {
     const html = await render({ month: "2026-10" });
-    expect(html.indexOf('<nav aria-label="Month"')).toBeLessThan(html.indexOf('aria-label="Needs attention"'));
-    expect(html.indexOf('aria-label="Needs attention"')).toBeLessThan(html.indexOf('aria-label="Month summary"'));
+    expect(html.indexOf('<nav aria-label="Month"')).toBeLessThan(html.indexOf('aria-label="Month summary"'));
+    expect(html.indexOf('aria-label="Month summary"')).toBeLessThan(html.indexOf('aria-label="Needs attention"'));
+    expect(html.indexOf('aria-label="Needs attention"')).toBeLessThan(html.indexOf('aria-label="Filter portions"'));
   });
 
   it("reads the snapshot for the signed-in person, after the month view", async () => {
@@ -278,7 +279,7 @@ describe("the month summary: received against rent due", () => {
     expect(out).toContain("₹ 5,450");
     expect(out).toContain("of ₹ 5,450");
     expect(out).not.toContain("than rent");
-    expect(out).toContain("1 of 1 portions");
+    expect(out).toContain("1 of 1 portions paid");
   });
 
   it("shows the extra, in the success colour, under the total", async () => {
@@ -291,9 +292,9 @@ describe("the month summary: received against rent due", () => {
     expect(out).toContain("of ₹ 5,450");
     expect(out).toMatch(/<p class="[^"]*text-success-ink[^"]*">₹ 30 more than rent<\/p>/);
     expect(out).not.toContain("text-warn-ink");
-    // it comes after the total line and before the progress bar
+    // it comes after the total line and before the count of portions
     expect(out.indexOf("of ₹ 5,450")).toBeLessThan(out.indexOf("more than rent"));
-    expect(out.indexOf("more than rent")).toBeLessThan(out.indexOf('role="presentation"'));
+    expect(out.indexOf("more than rent")).toBeLessThan(out.indexOf("portions paid"));
   });
 
   it("shows the shortfall, in the warning colour", async () => {
@@ -320,7 +321,7 @@ describe("the month summary: received against rent due", () => {
       mocks.loadMonthView.mockResolvedValue(two(1, 64));
       const out = summary(await render());
       expect(out).toMatch(/<p class="[^"]*text-success-ink[^"]*">₹ 64 more than rent so far<\/p>/);
-      expect(out).toContain("1 of 2 portions");
+      expect(out).toContain("1 of 2 portions paid");
     });
 
     it('says "so far" after the shortfall too, in the warning colour', async () => {
@@ -356,21 +357,21 @@ describe("the month summary: received against rent due", () => {
     });
   });
 
-  it("keeps the progress bar at 100% when more than the rent due was received", async () => {
+  it("keeps the progress ring at 100% when more than the rent due was received", async () => {
     mocks.loadMonthView.mockResolvedValue(
       view({ received: 5480, due: 5450, difference: 30, paidCount: 1 }),
     );
-    expect(summary(await render())).toContain('style="width:100%"');
+    expect(summary(await render())).toContain('aria-label="100% collected"');
   });
 
-  it("fills the progress bar by the share of the rent due that was received", async () => {
+  it("fills the progress ring by the share of the rent due that was received", async () => {
     mocks.loadMonthView.mockResolvedValue(view({ received: 2725, due: 5450, paidCount: 0 }));
-    expect(summary(await render())).toContain('style="width:50%"');
+    expect(summary(await render())).toContain('aria-label="50% collected"');
   });
 
-  it("shows an empty bar when nothing is due", async () => {
+  it("shows an empty ring when nothing is due", async () => {
     mocks.loadMonthView.mockResolvedValue(view({ received: 0, due: 0, cards: [] }));
-    expect(summary(await render())).toContain('style="width:0%"');
+    expect(summary(await render())).toContain('aria-label="0% collected"');
   });
 });
 
@@ -385,7 +386,7 @@ describe("the month summary: portions that are let", () => {
       }),
     );
     const out = summary(await render());
-    expect(out).toContain("3 of 4 portions · 1 vacant");
+    expect(out).toContain("3 of 4 portions paid · 1 vacant");
     expect(out).not.toContain("of 5 portions");
   });
 
@@ -393,7 +394,7 @@ describe("the month summary: portions that are let", () => {
     mocks.loadMonthView.mockResolvedValue(
       view({ cards: [status("p1", "paid"), status("p2", "needs-tenant")], paidCount: 1 }),
     );
-    expect(summary(await render())).toContain("1 of 1 portions · 1 vacant");
+    expect(summary(await render())).toContain("1 of 1 portions paid · 1 vacant");
   });
 
   it('says all portions are vacant when none is let, and never "so far"', async () => {

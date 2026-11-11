@@ -272,10 +272,10 @@ describe("the labels the docs tell a person to tap are in the source", () => {
     ["Set up", ["src/app/more/page.tsx"]],
     ["Diagnostics", ["src/app/more/page.tsx"]],
     ["Portion settings", ["src/app/more/page.tsx"]],
-    ["Add tenant", ["src/components/PortionBoard.tsx"]],
+    ["Add tenant", ["src/components/PortionRow.tsx"]],
     ["Move out", ["src/app/tenants/[portionId]/page.tsx"]],
-    ["Add details", ["src/components/PortionBoard.tsx"]],
-    ["Tenant page", ["src/components/PortionBoard.tsx"]],
+    ["Add details", ["src/components/PortionRow.tsx"]],
+    ["Tenant page", ["src/components/PortionRow.tsx"]],
     ["Past tenants", ["src/app/tenants/[portionId]/page.tsx"]],
   ];
 

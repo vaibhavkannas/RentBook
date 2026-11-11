@@ -6,7 +6,7 @@
  * It makes a temporary copy of the app, puts an in-memory Sheet in the copy (scripts/e2e/sheet.ts), builds the copy and starts it
  * with made-up settings, and drives Chromium at 390 by 844 through every page and the main journeys (checks.ts). The two people
  * are signed in with cookies the run makes itself, so Google's sign-in is never used. The browser refuses every request that is not to the local server, so a run never reaches the Google Sheets API or any
- * Google account, and the copy of the app talks only to the in-memory Sheet. (The build of the copy downloads the Geist font from
+ * Google account, and the copy of the app talks only to the in-memory Sheet. (The build of the copy downloads the Inter and Space Grotesk fonts from
  * Google Fonts, with no credentials.) Playwright is not a dependency: it is installed outside this project (see findPlaywright
  * in helpers.ts). Not part of CI, which has no browser.
  *

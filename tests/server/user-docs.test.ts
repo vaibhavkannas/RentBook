@@ -345,7 +345,7 @@ describe("README.md", () => {
     expect(check).toMatch(/in-memory Sheet/);
     expect(check).toMatch(/never reaches the Google Sheets API or any Google account/);
     expect(check).not.toMatch(/never reaches Google\b/);
-    expect(check).toMatch(/downloads the Geist font from Google Fonts/);
+    expect(check).toMatch(/downloads the Inter and Space Grotesk fonts from Google Fonts/);
     expect(check).toMatch(/signed in with cookies the run makes itself/);
     expect(check).toContain("the sign-in page");
     expect(check).not.toMatch(/journeys: signing in/);

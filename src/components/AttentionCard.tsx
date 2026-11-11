@@ -1,38 +1,39 @@
 import Link from "next/link";
-import { Card } from "@/components/ui/Card";
+import { Icon, type IconName } from "@/components/ui/Icon";
 import type { AttentionItem, AttentionTone } from "@/lib/report-copy";
 import { cx } from "@/lib/ui-classes";
 
-/** The dot before a row: the tone's colour, as a hint only. The words of the row say the same, so no colour is needed to read it. */
-const DOT: Record<AttentionTone, string> = {
-  danger: "bg-danger-ink",
-  warn: "bg-warn-ink",
-  neutral: "bg-muted",
+/** Each tone's row: a tint and the colour of its words, and the icon that goes with it, so the colour is a hint and no more. */
+const LOOK: Record<AttentionTone, { row: string; icon: IconName }> = {
+  danger: { row: "bg-danger-bg text-danger-ink", icon: "warn" },
+  warn: { row: "bg-warn-bg text-warn-ink", icon: "bell" },
+  neutral: { row: "bg-accent-soft text-accent", icon: "bell" },
 };
 
 /**
- * The home screen's "Needs attention" card: a row for each thing that is due (overdue rent, agreements that have ended or end
- * soon, rent hikes), each a full-width 44 px link to the screen that explains it. It draws what `attentionItems` built and
- * nothing when that is empty. It has no state, so it is drawn on the server.
+ * The home screen's "Needs attention" rows: one for each thing that is due (overdue rent, agreements that have ended or end
+ * soon, rent hikes), each a tinted, full-width 44 px link to the screen that explains it. It draws what `attentionItems` built
+ * and nothing when that is empty. It has no state, so it is drawn on the server.
  */
 export default function AttentionCard({ items }: { items: readonly AttentionItem[] }) {
   if (items.length === 0) return null;
   return (
-    <Card as="section" aria-label="Needs attention" className="mt-3">
-      <h2 className="text-sm text-muted">Needs attention</h2>
-      <ul className="mt-1 divide-y divide-line">
+    <section aria-label="Needs attention" className="mt-3">
+      <h2 className="sr-only">Needs attention</h2>
+      <ul className="grid gap-1.5">
         {items.map((item) => (
           <li key={`${item.href}-${item.text}`}>
-            <Link href={item.href} className="press flex min-h-11 w-full items-center gap-3 py-1">
-              <span aria-hidden="true" className={cx("size-2.5 shrink-0 rounded-full", DOT[item.tone])} />
+            <Link
+              href={item.href}
+              className={cx("press flex min-h-11 w-full items-center gap-2.5 rounded-control px-3 py-2 text-sm font-medium", LOOK[item.tone].row)}
+            >
+              <Icon name={LOOK[item.tone].icon} />
               <span className="min-w-0 flex-1">{item.text}</span>
-              <span aria-hidden="true" className="text-xl text-muted">
-                ›
-              </span>
+              <Icon name="right" />
             </Link>
           </li>
         ))}
       </ul>
-    </Card>
+    </section>
   );
 }

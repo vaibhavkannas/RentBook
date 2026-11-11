@@ -1,40 +1,55 @@
 import Link from "next/link";
+import type { ReactNode } from "react";
+import { Icon } from "@/components/ui/Icon";
+import { ProgressRing } from "@/components/ui/ProgressRing";
+import { withMonth, yearHref } from "@/lib/app-nav";
 import type { MonthView } from "@/lib/domain/types";
 import { ymKey } from "@/lib/domain/year-month";
-import { yearHref } from "@/lib/app-nav";
 import { formatRupees } from "@/lib/format";
 import { summaryCounts, summaryText } from "@/lib/month-summary";
 import { describeDifference, progressPercent } from "@/lib/rent-difference";
 
-/** The month's figures: what was received of what is due, the progress, and the way to the Year screen. */
-export default function MonthSummary({ view }: { view: MonthView }) {
+const LINK = "press inline-flex min-h-11 items-center gap-1.5 rounded-control border border-line bg-surface px-3 text-sm font-medium";
+
+/**
+ * The month's figures: a ring that fills with the share of the rent collected, what was received of what is due, how many
+ * portions have paid, and the ways on to the Year screen and the Overdue rent. `status` is the "Updated" mark that goes on the
+ * meta line (the screen draws it, so a refresh redraws that one line and not this card).
+ */
+export default function MonthSummary({ view, status }: { view: MonthView; status?: ReactNode }) {
   const key = ymKey(view.month);
-  const progress = progressPercent(view.received, view.due);
   // While some portion that is let has not paid yet, the total can still change: "so far". A vacant portion owes nothing.
   const counts = summaryCounts(view);
   const difference = describeDifference(view.difference, counts.paid < counts.let);
   return (
-    <section className="mt-3 rounded-card bg-surface p-4 ring-1 ring-line" aria-label="Month summary">
-      <div className="flex items-baseline justify-between text-sm text-muted">
-        <span>Received</span>
-        <span>{summaryText(view)}</span>
+    <section
+      aria-label="Month summary"
+      className="mt-3 grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-4 gap-y-3 rounded-card border border-line bg-surface p-4 shadow-card"
+    >
+      <ProgressRing percent={progressPercent(view.received, view.due)} />
+      <div className="min-w-0">
+        <p className="text-xs uppercase tracking-wider text-muted">Collected</p>
+        <p className="mt-0.5 font-display text-2xl font-bold leading-tight tabular-nums">
+          {formatRupees(view.received)} <span className="font-sans text-sm font-medium text-muted">of {formatRupees(view.due)}</span>
+        </p>
+        {difference && (
+          <p className={`mt-0.5 text-sm ${difference.tone === "more" ? "text-success-ink" : "text-warn-ink"}`}>{difference.text}</p>
+        )}
+        <p className="mt-0.5 text-sm text-muted">
+          {summaryText(view)}
+          {status}
+        </p>
       </div>
-      <p className="mt-0.5 text-2xl font-semibold">
-        {formatRupees(view.received)} <span className="text-sm font-normal text-muted">of {formatRupees(view.due)}</span>
-      </p>
-      {difference && (
-        <p className={`mt-0.5 text-sm ${difference.tone === "more" ? "text-success-ink" : "text-warn-ink"}`}>{difference.text}</p>
-      )}
-      <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-line" role="presentation">
-        <div className="h-full bg-accent" style={{ width: `${progress}%` }} />
+      <div className="col-span-2 flex flex-wrap gap-2">
+        <Link href={yearHref(view.month.year, key)} className={LINK}>
+          <Icon name="grid" />
+          Year at a glance
+        </Link>
+        <Link href={withMonth("/overdue", key)} className={LINK}>
+          <Icon name="warn" />
+          Overdue rent
+        </Link>
       </div>
-      {/* The link's 44 px give the card's bottom padding back, so the card grows by the link's text only. */}
-      <Link
-        href={yearHref(view.month.year, key)}
-        className="press -mb-2 mt-0.5 inline-flex min-h-11 items-center text-sm text-muted underline"
-      >
-        Year at a glance
-      </Link>
     </section>
   );
 }

@@ -9,11 +9,11 @@ export const BRAND = {
   tagline: "Rent receipts, straight into your own Google Sheet.",
   description: "Record monthly rent receipts into your Google Sheet.",
   colors: {
-    accent: "#1f5f4a",
+    accent: "#0f766e",
     accentInk: "#ffffff",
-    background: "#f6f5f1",
-    accentDark: "#6fc2a0",
-    backgroundDark: "#121311",
+    background: "#f3f5f7",
+    accentDark: "#3cc3b4",
+    backgroundDark: "#0c1218",
   },
 } as const;
 
