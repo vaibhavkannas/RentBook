@@ -72,7 +72,7 @@ const cellsOf = (card: string) => {
   return list.slice(list.indexOf(">") + 1).split("<li>").slice(1);
 };
 
-const headingsIn = (html: string) => [...html.matchAll(/<h2 class="break-words font-medium">([^<]*)<\/h2>/g)].map((match) => match[1]);
+const headingsIn = (html: string) => [...html.matchAll(/<h2 class="break-words font-semibold leading-tight">([^<]*)<\/h2>/g)].map((match) => match[1]);
 
 /** A Schedule of 2025 and 2026: every portion is let in both years. */
 const twoYears = () =>
@@ -107,8 +107,8 @@ describe("the Year page", () => {
   it("is titled Year at a glance, with an arrow back to the month that was showing", async () => {
     nav.search = "month=2026-08";
     const html = await render({ month: "2026-08" });
-    expect(html).toContain('<h1 class="min-w-0 break-words text-lg font-semibold">Year at a glance</h1>');
-    expect(html).toMatch(/<a [^>]*aria-label="Back to month"[^>]*href="\/\?month=2026-08"[^>]*>‹<\/a>/);
+    expect(html).toContain('<h1 class="min-w-0 break-words font-display text-xl font-bold leading-tight">Year at a glance</h1>');
+    expect(html).toMatch(/<a [^>]*aria-label="Back to month"[^>]*href="\/\?month=2026-08"[^>]*><svg[^>]*>[\s\S]*?<\/svg><\/a>/);
     expect(html.match(/<h1/g)).toHaveLength(1);
   });
 
@@ -151,8 +151,8 @@ describe("the year switcher", () => {
 
   it("has no way to another year when the Schedule is of one year: both arrows are dimmed and say they are not available", async () => {
     const nav = arrows(await render({ month: "2026-10" }));
-    expect(nav).toContain(`<span role="link" aria-disabled="true" aria-label="Previous year" class="${ICON_BUTTON_OFF}">‹</span>`);
-    expect(nav).toContain(`<span role="link" aria-disabled="true" aria-label="Next year" class="${ICON_BUTTON_OFF}">›</span>`);
+    expect(nav).toContain(`<span role="link" aria-disabled="true" aria-label="Previous year" class="${ICON_BUTTON_OFF}"><svg`);
+    expect(nav).toContain(`<span role="link" aria-disabled="true" aria-label="Next year" class="${ICON_BUTTON_OFF}"><svg`);
     expect(nav).not.toContain("<a ");
   });
 
@@ -167,14 +167,14 @@ describe("the year switcher", () => {
 
     it("leads from the last year back to the one before, keeping the month, and has no next year", async () => {
       const nav = arrows(await render({ year: "2026", month: "2026-10" }));
-      expect(nav).toMatch(/<a [^>]*aria-label="Previous year"[^>]*href="\/year\?year=2025&amp;month=2026-10"[^>]*>‹<\/a>/);
+      expect(nav).toMatch(/<a [^>]*aria-label="Previous year"[^>]*href="\/year\?year=2025&amp;month=2026-10"[^>]*><svg[^>]*>[\s\S]*?<\/svg><\/a>/);
       expect(nav).toMatch(/<span role="link" aria-disabled="true" aria-label="Next year"/);
     });
 
     it("leads from the first year on to the next, and has no previous year", async () => {
       const nav = arrows(await render({ year: "2025", month: "2026-10" }));
       expect(nav).toMatch(/<span role="link" aria-disabled="true" aria-label="Previous year"/);
-      expect(nav).toMatch(/<a [^>]*aria-label="Next year"[^>]*href="\/year\?year=2026&amp;month=2026-10"[^>]*>›<\/a>/);
+      expect(nav).toMatch(/<a [^>]*aria-label="Next year"[^>]*href="\/year\?year=2026&amp;month=2026-10"[^>]*><svg[^>]*>[\s\S]*?<\/svg><\/a>/);
     });
 
     it("keeps no month in the arrows when the address has none", async () => {
@@ -200,9 +200,9 @@ describe("the Year page for the fixture year (2026, today 17 October)", () => {
   it("sums what was received of what fell due, with a bar for the share", async () => {
     const html = await render({ year: "2026" });
     const summary = /<section[^>]*aria-label="Received in 2026"[^>]*>[\s\S]*?<\/section>/.exec(html)?.[0] ?? "";
-    expect(summary).toContain(`class="${CARD}`);
+    expect(summary).toContain("rounded-card border border-line bg-surface p-4 shadow-card");
     expect(visibleText(summary)).toBe(`Received ${formatRupees(59400)} of ${formatRupees(92285)}`);
-    expect(summary).toMatch(/<p class="[^"]*\btext-2xl\b[^"]*\bfont-semibold\b[^"]*">/);
+    expect(summary).toMatch(/<p class="[^"]*\btext-2xl\b[^"]*\bfont-bold\b[^"]*">/);
     // 59,400 of 92,285 is 64%
     expect(summary).toContain('role="presentation"');
     expect(summary).toContain('style="width:64%"');

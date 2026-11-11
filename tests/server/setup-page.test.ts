@@ -140,9 +140,9 @@ describe("who sees the Set up page", () => {
   it("tells a member it is for the owner, shows no check, and reads nothing", async () => {
     asMember();
     const html = await render();
-    expect(html).toContain('<h1 class="min-w-0 break-words text-lg font-semibold">Set up</h1>');
+    expect(html).toContain('<h1 class="min-w-0 break-words font-display text-xl font-bold leading-tight">Set up</h1>');
     expect(visibleText(html)).toContain("Set up is for the owner. If something isn't working, ask the owner to open it.");
-    expect(html).toMatch(/<a [^>]*href="\/more"[^>]*>‹<\/a>/);
+    expect(html).toMatch(/<a [^>]*href="\/more"[^>]*><svg[^>]*>[\s\S]*?<\/svg><\/a>/);
     expect(mocks.getSheetsContext).not.toHaveBeenCalled();
     expect(html).not.toContain("AUTH_SECRET");
     expect(html).not.toContain("Prepare my Sheet");
@@ -159,8 +159,8 @@ describe("the owner's view of a connected Sheet", () => {
   it("is titled Set up, with an arrow back to More that keeps the month", async () => {
     nav.search = "month=2026-10";
     const html = await render();
-    expect(html).toContain('<h1 class="min-w-0 break-words text-lg font-semibold">Set up</h1>');
-    expect(html).toMatch(/<a [^>]*href="\/more\?month=2026-10"[^>]*>‹<\/a>/);
+    expect(html).toContain('<h1 class="min-w-0 break-words font-display text-xl font-bold leading-tight">Set up</h1>');
+    expect(html).toMatch(/<a [^>]*href="\/more\?month=2026-10"[^>]*><svg[^>]*>[\s\S]*?<\/svg><\/a>/);
     expect(html).toContain('aria-label="Back to More"');
   });
 

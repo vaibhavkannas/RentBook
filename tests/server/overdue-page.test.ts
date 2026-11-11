@@ -6,6 +6,7 @@ import { formatRupees } from "@/lib/format";
 import { MOVED_OUT_HINT, OVERDUE_RULES } from "@/lib/report-copy";
 import { buttonClasses, CARD, noticeClasses, pillClasses } from "@/lib/ui-classes";
 import { smallTargets, unpressedTargets } from "../support/tap-targets";
+import { wrapProblems } from "../support/wrapping";
 import { baseRows, PORTIONS, parsedRows, tenancyRow } from "../support/fixtures";
 import type { Tenancy } from "@/lib/domain/tenancy";
 import type { ScheduleRow } from "@/lib/domain/types";
@@ -69,7 +70,7 @@ const itemCards = (html: string) => html.split("<li class=\"" + CARD + "\">").sl
 const headingsIn = (html: string) => [...html.matchAll(/<h2 class="[^"]*">([^<]*)<\/h2>/g)].map((match) => match[1]);
 
 /** The months of one portion's list: their links in order. */
-const monthLinks = (card: string) => [...card.matchAll(/<a [^>]*href="([^"]*)"[^>]*><span[^>]*>([\s\S]*?)<\/a>/g)].map((match) => ({ href: match[1], text: visibleText(match[2]) }));
+const monthLinks = (card: string) => [...(/<ol [^>]*>[\s\S]*?<\/ol>/.exec(card)?.[0] ?? "").matchAll(/<a [^>]*href="([^"]*)"[^>]*>([\s\S]*?)<\/a>/g)].map((match) => ({ href: match[1], text: visibleText(match[2]) }));
 
 /**
  * A Schedule where Asha (p1) last paid `monthsBehind` months before October 2026 and has paid nothing since, so her portion owes
@@ -110,8 +111,8 @@ describe("the Overdue page", () => {
   it("is titled Overdue rent, with an arrow back to the month that was showing", async () => {
     nav.search = "month=2026-08";
     const html = await render({ month: "2026-08" });
-    expect(html).toContain('<h1 class="min-w-0 break-words text-lg font-semibold">Overdue rent</h1>');
-    expect(html).toMatch(/<a [^>]*aria-label="Back to month"[^>]*>‹<\/a>/);
+    expect(html).toContain('<h1 class="min-w-0 break-words font-display text-xl font-bold leading-tight">Overdue rent</h1>');
+    expect(html).toMatch(/<a [^>]*aria-label="Back to month"[^>]*><svg[^>]*>[\s\S]*?<\/svg><\/a>/);
     expect(html).toMatch(/<a [^>]*aria-label="Back to month"[^>]*href="\/\?month=2026-08"/);
     expect(html.match(/<h1/g)).toHaveLength(1);
   });
@@ -125,7 +126,7 @@ describe("the Overdue page with rent owed", () => {
   it("sums what is owed, says how many portions and the month it counts up to", async () => {
     const html = await render();
     const summary = /<section[^>]*aria-label="Overdue summary"[^>]*>[\s\S]*?<\/section>/.exec(html)?.[0] ?? "";
-    expect(summary).toMatch(/<p class="[^"]*\btext-2xl\b[^"]*\bfont-semibold\b[^"]*">/);
+    expect(summary).toMatch(/<p class="[^"]*\btext-2xl\b[^"]*\bfont-bold\b[^"]*">/);
     expect(visibleText(summary)).toContain(`${formatRupees(32885)} overdue`);
     expect(visibleText(summary)).toContain("4 portions · counted up to October 2026");
     expect(summary).toContain(`class="${CARD}`);
@@ -149,7 +150,7 @@ describe("the Overdue page with rent owed", () => {
     const owed = [13335, 9000, 5450, 5100];
     cards.forEach((card, index) => {
       expect(card).toContain(`<span class="${pillClasses("danger")}">${formatRupees(owed[index])}</span>`);
-      expect(card).toMatch(/<h2 class="[^"]*\bfont-medium\b/);
+      expect(card).toMatch(/<h2 class="[^"]*\bfont-semibold\b/);
     });
     // the portion that was never let owes nothing and has no card
     expect(html).not.toContain("Second floor, double bedroom");
@@ -166,7 +167,7 @@ describe("the Overdue page with rent owed", () => {
     const [first] = itemCards(await render());
     const links = monthLinks(first);
     // October is this month, which lives at "/"
-    expect(links).toEqual([{ href: "/", text: `October 2026 Unpaid: ${formatRupees(13335)} ›` }]);
+    expect(links).toEqual([{ href: "/", text: `October 2026 · ${formatRupees(13335)}` }]);
     expect(first).toMatch(/<ol [^>]*aria-label="[^"]*"/);
   });
 
@@ -183,11 +184,11 @@ describe("the Overdue page with rent owed", () => {
       expect(headingsIn(html)).toEqual(["First floor, single bedroom"]);
       const [card] = itemCards(html);
       expect(monthLinks(card)).toEqual([
-        { href: "/", text: `October 2026 Unpaid: ${formatRupees(5450)} ›` },
-        { href: "/?month=2026-09", text: `September 2026 Unpaid: ${formatRupees(5450)} ›` },
-        { href: "/?month=2026-08", text: `August 2026 Unpaid: ${formatRupees(5450)} ›` },
-        { href: "/?month=2026-07", text: `July 2026 Unpaid: ${formatRupees(5450)} ›` },
-        { href: "/?month=2026-06", text: `June 2026 Unpaid: ${formatRupees(5450)} ›` },
+        { href: "/", text: `October 2026 · ${formatRupees(5450)}` },
+        { href: "/?month=2026-09", text: `September 2026 · ${formatRupees(5450)}` },
+        { href: "/?month=2026-08", text: `August 2026 · ${formatRupees(5450)}` },
+        { href: "/?month=2026-07", text: `July 2026 · ${formatRupees(5450)}` },
+        { href: "/?month=2026-06", text: `June 2026 · ${formatRupees(5450)}` },
       ]);
       expect(visibleText(card)).toContain("Asha · 5 unpaid months");
       expect(visibleText(card)).toContain("Oldest: June 2026, about 5 months overdue");
@@ -205,7 +206,7 @@ describe("the Overdue page with rent owed", () => {
       mocks.loadPageSnapshot.mockResolvedValue(snapshot({ rows: lower }));
       const html = await render();
       const [card] = itemCards(html);
-      expect(monthLinks(card).map((link) => link.text)).toEqual([`October 2026 Unpaid: ${formatRupees(5450)} ›`]);
+      expect(monthLinks(card).map((link) => link.text)).toEqual([`October 2026 · ${formatRupees(5450)}`]);
       expect(visibleText(card)).toContain("Asha · 1 unpaid month");
       expect(visibleText(card)).toContain("Oldest: October 2026");
       expect(visibleText(html)).toContain(`${formatRupees(5450)} overdue`);
@@ -439,5 +440,36 @@ describe("touch and accessibility", () => {
     expect(problem).toContain("Open Set up");
     expect(smallTargets(problem)).toEqual([]);
     expect(unpressedTargets(problem)).toEqual([]);
+  });
+});
+
+describe("the redesigned Overdue screen", () => {
+  it("puts the total in a summary card with a small label, as the other screens do", async () => {
+    const html = await render();
+    expect(html).toMatch(/<section aria-label="Overdue summary" class="[^"]*\bshadow-card\b/);
+    expect(visibleText(/<section[^>]*aria-label="Overdue summary"[^>]*>[\s\S]*?<\/section>/.exec(html)![0])).toMatch(/^Owed /);
+  });
+
+  it("draws each month as a round red chip, 44 px high, that answers a press and says its month and amount in words", async () => {
+    const [first] = itemCards(await render());
+    const chip = /<a [^>]*>/.exec(/<ol [^>]*>[\s\S]*?<\/ol>/.exec(first)![0])![0];
+    expect(chip).toMatch(/\brounded-full\b/);
+    expect(chip).toMatch(/\bbg-danger-bg\b/);
+    expect(chip).toMatch(/\btext-danger-ink\b/);
+    expect(chip).toMatch(/\bmin-h-11\b/);
+    expect(chip).toMatch(/\bpress\b/);
+    expect(chip).toContain(`aria-label="October 2026. Unpaid: ${formatRupees(13335)}"`);
+  });
+
+  it("keeps every link and button a 44 px target that answers a press", async () => {
+    const html = await render();
+    expect(smallTargets(html)).toEqual([]);
+    expect(unpressedTargets(html)).toEqual([]);
+  });
+
+  it("wraps a long portion name instead of cutting it", async () => {
+    const long = "Third floor, hall and kitchen with the long verandah and the garden";
+    mocks.loadPageSnapshot.mockResolvedValue({ ...snapshot(), portions: PORTIONS.map((p, i) => (i === 4 ? { ...p, name: long } : p)) });
+    expect(wrapProblems(await render(), [long])).toEqual([]);
   });
 });

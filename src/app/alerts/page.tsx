@@ -1,11 +1,12 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
 import LoadProblem from "@/components/LoadProblem";
+import { ButtonLink } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Notice } from "@/components/ui/Notice";
 import { Page } from "@/components/ui/Page";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Pill } from "@/components/ui/Pill";
+import { SectionLabel } from "@/components/ui/SectionLabel";
 import { monthParam, withMonth } from "@/lib/app-nav";
 import { agreementAlerts, hikeAlerts, type AgreementAlert, type HikeAlert } from "@/lib/domain/alerts";
 import type { YearMonth } from "@/lib/domain/types";
@@ -40,19 +41,20 @@ function Agreement({ alert, monthKey }: { alert: AgreementAlert; monthKey: strin
   return (
     <Card as="li">
       <div className="flex items-start justify-between gap-3">
-        <h3 className="min-w-0 break-words font-medium">{alert.name}</h3>
+        <h3 className="min-w-0 break-words font-semibold leading-tight">{alert.name}</h3>
         <Pill tone={pill.tone}>{pill.label}</Pill>
       </div>
       <p className="mt-0.5 break-words text-sm text-muted">{alert.tenant}</p>
       <p className="mt-1 text-sm">{agreementSentence(alert)}</p>
       {alert.state === "ended" && <p className="mt-1 text-sm text-muted">{AGREEMENT_HINT}</p>}
-      <Link
+      <ButtonLink
         href={tenantsPagePath(alert.portionId, monthKey)}
         aria-label={`Details for ${alert.name}`}
-        className="press inline-flex min-h-11 min-w-11 items-center text-sm text-muted underline"
+        variant="secondary"
+        className="mt-2"
       >
         Details
-      </Link>
+      </ButtonLink>
     </Card>
   );
 }
@@ -63,7 +65,7 @@ function Hike({ alert, thisMonth }: { alert: HikeAlert; thisMonth: YearMonth }) 
   return (
     <Card as="li">
       <div className="flex items-start justify-between gap-3">
-        <h3 className="min-w-0 break-words font-medium">{alert.name}</h3>
+        <h3 className="min-w-0 break-words font-semibold leading-tight">{alert.name}</h3>
         <Pill tone={pill.tone}>{pill.label}</Pill>
       </div>
       <p className="mt-0.5 break-words text-sm text-muted">{alert.tenant}</p>
@@ -109,10 +111,10 @@ export default async function AlertsPage({
 
       {snapshot && (
         <>
-          <section id="agreements" aria-labelledby="agreements-heading" className="mt-4">
-            <h2 id="agreements-heading" className="font-medium">
+          <section id="agreements" aria-labelledby="agreements-heading" className="mt-3">
+            <SectionLabel id="agreements-heading" className="mb-2 px-0.5">
               Agreements
-            </h2>
+            </SectionLabel>
             {snapshot.tenantsProblem !== undefined ? (
               // Without the Tenants tab no agreement is known, so "nothing ends soon" would be a guess.
               <Notice tone="warn" className="mt-2">
@@ -129,10 +131,10 @@ export default async function AlertsPage({
             )}
           </section>
 
-          <section id="hikes" aria-labelledby="hikes-heading" className="mt-6">
-            <h2 id="hikes-heading" className="font-medium">
+          <section id="hikes" aria-labelledby="hikes-heading" className="mt-5">
+            <SectionLabel id="hikes-heading" className="mb-2 px-0.5">
               Rent hikes
-            </h2>
+            </SectionLabel>
             {snapshot.tenantsProblem !== undefined && hikes.length > 0 && (
               // Without the Tenants tab a hike for a tenant who left cannot be told apart from a real one.
               <Notice tone="warn" className="mt-2">

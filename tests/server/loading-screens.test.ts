@@ -58,7 +58,7 @@ describe("the Activity loading screen", () => {
   const out = html(createElement(ActivityLoading));
 
   it("has the header Activity, with no arrow back, because Activity is a tab", () => {
-    expect(out).toContain('<h1 class="min-w-0 break-words text-lg font-semibold">Activity</h1>');
+    expect(out).toContain('<h1 class="min-w-0 break-words font-display text-xl font-bold leading-tight">Activity</h1>');
     expect(out).not.toContain("<a");
   });
 
@@ -102,8 +102,8 @@ describe("the settings loading screen", () => {
   const out = html(createElement(SettingsLoading));
 
   it("has the header Portion settings, with an arrow back to More", () => {
-    expect(out).toContain('<h1 class="min-w-0 break-words text-lg font-semibold">Portion settings</h1>');
-    expect(out).toMatch(/<a [^>]*href="\/more"[^>]*>‹<\/a>/);
+    expect(out).toContain('<h1 class="min-w-0 break-words font-display text-xl font-bold leading-tight">Portion settings</h1>');
+    expect(out).toMatch(/<a [^>]*href="\/more"[^>]*><svg[^>]*>[\s\S]*?<\/svg><\/a>/);
     expect(out).toContain('aria-label="Back to More"');
   });
 
@@ -137,7 +137,7 @@ describe("the tenant details loading screen", () => {
   const out = html(createElement(TenantsLoading));
 
   it("has an arrow back to the month, and the same two cards as before", () => {
-    expect(out).toMatch(/<a [^>]*href="\/"[^>]*>‹<\/a>/);
+    expect(out).toMatch(/<a [^>]*href="\/"[^>]*><svg[^>]*>[\s\S]*?<\/svg><\/a>/);
     expect(out).toContain('aria-label="Back to month"');
     expect(out.match(new RegExp(`class="${CARD}`, "g"))).toHaveLength(2);
   });
@@ -151,8 +151,8 @@ describe("the Overdue loading screen", () => {
   const out = html(createElement(OverdueLoading));
 
   it("has the header Overdue rent, with an arrow back to the month, as the page has", () => {
-    expect(out).toContain('<h1 class="min-w-0 break-words text-lg font-semibold">Overdue rent</h1>');
-    expect(out).toMatch(/<a [^>]*href="\/"[^>]*>‹<\/a>/);
+    expect(out).toContain('<h1 class="min-w-0 break-words font-display text-xl font-bold leading-tight">Overdue rent</h1>');
+    expect(out).toMatch(/<a [^>]*href="\/"[^>]*><svg[^>]*>[\s\S]*?<\/svg><\/a>/);
     expect(out).toContain('aria-label="Back to month"');
   });
 
@@ -172,6 +172,11 @@ describe("the Overdue loading screen", () => {
     expect(cards[2].match(/\bh-11\b/g)).toHaveLength(2);
   });
 
+  it("holds a round chip for each month, as the real card has, and the summary card has its shadow", () => {
+    expect(out.match(/\bh-11 w-40 rounded-full\b/g)).toHaveLength(3);
+    expect(out).toContain("shadow-card");
+  });
+
   it("has no link of its own besides the arrow back: nothing can be done on it", () => {
     expect(out.match(/<a /g)).toHaveLength(1);
     expect(out).not.toContain("<button");
@@ -182,8 +187,8 @@ describe("the Year loading screen", () => {
   const out = html(createElement(YearLoading));
 
   it("has the header Year at a glance, with an arrow back to the month, as the page has", () => {
-    expect(out).toContain('<h1 class="min-w-0 break-words text-lg font-semibold">Year at a glance</h1>');
-    expect(out).toMatch(/<a [^>]*href="\/"[^>]*>‹<\/a>/);
+    expect(out).toContain('<h1 class="min-w-0 break-words font-display text-xl font-bold leading-tight">Year at a glance</h1>');
+    expect(out).toMatch(/<a [^>]*href="\/"[^>]*><svg[^>]*>[\s\S]*?<\/svg><\/a>/);
     expect(out).toContain('aria-label="Back to month"');
   });
 
@@ -216,8 +221,8 @@ describe("the Agreements and hikes loading screen", () => {
   const out = html(createElement(AlertsLoading));
 
   it("has the header Agreements and hikes, with an arrow back to the month, as the page has", () => {
-    expect(out).toContain('<h1 class="min-w-0 break-words text-lg font-semibold">Agreements and hikes</h1>');
-    expect(out).toMatch(/<a [^>]*href="\/"[^>]*>‹<\/a>/);
+    expect(out).toContain('<h1 class="min-w-0 break-words font-display text-xl font-bold leading-tight">Agreements and hikes</h1>');
+    expect(out).toMatch(/<a [^>]*href="\/"[^>]*><svg[^>]*>[\s\S]*?<\/svg><\/a>/);
     expect(out).toContain('aria-label="Back to month"');
   });
 
@@ -231,8 +236,8 @@ describe("the Agreements and hikes loading screen", () => {
     }
     // only an agreement has a Details link: a 44 px bar in the cards of the first section
     expect(out.match(/(?<![-\w])h-11\b/g)).toHaveLength(2);
-    // a heading bar over each section
-    expect(out.match(/\bh-6 w-32\b/g)).toHaveLength(2);
+    // a bar the height of the small uppercase section label over each section
+    expect(out.match(/\bh-4 w-24\b/g)).toHaveLength(2);
   });
 
   it("has no link of its own besides the arrow back: nothing can be done on it", () => {
@@ -245,8 +250,8 @@ describe("the Set up loading screen", () => {
   const out = html(createElement(SetupLoading));
 
   it("has the header Set up, with an arrow back to More, as the page has", () => {
-    expect(out).toContain('<h1 class="min-w-0 break-words text-lg font-semibold">Set up</h1>');
-    expect(out).toMatch(/<a [^>]*href="\/more"[^>]*>‹<\/a>/);
+    expect(out).toContain('<h1 class="min-w-0 break-words font-display text-xl font-bold leading-tight">Set up</h1>');
+    expect(out).toMatch(/<a [^>]*href="\/more"[^>]*><svg[^>]*>[\s\S]*?<\/svg><\/a>/);
     expect(out).toContain('aria-label="Back to More"');
   });
 
@@ -273,8 +278,8 @@ describe("the Diagnostics loading screen", () => {
   const out = html(createElement(DiagnosticsLoading));
 
   it("has the header Diagnostics, with an arrow back to More, as the page has", () => {
-    expect(out).toContain('<h1 class="min-w-0 break-words text-lg font-semibold">Diagnostics</h1>');
-    expect(out).toMatch(/<a [^>]*href="\/more"[^>]*>‹<\/a>/);
+    expect(out).toContain('<h1 class="min-w-0 break-words font-display text-xl font-bold leading-tight">Diagnostics</h1>');
+    expect(out).toMatch(/<a [^>]*href="\/more"[^>]*><svg[^>]*>[\s\S]*?<\/svg><\/a>/);
     expect(out).toContain('aria-label="Back to More"');
   });
 

@@ -502,12 +502,12 @@ describe("the tenant details page and the month it was opened from", () => {
   it("has an arrow back to the month screen that carries the month of the address", async () => {
     nav.search = "month=2026-10";
     const html = await render("p1", { month: "2026-10" });
-    expect(html).toMatch(/<a [^>]*href="\/\?month=2026-10"[^>]*>‹<\/a>/);
+    expect(html).toMatch(/<a [^>]*href="\/\?month=2026-10"[^>]*><svg[^>]*>[\s\S]*?<\/svg><\/a>/);
     expect(html).toContain('aria-label="Back to month"');
   });
 
   it("has an arrow back to plain / when it was opened with no month", async () => {
-    expect(await render()).toMatch(/<a [^>]*href="\/"[^>]*>‹<\/a>/);
+    expect(await render()).toMatch(/<a [^>]*href="\/"[^>]*><svg[^>]*>[\s\S]*?<\/svg><\/a>/);
   });
 
   it("gives both forms the month, so a save or a conflict keeps it in the address", async () => {

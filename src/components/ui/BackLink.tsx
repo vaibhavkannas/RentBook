@@ -4,7 +4,8 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useAppNavigate } from "@/components/useAppNavigate";
 import { monthParam, withMonth } from "@/lib/app-nav";
-import { iconButtonClasses } from "@/lib/ui-classes";
+import { Icon } from "@/components/ui/Icon";
+import { framedIconButtonClasses } from "@/lib/ui-classes";
 
 type Props = {
   /** The screen the arrow leads to: its path, without a month ("/" for the month screen, "/more"). */
@@ -22,8 +23,8 @@ export function BackLink({ href, label }: Props) {
   const to = withMonth(href, monthParam(useSearchParams().get("month")));
   const { onNavigate } = useAppNavigate();
   return (
-    <Link href={to} aria-label={label} onNavigate={(event) => onNavigate(to, event)} className={iconButtonClasses()}>
-      ‹
+    <Link href={to} aria-label={label} onNavigate={(event) => onNavigate(to, event)} className={framedIconButtonClasses()}>
+      <Icon name="left" />
     </Link>
   );
 }
@@ -31,8 +32,8 @@ export function BackLink({ href, label }: Props) {
 /** The same arrow without the month, for the moment before the address can be read. */
 export function BackLinkFallback({ href, label }: Props) {
   return (
-    <Link href={href} aria-label={label} className={iconButtonClasses()}>
-      ‹
+    <Link href={href} aria-label={label} className={framedIconButtonClasses()}>
+      <Icon name="left" />
     </Link>
   );
 }

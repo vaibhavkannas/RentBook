@@ -20,20 +20,20 @@ export default function Loading() {
       <div aria-hidden="true">
         {CARDS_IN_SECTION.map((cards, section) => (
           <div key={section} className={section === 0 ? "mt-4" : "mt-6"}>
-            <Skeleton className="h-6 w-32" />
+            <Skeleton className="h-4 w-24" />
             <div className="mt-2 space-y-3">
               {Array.from({ length: cards }, (_, card) => (
                 <Card key={card}>
                   <div className="flex items-start justify-between gap-3">
                     <Skeleton className="h-6 w-44" />
-                    <Skeleton className="h-5 w-16" />
+                    <Skeleton className="h-5 w-16 rounded-full" />
                   </div>
                   <Skeleton className="mt-0.5 h-5 w-24" />
                   <div className="mt-1 space-y-1">
                     <Skeleton className="h-5 w-full" />
                     <Skeleton className="h-5 w-2/3" />
                   </div>
-                  {section === 0 && <Skeleton className="mt-0 h-11 w-20" />}
+                  {section === 0 && <Skeleton className="mt-2 h-11 w-24 rounded-control" />}
                 </Card>
               ))}
             </div>

@@ -6,7 +6,7 @@ import type { ScheduleRow } from "@/lib/domain/types";
 import { AppError } from "@/lib/errors";
 import { formatRupees } from "@/lib/format";
 import { AGREEMENT_HINT, ALERTS_FOOTNOTE, HIKE_MOVED_OUT_HINT, NO_AGREEMENTS_TEXT, NO_HIKES_TEXT } from "@/lib/report-copy";
-import { CARD, noticeClasses, pillClasses } from "@/lib/ui-classes";
+import { buttonClasses, CARD, noticeClasses, pillClasses } from "@/lib/ui-classes";
 import { baseRows, parsedRows, PORTIONS, tenancyRow } from "../support/fixtures";
 import { smallTargets, unpressedTargets } from "../support/tap-targets";
 
@@ -111,8 +111,8 @@ describe("the Agreements and hikes page", () => {
   it("is titled Agreements and hikes, with an arrow back to the month that was showing", async () => {
     nav.search = "month=2026-08";
     const html = await render({ month: "2026-08" });
-    expect(html).toContain('<h1 class="min-w-0 break-words text-lg font-semibold">Agreements and hikes</h1>');
-    expect(html).toMatch(/<a [^>]*aria-label="Back to month"[^>]*href="\/\?month=2026-08"[^>]*>‹<\/a>/);
+    expect(html).toContain('<h1 class="min-w-0 break-words font-display text-xl font-bold leading-tight">Agreements and hikes</h1>');
+    expect(html).toMatch(/<a [^>]*aria-label="Back to month"[^>]*href="\/\?month=2026-08"[^>]*><svg[^>]*>[\s\S]*?<\/svg><\/a>/);
     expect(html.match(/<h1/g)).toHaveLength(1);
   });
 
@@ -339,5 +339,19 @@ describe("touch and accessibility", () => {
     expect(html).toContain('<h2 id="agreements-heading"');
     expect(html).toMatch(/<section id="hikes" aria-labelledby="hikes-heading"/);
     expect(html).toContain('<h2 id="hikes-heading"');
+  });
+});
+
+describe("the redesigned look", () => {
+  it("heads each section with the small uppercase label of the other screens, and Details is a 44 px button", async () => {
+    const html = await render({ month: "2026-10" });
+    expect(html).toMatch(/<h2 id="agreements-heading" class="[^"]*\buppercase\b/);
+    expect(html).toMatch(/<h2 id="hikes-heading" class="[^"]*\buppercase\b/);
+    expect(html).toContain(`class="${buttonClasses("secondary", "md")} mt-2"`);
+  });
+
+  it("has the arrow back as a framed icon, with an accessible name", async () => {
+    const html = await render();
+    expect(html).toMatch(/<a [^>]*aria-label="Back to month"[^>]*><svg aria-hidden="true"/);
   });
 });

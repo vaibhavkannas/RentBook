@@ -61,10 +61,10 @@ export const framedIconButtonClasses = (look: "square" | "round" | "round-done" 
   );
 
 /**
- * What an icon button becomes where it has nowhere to go (the year arrow at the end of the Schedule): the same 44 px square, so
- * the row does not move, muted and dimmed, with no press feedback because there is nothing to press. It is a span, not a button.
+ * What a framed icon button becomes where it has nowhere to go (the year arrow at the end of the Schedule): the same framed 44 px
+ * square, so the row does not move, muted and dimmed, with no press feedback because there is nothing to press. It is a span.
  */
-export const ICON_BUTTON_OFF = "grid min-h-11 min-w-11 place-items-center rounded-chip text-xl text-muted opacity-40";
+export const ICON_BUTTON_OFF = "grid min-h-11 min-w-11 place-items-center rounded-control border border-line bg-surface text-muted opacity-40";
 
 /**
  * The colours of one month in the year view (tokens only; the screen gives it its size and corners). Each state differs by more
@@ -112,6 +112,9 @@ export const pillClasses = (tone: PillTone) =>
   `shrink-0 rounded-full px-2.5 py-0.5 text-xs font-medium ${PILL_TONE[tone]}`;
 
 export const CARD = "rounded-card border border-line bg-surface p-4";
+
+/** The card at the top of a report screen (the month summary, Overdue, Year): the same box, lifted by a shadow. */
+export const SUMMARY_CARD = "rounded-card border border-line bg-surface p-4 shadow-card";
 
 /**
  * A row of chips that scrolls sideways when they do not all fit, out to the edges of the screen (bleed-x-safe, in

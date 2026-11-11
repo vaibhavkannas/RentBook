@@ -2,6 +2,7 @@ import { Card } from "@/components/ui/Card";
 import { Page } from "@/components/ui/Page";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Skeleton } from "@/components/ui/Skeleton";
+import { SUMMARY_CARD } from "@/lib/ui-classes";
 
 /** How many portion cards the placeholder shows, each with the twelve months of a year in two rows of six. */
 const PORTION_CARDS = 2;
@@ -19,16 +20,16 @@ export default function Loading() {
 
       <div aria-hidden="true">
         <div className="mt-3 flex items-center justify-between">
-          <Skeleton className="size-11" />
+          <Skeleton className="size-11 rounded-control" />
           <Skeleton className="h-7 w-16" />
-          <Skeleton className="size-11" />
+          <Skeleton className="size-11 rounded-control" />
         </div>
 
-        <Card className="mt-3">
-          <Skeleton className="h-5 w-20" />
+        <div className={`${SUMMARY_CARD} mt-3`}>
+          <Skeleton className="h-4 w-20" />
           <Skeleton className="mt-0.5 h-8 w-56" />
-          <Skeleton className="mt-2 h-1.5 w-full" />
-        </Card>
+          <Skeleton className="mt-3 h-1.5 w-full" />
+        </div>
 
         <div className="mt-3 flex gap-x-4">
           <Skeleton className="h-6 w-16" />

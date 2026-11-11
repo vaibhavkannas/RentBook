@@ -53,7 +53,7 @@ describe("the More page", () => {
 
   it("is titled More, with no arrow back, because it is a tab", async () => {
     const html = await render();
-    expect(html).toContain('<h1 class="min-w-0 break-words text-lg font-semibold">More</h1>');
+    expect(html).toContain('<h1 class="min-w-0 break-words font-display text-xl font-bold leading-tight">More</h1>');
     expect(html).not.toContain("aria-label=\"Back");
     expect(html.match(/<h1/g)).toHaveLength(1);
   });

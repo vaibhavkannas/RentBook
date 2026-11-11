@@ -4,10 +4,12 @@ import LoadProblem from "@/components/LoadProblem";
 import { ButtonLink } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { Icon } from "@/components/ui/Icon";
 import { Notice } from "@/components/ui/Notice";
 import { Page } from "@/components/ui/Page";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Pill } from "@/components/ui/Pill";
+import { SummaryCard } from "@/components/ui/SummaryCard";
 import { monthParam, withMonth } from "@/lib/app-nav";
 import { overdueList, overdueTotals, type OverdueItem } from "@/lib/domain/overdue";
 import { lastDueMonth } from "@/lib/domain/rent-due";
@@ -44,7 +46,7 @@ function Owes({ item, monthKey, currentKey, thisMonth }: { item: OverdueItem; mo
   return (
     <Card as="li">
       <div className="flex items-start justify-between gap-3">
-        <h2 className="min-w-0 break-words font-medium">{item.name}</h2>
+        <h2 className="min-w-0 break-words font-semibold leading-tight">{item.name}</h2>
         <Pill tone="danger">{formatRupees(item.owed)}</Pill>
       </div>
       <p className="mt-1 break-words text-sm">{overdueSummary(item)}</p>
@@ -52,17 +54,19 @@ function Owes({ item, monthKey, currentKey, thisMonth }: { item: OverdueItem; mo
         Oldest: {formatMonthTitle(item.oldest)}, {overdueAge(item.daysOverdue)}
       </p>
 
-      <ol aria-label={`Months ${item.name} owes rent for`} className="mt-2 divide-y divide-line">
+      {/* Each month is a round chip that opens that month on the month screen. */}
+      <ol aria-label={`Months ${item.name} owes rent for`} className="mt-3 flex flex-wrap gap-2">
         {shown.map((owed) => (
           <li key={ymKey(owed.month)}>
-            <Link href={monthHref(ymKey(owed.month), currentKey)} className="press flex min-h-11 items-center justify-between gap-3 py-1">
-              <span className="min-w-0">
-                <span className="block font-medium">{formatMonthTitle(owed.month)}</span>
-                <span className="block break-words text-sm text-muted">{overdueMonthLine(owed)}</span>
-              </span>
-              <span aria-hidden="true" className="text-xl text-muted">
-                ›
-              </span>
+            <Link
+              href={monthHref(ymKey(owed.month), currentKey)}
+              aria-label={`${formatMonthTitle(owed.month)}. ${overdueMonthLine(owed)}`}
+              className="press inline-flex min-h-11 items-center gap-1.5 rounded-full bg-danger-bg px-3.5 text-sm font-medium text-danger-ink"
+            >
+              <Icon name="bang" className="size-4 shrink-0" />
+              <span>{formatMonthTitle(owed.month)}</span>
+              <span aria-hidden="true">·</span>
+              <span className="tabular-nums">{formatRupees(owed.owed)}</span>
             </Link>
           </li>
         ))}
@@ -161,10 +165,16 @@ export default async function OverduePage({
             </EmptyState>
           ) : (
             <>
-              <Card as="section" aria-label="Overdue summary" className="mt-3">
-                <p className="text-2xl font-semibold">{formatRupees(totals.owed)} overdue</p>
-                <p className="mt-0.5 text-sm text-muted">{overdueCountLine(totals.portions, upTo)}</p>
-              </Card>
+              <SummaryCard
+                ariaLabel="Overdue summary"
+                label="Owed"
+                figure={
+                  <>
+                    {formatRupees(totals.owed)} <span className="font-sans text-sm font-medium text-muted">overdue</span>
+                  </>
+                }
+                note={overdueCountLine(totals.portions, upTo)}
+              />
 
               <ul className="mt-3 space-y-3">
                 {items.map((item) => (

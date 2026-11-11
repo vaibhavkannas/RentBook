@@ -4,9 +4,11 @@ import LoadProblem from "@/components/LoadProblem";
 import { ButtonLink } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { Icon } from "@/components/ui/Icon";
 import { Notice } from "@/components/ui/Notice";
 import { Page } from "@/components/ui/Page";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { SummaryCard } from "@/components/ui/SummaryCard";
 import { monthParam, yearHref } from "@/lib/app-nav";
 import { currentYm, monthName, parseYmKey, todayIso, ymKey } from "@/lib/domain/year-month";
 import { deriveYearView, parseYear, yearBounds, yearNeighbours, type YearCell, type YearRow, type YearView } from "@/lib/domain/year-view";
@@ -25,7 +27,7 @@ import { getSheetsContext } from "@/lib/server/context";
 import { loadPageSnapshot } from "@/lib/server/freshness";
 import { problemMessage, setupHrefFor } from "@/lib/server/problem";
 import type { Snapshot } from "@/lib/sheets/service";
-import { cx, ICON_BUTTON_OFF, iconButtonClasses, yearCellClasses } from "@/lib/ui-classes";
+import { cx, framedIconButtonClasses, ICON_BUTTON_OFF, yearCellClasses } from "@/lib/ui-classes";
 
 // A Google call gives up after 10 seconds; the whole request is cut off after 15.
 export const maxDuration = 15;
@@ -65,7 +67,7 @@ function Month({ cell, portionName, currentKey }: { cell: YearCell; portionName:
 function Portion({ row, year, currentKey }: { row: YearRow; year: number; currentKey: string }) {
   return (
     <Card as="li">
-      <h2 className="break-words font-medium">{row.name}</h2>
+      <h2 className="break-words font-semibold leading-tight">{row.name}</h2>
       <p className="mt-0.5 text-sm text-muted">
         {formatRupees(row.received)} of {formatRupees(row.due)}
       </p>
@@ -81,37 +83,41 @@ function Portion({ row, year, currentKey }: { row: YearRow; year: number; curren
 /** The year between two arrows. An arrow with nowhere to go is a dimmed span of the same size, so the row does not move. */
 function Switcher({ year, monthKey, bounds }: { year: number; monthKey: string | null; bounds: { first: number; last: number } }) {
   const { previous, next } = yearNeighbours(year, bounds);
-  const arrow = (target: number | null, label: string, glyph: string) =>
+  const arrow = (target: number | null, label: string, glyph: "left" | "right") =>
     target === null ? (
       <span role="link" aria-disabled="true" aria-label={label} className={ICON_BUTTON_OFF}>
-        {glyph}
+        <Icon name={glyph} />
       </span>
     ) : (
       // Replacing, as the month screen does: a walk through the years must not fill the history.
-      <Link href={yearHref(target, monthKey)} replace scroll={false} aria-label={label} className={iconButtonClasses()}>
-        {glyph}
+      <Link href={yearHref(target, monthKey)} replace scroll={false} aria-label={label} className={framedIconButtonClasses()}>
+        <Icon name={glyph} />
       </Link>
     );
   return (
     <nav aria-label="Year" className="mt-3 flex items-center justify-between">
-      {arrow(previous, "Previous year", "‹")}
-      <h2 className="text-lg font-semibold">{year}</h2>
-      {arrow(next, "Next year", "›")}
+      {arrow(previous, "Previous year", "left")}
+      <h2 className="font-display text-lg font-bold">{year}</h2>
+      {arrow(next, "Next year", "right")}
     </nav>
   );
 }
 
 function Summary({ view }: { view: YearView }) {
   return (
-    <Card as="section" aria-label={`Received in ${view.year}`} className="mt-3">
-      <p className="text-sm text-muted">Received</p>
-      <p className="mt-0.5 text-2xl font-semibold">
-        {formatRupees(view.received)} <span className="text-sm font-normal text-muted">of {formatRupees(view.due)}</span>
-      </p>
-      <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-line" role="presentation">
-        <div className="h-full bg-accent" style={{ width: `${progressPercent(view.received, view.due)}%` }} />
+    <SummaryCard
+      ariaLabel={`Received in ${view.year}`}
+      label="Received"
+      figure={
+        <>
+          {formatRupees(view.received)} <span className="font-sans text-sm font-medium text-muted">of {formatRupees(view.due)}</span>
+        </>
+      }
+    >
+      <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-surface-2" role="presentation">
+        <div className="h-full rounded-full bg-accent" style={{ width: `${progressPercent(view.received, view.due)}%` }} />
       </div>
-    </Card>
+    </SummaryCard>
   );
 }
 

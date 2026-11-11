@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { SUMMARY_CARD } from "@/lib/ui-classes";
 
 type Props = {
   /** What the figure is ("Owed"). */
@@ -18,7 +19,7 @@ type Props = {
 /** The card at the top of Overdue rent and Year at a glance: a small label, the figure in the display face, and a line under it. */
 export function SummaryCard({ label, figure, note, ariaLabel, className = "mt-3", children }: Props) {
   return (
-    <section aria-label={ariaLabel} className={`rounded-card border border-line bg-surface p-4 shadow-card ${className}`}>
+    <section aria-label={ariaLabel} className={`${SUMMARY_CARD} ${className}`}>
       <p className="text-xs uppercase tracking-wider text-muted">{label}</p>
       <p className="mt-0.5 font-display text-2xl font-bold leading-tight tabular-nums">{figure}</p>
       {note && <p className="mt-1 text-sm text-muted">{note}</p>}

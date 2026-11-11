@@ -176,7 +176,7 @@ describe("Set up", () => {
     h.viewer = MEMBER;
     const { fake } = useSheet("main");
     const html = await setup();
-    expect(pageText(html)).toBe("‹ Set up Set up is for the owner. If something isn't working, ask the owner to open it.");
+    expect(pageText(html)).toBe("Set up Set up is for the owner. If something isn't working, ask the owner to open it.");
     expect(html).not.toContain("AUTH_SECRET");
     expect(html).not.toContain("rentbook-robot");
     expect(fake.calls).toEqual([]);
@@ -240,7 +240,7 @@ describe("Diagnostics", () => {
     h.viewer = MEMBER;
     const { fake } = useSheet("main");
     const html = await diagnostics();
-    expect(pageText(html)).toBe("‹ Diagnostics Diagnostics are for the owner.");
+    expect(pageText(html)).toBe("Diagnostics Diagnostics are for the owner.");
     expect(fake.calls).toEqual([]);
   });
 
@@ -307,8 +307,8 @@ describe("Overdue rent", () => {
     expect(pageText(html)).toContain("₹ 31,335 overdue 2 portions · counted up to October 2026");
     const owing = named(html, "li").filter((item) => inside(item, "h2").length > 0).map((item) => textOf(item));
     expect(owing).toEqual([
-      "Second floor, single bedroom ₹ 18,000 Chitra · 2 unpaid months Oldest: September 2026, 46 days overdue October 2026 Unpaid: ₹ 9,000 September 2026 Unpaid: ₹ 9,000",
-      "First floor, double bedroom ₹ 13,335 Bala · 1 unpaid month Oldest: October 2026, 16 days overdue October 2026 Unpaid: ₹ 13,335",
+      "Second floor, single bedroom ₹ 18,000 Chitra · 2 unpaid months Oldest: September 2026, 46 days overdue October 2026 ₹ 9,000 September 2026 ₹ 9,000",
+      "First floor, double bedroom ₹ 13,335 Bala · 1 unpaid month Oldest: October 2026, 16 days overdue October 2026 ₹ 13,335",
     ]);
   });
 

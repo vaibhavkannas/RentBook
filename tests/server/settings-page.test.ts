@@ -53,15 +53,15 @@ describe("the portion settings page", () => {
 
   it("is titled Portion settings, with an arrow back to More", async () => {
     const html = await render();
-    expect(html).toContain('<h1 class="min-w-0 break-words text-lg font-semibold">Portion settings</h1>');
-    expect(html).toMatch(/<a [^>]*href="\/more"[^>]*>‹<\/a>/);
+    expect(html).toContain('<h1 class="min-w-0 break-words font-display text-xl font-bold leading-tight">Portion settings</h1>');
+    expect(html).toMatch(/<a [^>]*href="\/more"[^>]*><svg[^>]*>[\s\S]*?<\/svg><\/a>/);
     expect(html).toContain('aria-label="Back to More"');
     expect(html).not.toContain("Back to month");
   });
 
   it("has its arrow back to More carry the month of the address", async () => {
     nav.search = "month=2026-10";
-    expect(await render()).toMatch(/<a [^>]*href="\/more\?month=2026-10"[^>]*>‹<\/a>/);
+    expect(await render()).toMatch(/<a [^>]*href="\/more\?month=2026-10"[^>]*><svg[^>]*>[\s\S]*?<\/svg><\/a>/);
   });
 
   it("shows the form for each portion", async () => {

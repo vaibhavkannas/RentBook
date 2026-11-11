@@ -82,11 +82,11 @@ describe("iconButtonClasses", () => {
 });
 
 describe("ICON_BUTTON_OFF", () => {
-  it("is the same 44 px square as an icon button, muted and dimmed, with no press feedback: an arrow that has nowhere to go", () => {
-    expect(ICON_BUTTON_OFF).toBe("grid min-h-11 min-w-11 place-items-center rounded-chip text-xl text-muted opacity-40");
+  it("is the same 44 px square as a framed icon button, muted and dimmed, with no press feedback: an arrow that has nowhere to go", () => {
+    expect(ICON_BUTTON_OFF).toBe("grid min-h-11 min-w-11 place-items-center rounded-control border border-line bg-surface text-muted opacity-40");
     expect(tokens(ICON_BUTTON_OFF)).not.toContain("press");
-    const square = (classes: string) => tokens(classes).filter((name) => /^(?:min-h-11|min-w-11|place-items-center|rounded-chip|text-xl|grid)$/.test(name)).sort();
-    expect(square(ICON_BUTTON_OFF)).toEqual(square(iconButtonClasses()));
+    const square = (classes: string) => tokens(classes).filter((name) => /^(?:min-h-11|min-w-11|place-items-center|rounded-control|border|border-line|bg-surface|grid)$/.test(name)).sort();
+    expect(square(ICON_BUTTON_OFF)).toEqual(square(framedIconButtonClasses()));
   });
 });
 
