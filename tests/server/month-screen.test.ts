@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
@@ -140,5 +141,18 @@ describe("the refresh button and the Updated words", () => {
     const css = readFileSync(new URL("../../src/app/globals.css", import.meta.url), "utf8");
     expect(css).toMatch(/@keyframes refresh-turn\s*\{\s*to\s*\{\s*transform:\s*rotate\(360deg\);\s*\}\s*\}/);
     expect(css).toMatch(/prefers-reduced-motion: reduce\)\s*\{\s*\.refresh-turn\s*\{\s*animation:\s*none/);
+  });
+});
+
+describe("the quiet refresh when the app returns to the foreground", () => {
+  const screen = readFileSync(new URL("../../src/components/MonthScreen.tsx", import.meta.url), "utf8");
+
+  it("is wired in the month screen, through a transition of its own so the figures stay while it loads", () => {
+    expect(screen).toMatch(/watchForeground\(document, \(\) => startQuietRefresh\(\(\) => router\.refresh\(\)\)\)/);
+    expect(screen).toMatch(/const \[, startQuietRefresh\] = useTransition\(\)/);
+  });
+
+  it("does not touch the refresh button's store, so nothing spins or announces", () => {
+    expect(screen).not.toMatch(/watchForeground[^;]*refreshStore/);
   });
 });

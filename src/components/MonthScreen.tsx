@@ -9,6 +9,7 @@ import { addMonths, parseYmKey, ymKey } from "@/lib/domain/year-month";
 import { formatMonthTitle } from "@/lib/format";
 import { canSwitchHere } from "@/lib/month-window";
 import { applyOverlay, beginWrite, liveOverlay, rollbackWrite, savingIds, settleWrite, type Overlay, type Writes } from "@/lib/optimistic";
+import { watchForeground } from "@/lib/foreground-refresh";
 import { createRefreshStore } from "@/lib/refresh-status";
 import { monthFromAddress, monthHref, openMonth, sheetKey, shouldStartSwipe, swipeDirection } from "@/lib/month-nav";
 import MonthPicker from "./MonthPicker";
@@ -73,7 +74,10 @@ export default function MonthScreen({ monthKey, currentKey, today, renderedAt, v
   const [pickerOpen, setPickerOpen] = useState(false);
   const touchStart = useRef<{ x: number; y: number; ignore: boolean } | null>(null);
   const [active, setActive] = useState<Active | null>(null);
+  const [, startQuietRefresh] = useTransition();
   const [refreshStore] = useState(createRefreshStore);
+  // Back in the foreground after a while: load the page again without a sound, so the figures are not old (see foreground-refresh).
+  useEffect(() => watchForeground(document, () => startQuietRefresh(() => router.refresh())), [router]);
   useEffect(() => () => refreshStore.dispose(), [refreshStore]);
   const opened = useRef(0);
   // Changes on their way to the Sheet: the cards show them at once (see src/lib/optimistic.ts). The data the screen has now is

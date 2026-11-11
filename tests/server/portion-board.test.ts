@@ -136,3 +136,32 @@ describe("motion on the month screen", () => {
     }
   });
 });
+
+describe("the Overdue state of a row", () => {
+  const owing = (id: string) => card(id, "pending", { rentReference: 6000 });
+  const rows = (monthKey: string, today: string, cards: PortionCard[]) =>
+    renderToStaticMarkup(createElement(PortionBoard, { monthKey, cards, defaultDate: today }));
+
+  it("draws a pending card of a month that is overdue with the red Overdue pill and the red status circle", () => {
+    const out = rows("2026-09", "2026-10-20", [owing("p1")]);
+    expect(out).toContain("Overdue</span>");
+    expect(out).toContain("bg-danger-bg");
+    expect(out).not.toContain(">Pending</span>");
+  });
+
+  it("keeps Pending for the current month until the rent counts as overdue, and for a month to come", () => {
+    expect(rows("2026-10", "2026-10-05", [owing("p1")])).toContain(">Pending</span>");
+    expect(rows("2026-10", "2026-10-06", [owing("p1")])).toContain("Overdue</span>");
+    expect(rows("2026-11", "2026-10-20", [owing("p1")])).toContain(">Pending</span>");
+  });
+
+  it("never marks a paid, vacant or switched-off-for-rent card overdue", () => {
+    const out = rows("2026-09", "2026-10-20", [card("p1", "paid"), card("p2", "vacant", { vacancy: null }), card("p3", "needs-tenant")]);
+    expect(out).not.toContain("Overdue</span>");
+  });
+
+  it("counts an overdue card under the Pending chip, which still shows it", () => {
+    const out = rows("2026-09", "2026-10-20", [owing("p1"), card("p2", "paid")]);
+    expect(out).toMatch(/aria-pressed="false"[^>]*>Pending[\s\S]*?>1<\/span>/);
+  });
+});

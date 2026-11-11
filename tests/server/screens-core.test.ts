@@ -118,11 +118,11 @@ describe("the month screen", () => {
     // The chips of the tenancy: the advance, and the agreement that ends in 30 days (for p3, one that ended a week ago).
     expect(shown[0]).toContain("Advance ₹ 10,900 held Agreement ends 16 Nov 2026");
     expect(shown[0]).toMatch(/Edit amount Undo Details$/);
-    expect(shown[1]).toMatch(/^First floor, double bedroom Bala · Payment 1 of 11 ₹ 13,335 Pending /);
+    expect(shown[1]).toMatch(/^First floor, double bedroom Bala · Payment 1 of 11 ₹ 13,335 Overdue /);
     expect(shown[1]).toContain("₹ 13,335");
     expect(shown[1]).toContain("New cycle. Suggested rent includes the hike (was ₹ 12,700).");
     expect(shown[1]).toMatch(/Log payment Details$/);
-    expect(shown[2]).toMatch(/^Second floor, single bedroom Chitra · Payment 5 of 11 ₹ 9,000 Pending /);
+    expect(shown[2]).toMatch(/^Second floor, single bedroom Chitra · Payment 5 of 11 ₹ 9,000 Overdue /);
     expect(shown[2]).toContain("Advance ₹ 18,000 held Agreement ended 10 Oct 2026");
     expect(shown[3]).toMatch(/^Second floor, double bedroom No tenant recorded yet\. Vacant Add tenant$/);
     expect(shown[4]).toMatch(/^Third floor, hall and kitchen Vacant since 1 Oct 2026\. Esha moved out\. Vacant Add tenant Past tenants$/);
@@ -143,7 +143,9 @@ describe("the month screen", () => {
   it("colours each card's pill by its state, not only by its words", async () => {
     const html = await month();
     expect(html.match(new RegExp(`<span class="${pillClasses("success")}">Paid</span>`, "g"))).toHaveLength(1);
-    expect(html.match(new RegExp(`<span class="${pillClasses("warn")}">Pending</span>`, "g"))).toHaveLength(2);
+    // 17 October: the rent of October has counted as overdue since the 6th, so the two cards with no payment are red
+    expect(html.match(new RegExp(`<span class="${pillClasses("danger")}">Overdue</span>`, "g"))).toHaveLength(2);
+    expect(html).not.toContain(">Pending</span>");
     expect(html.match(new RegExp(`<span class="${pillClasses("neutral")}">Vacant</span>`, "g"))).toHaveLength(2);
   });
 

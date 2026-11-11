@@ -27,6 +27,8 @@ type Props = {
   store: OpenRowStore;
   /** The change shown on this card is on its way to the Sheet and is not confirmed yet. */
   saving: boolean;
+  /** The month is one whose rent counts as overdue, and this card has no payment (see isOverdueCard). */
+  overdue: boolean;
   onAction: (action: RowAction) => void;
 };
 
@@ -36,14 +38,14 @@ type Props = {
  * the row that opens and the one that closes, and nothing else. The details stay in the page while closed (they are what the
  * height animates), hidden from the keyboard and from screen readers.
  */
-function PortionRow({ card, monthKey, defaultDate, store, saving, onAction }: Props) {
+function PortionRow({ card, monthKey, defaultDate, store, saving, overdue, onAction }: Props) {
   const open = useSyncExternalStore(
     store.subscribe,
     () => store.get() === card.portionId,
     () => false,
   );
   const panelId = useId();
-  const status = rowStatus(card);
+  const status = rowStatus(card, overdue);
   const pill = rowPill(status);
   const amount = rowAmount(card);
   const noTenant = status === "vacant";

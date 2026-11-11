@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { PortionCard } from "@/lib/domain/types";
-import { rowAmount, rowPill, rowStatus, rowSubtitle } from "@/lib/portion-row";
+import { isOverdueCard, rowAmount, rowPill, rowStatus, rowSubtitle } from "@/lib/portion-row";
 
 const card = (overrides: Partial<PortionCard> = {}): PortionCard => ({
   portionId: "p1",
@@ -66,5 +66,40 @@ describe("a portion's status", () => {
     expect(rowPill("paid")).toEqual({ tone: "success", label: "Paid" });
     expect(rowPill("pending")).toEqual({ tone: "warn", label: "Pending" });
     expect(rowPill("vacant")).toEqual({ tone: "neutral", label: "Vacant" });
+  });
+});
+
+describe("the Overdue state of a pending card", () => {
+  const pending = card();
+
+  it("is overdue when its month is on or before the last month whose rent counts as overdue", () => {
+    // rent is due on the 1st and counts as overdue from the 6th: on 6 Oct October is overdue, on 5 Oct only September is
+    expect(isOverdueCard(pending, "2026-10", "2026-10-06")).toBe(true);
+    expect(isOverdueCard(pending, "2026-10", "2026-10-05")).toBe(false);
+    expect(isOverdueCard(pending, "2026-09", "2026-10-05")).toBe(true);
+    expect(isOverdueCard(pending, "2026-03", "2026-10-05")).toBe(true);
+  });
+
+  it("is never overdue for a month after the last due one", () => {
+    expect(isOverdueCard(pending, "2026-11", "2026-10-20")).toBe(false);
+    expect(isOverdueCard(pending, "2026-12", "2026-10-20")).toBe(false);
+  });
+
+  it("follows the Overdue screen: a paid, vacant or needs-tenant card, or one with no rent, is not overdue", () => {
+    for (const status of ["paid", "vacant", "needs-tenant"] as const) expect(isOverdueCard(card({ status }), "2026-09", "2026-10-20")).toBe(false);
+    expect(isOverdueCard(card({ rentReference: null }), "2026-09", "2026-10-20")).toBe(false);
+    expect(isOverdueCard(card({ rentReference: 0 }), "2026-09", "2026-10-20")).toBe(false);
+  });
+
+  it("is not overdue when the day is not a real day (nothing is guessed)", () => {
+    expect(isOverdueCard(pending, "2026-09", "not-a-day")).toBe(false);
+  });
+
+  it("makes the row status, the pill and the dot red and say Overdue", () => {
+    expect(rowStatus(pending, true)).toBe("overdue");
+    expect(rowStatus(pending, false)).toBe("pending");
+    expect(rowStatus(card({ status: "paid" }), true)).toBe("paid");
+    expect(rowStatus(card({ status: "vacant" }), true)).toBe("vacant");
+    expect(rowPill("overdue")).toEqual({ tone: "danger", label: "Overdue" });
   });
 });

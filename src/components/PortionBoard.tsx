@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/Button";
 import { FilterChip } from "@/components/ui/FilterChip";
 import type { PortionCard } from "@/lib/domain/types";
 import { createOpenRowStore } from "@/lib/open-row";
+import { isOverdueCard } from "@/lib/portion-row";
 import { FILTERS, filterCards, filterCounts, filterLabel, type Filter } from "@/lib/portion-filter";
 import { CHIP_ROW } from "@/lib/ui-classes";
 import PortionRow, { type RowAction } from "./PortionRow";
@@ -68,6 +69,7 @@ export default function PortionBoard({ monthKey, cards, defaultDate, saving = NO
               defaultDate={defaultDate}
               store={openRow}
               saving={saving.has(card.portionId)}
+              overdue={isOverdueCard(card, monthKey, defaultDate)}
               onAction={onAct}
             />
           ))}
