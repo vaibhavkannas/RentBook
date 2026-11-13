@@ -16,11 +16,11 @@ describe("BRAND", () => {
       tagline: "Rent receipts, straight into your own Google Sheet.",
       description: "Record monthly rent receipts into your Google Sheet.",
       colors: {
-        accent: "#0f766e",
+        accent: "#4f46e5",
         accentInk: "#ffffff",
-        background: "#f3f5f7",
-        accentDark: "#3cc3b4",
-        backgroundDark: "#0c1218",
+        background: "#f4f4fb",
+        accentDark: "#8b87ff",
+        backgroundDark: "#0f1020",
       },
     });
   });
@@ -54,22 +54,22 @@ describe("globals.css", () => {
 
   it("carries every colour token, in the palette of the redesign", () => {
     const tokens: Record<string, [string, string]> = {
-      "--foreground": ["#14202b", "#e8eef4"],
-      "--surface": ["#ffffff", "#151d26"],
-      "--surface-2": ["#eaeef2", "#1d2833"],
-      "--muted": ["#5c6b7a", "#93a3b3"],
-      "--line": ["#dbe2e9", "#27333f"],
-      "--control": ["#7b8794", "#5b6b7a"],
-      "--accent-ink": ["#ffffff", "#06201d"],
-      "--accent-soft": ["#d9f1ee", "#12332f"],
+      "--foreground": ["#1a1b3a", "#eceefe"],
+      "--surface": ["#ffffff", "#181a33"],
+      "--surface-2": ["#ebebf7", "#212445"],
+      "--muted": ["#5d6080", "#9a9dc4"],
+      "--line": ["#dcdcee", "#2b2e55"],
+      "--control": ["#8486a8", "#6d70a4"],
+      "--accent-ink": ["#ffffff", "#12123a"],
+      "--accent-soft": ["#e3e1fb", "#26285a"],
       "--success-bg": ["#dff3e8", "#12331f"],
       "--success-ink": ["#17703f", "#5dd496"],
       "--warn-bg": ["#fdecc8", "#3a2a0a"],
       "--warn-ink": ["#9a5b00", "#f2b44a"],
       "--danger-bg": ["#fbdedb", "#3d1714"],
       "--danger-ink": ["#b4281f", "#ff8c82"],
-      "--off-bg": ["#e8edf1", "#222d38"],
-      "--off-ink": ["#55646f", "#93a3b3"],
+      "--off-bg": ["#ebebf7", "#212445"],
+      "--off-ink": ["#555878", "#9a9dc4"],
     };
     for (const [name, [lightValue, darkValue]] of Object.entries(tokens)) {
       expect(valueOf(light, name), `${name} (light)`).toBe(lightValue);
