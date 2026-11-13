@@ -5,6 +5,7 @@ import {
   applyOverlay,
   beginWrite,
   liveOverlay,
+  SETTLED_CAP_MS,
   rollbackWrite,
   settleWrite,
   type Change,
@@ -113,7 +114,7 @@ describe("what a card looks like while its change is on the way", () => {
 
 describe("what the month's figures look like while changes are on the way", () => {
   const base = view([pending("p1"), paid("p2"), vacant("p3")]);
-  const at = (changes: Change[]): Overlay => changes.reduce((overlay, change) => beginWrite(overlay, "2026-10", change, base), {});
+  const at = (changes: Change[]): Overlay => changes.reduce((overlay, change) => beginWrite(overlay, "2026-10", change), {});
 
   it("adds a logged amount to what was received, and counts the portion as paid", () => {
     const out = applyOverlay(base, at([{ kind: "log", portionId: "p1", amount: 5480 }]), "2026-10");
@@ -147,7 +148,7 @@ describe("what the month's figures look like while changes are on the way", () =
 
   it("is the very same view when nothing is on the way for the month, and only reads its own month's changes", () => {
     expect(applyOverlay(base, {}, "2026-10")).toBe(base);
-    const other = beginWrite({}, "2026-09", { kind: "log", portionId: "p1", amount: 5450 }, base);
+    const other = beginWrite({}, "2026-09", { kind: "log", portionId: "p1", amount: 5450 });
     expect(applyOverlay(base, other, "2026-10")).toBe(base);
   });
 
@@ -159,44 +160,41 @@ describe("what the month's figures look like while changes are on the way", () =
 });
 
 describe("the changes on the way", () => {
-  const v1 = view([pending()]);
-  const v2 = view([paid("p1")]);
   const log: Change = { kind: "log", portionId: "p1", amount: 5450 };
 
   it("starts one as saving, and the same portion in the same month has only one", () => {
-    const overlay = beginWrite(beginWrite({}, "2026-10", log, v1), "2026-10", { kind: "edit", portionId: "p1", amount: 1 }, v1);
+    const overlay = beginWrite(beginWrite({}, "2026-10", log), "2026-10", { kind: "edit", portionId: "p1", amount: 1 });
     expect(Object.keys(overlay)).toHaveLength(1);
     expect(Object.values(overlay)[0]).toMatchObject({ saving: true, change: { kind: "edit" } });
   });
 
   it("rolls one back, and only that one", () => {
-    let overlay = beginWrite({}, "2026-10", log, v1);
-    overlay = beginWrite(overlay, "2026-10", { kind: "undo", portionId: "p2" }, v1);
+    let overlay = beginWrite({}, "2026-10", log);
+    overlay = beginWrite(overlay, "2026-10", { kind: "undo", portionId: "p2" });
     overlay = rollbackWrite(overlay, "2026-10", "p1");
     expect(Object.values(overlay).map((entry) => entry.change.portionId)).toEqual(["p2"]);
     expect(rollbackWrite(overlay, "2026-10", "nothing")).toEqual(overlay);
   });
 
-  it("is kept while it is saving, whatever arrives", () => {
-    const overlay = beginWrite({}, "2026-10", log, v1);
-    expect(liveOverlay(overlay, v2)).toEqual(overlay);
-  });
-
-  it("is kept after it was answered until the screen has the server's data of its own, and then goes", () => {
-    const settled = settleWrite(beginWrite({}, "2026-10", log, v1), "2026-10", "p1", v1);
-    expect(Object.values(settled)[0].saving).toBe(false);
-    expect(liveOverlay(settled, v1)).toEqual(settled);
-    expect(liveOverlay(settled, v2)).toEqual({});
-  });
-
-  it("is not dropped by data that arrived while it was saving, once it is answered against that data", () => {
-    // a refresh landed (v2) between the start and the answer: the answer is settled against v2, so the next arrival drops it
-    const settled = settleWrite(beginWrite({}, "2026-10", log, v1), "2026-10", "p1", v2);
-    expect(liveOverlay(settled, v2)).toEqual(settled);
-    expect(liveOverlay(settled, view([]))).toEqual({});
+  it("is kept while it is saving, whatever arrives and however late", () => {
+    const overlay = beginWrite({}, "2026-10", log);
+    expect(liveOverlay(overlay, 99, 1_000_000)).toEqual(overlay);
   });
 
   it("settles nothing that is not there", () => {
-    expect(settleWrite({}, "2026-10", "p1", v1)).toEqual({});
+    expect(settleWrite({}, "2026-10", "p1", 1, 0)).toEqual({});
+  });
+
+  it("is kept after it was answered until data arrives that was asked for after the answer, and then goes", () => {
+    const settled = settleWrite(beginWrite({}, "2026-10", log), "2026-10", "p1", 5, 1000);
+    expect(liveOverlay(settled, 4, 1100)).toEqual(settled);
+    expect(liveOverlay(settled, 5, 1100)).toEqual(settled);
+    expect(liveOverlay(settled, 6, 1100)).toEqual({});
+  });
+
+  it("is let go after the cap even when no data came, so it cannot outlive a load that never arrives", () => {
+    const settled = settleWrite(beginWrite({}, "2026-10", log), "2026-10", "p1", 5, 1000);
+    expect(liveOverlay(settled, 0, 1000 + SETTLED_CAP_MS - 1)).toEqual(settled);
+    expect(liveOverlay(settled, 0, 1000 + SETTLED_CAP_MS)).toEqual({});
   });
 });

@@ -8,7 +8,8 @@ import type { MonthView, PortionCard } from "@/lib/domain/types";
 import { addMonths, parseYmKey, ymKey } from "@/lib/domain/year-month";
 import { formatMonthTitle } from "@/lib/format";
 import { canSwitchHere } from "@/lib/month-window";
-import { applyOverlay, beginWrite, liveOverlay, rollbackWrite, savingIds, settleWrite, type Overlay, type Writes } from "@/lib/optimistic";
+import { applyOverlay, beginWrite, liveOverlay, rollbackWrite, savingIds, settleWrite, SETTLED_CAP_MS, type Overlay, type Writes } from "@/lib/optimistic";
+import { createRefreshClock } from "@/lib/refresh-clock";
 import { watchForeground } from "@/lib/foreground-refresh";
 import { closeIfCurrent } from "@/lib/sheet-active";
 import { createRefreshStore } from "@/lib/refresh-status";
@@ -77,27 +78,38 @@ export default function MonthScreen({ monthKey, currentKey, today, renderedAt, v
   const [active, setActive] = useState<Active | null>(null);
   const [, startQuietRefresh] = useTransition();
   const [refreshStore] = useState(createRefreshStore);
+  // The order of loads and confirmed writes: a load asked for before a write cannot undo it (see src/lib/refresh-clock.ts).
+  const [clock] = useState(createRefreshClock);
+  const clockState = useSyncExternalStore(clock.subscribe, clock.getState, clock.getState);
   // Back in the foreground after a while: load the page again without a sound, so the figures are not old (see foreground-refresh).
-  useEffect(() => watchForeground(document, () => startQuietRefresh(() => router.refresh())), [router]);
+  useEffect(() => watchForeground(document, () => {
+      clock.startLoad();
+      startQuietRefresh(() => router.refresh());
+    }), [router, clock]);
   useEffect(() => () => refreshStore.dispose(), [refreshStore]);
   const opened = useRef(0);
   // Changes on their way to the Sheet: the cards show them at once (see src/lib/optimistic.ts). The data the screen has now is
   // what an answered change waits to be replaced by, and it is kept in a ref so that answering reads the latest.
   const [overlay, setOverlay] = useState<Overlay>({});
-  const latestViews = useRef(views);
-  useEffect(() => {
-    latestViews.current = views;
-  });
+  // New data from the server arrives as new views: the clock notes it (and which load it was).
+  useEffect(() => clock.arrive(), [views, clock]);
   const writes = useMemo<Writes>(
     () => ({
-      begin: (month, change) => setOverlay((o) => beginWrite(o, month, change, latestViews.current)),
-      settle: (month, portionId) => setOverlay((o) => settleWrite(o, month, portionId, latestViews.current)),
+      begin: (month, change) => setOverlay((o) => beginWrite(o, month, change)),
+      settle: (month, portionId) => setOverlay((o) => settleWrite(o, month, portionId, clock.confirmWrite(), clock.now())),
       rollback: (month, portionId) => setOverlay((o) => rollbackWrite(o, month, portionId)),
+      noteRefresh: () => void clock.startLoad(),
       busy: (month, portionId) => savingIds(latestOverlay.current, month).has(portionId),
     }),
-    [],
+    [clock],
   );
-  const live = useMemo(() => liveOverlay(overlay, views), [overlay, views]);
+  const live = useMemo(() => liveOverlay(overlay, clockState.arrivedSeq, clockState.now), [overlay, clockState]);
+  // A confirmed change waits for data that contains it, and is let go after the cap if none comes: look again then.
+  useEffect(() => {
+    if (!Object.values(overlay).some((entry) => !entry.saving)) return;
+    const timer = setTimeout(() => clock.poke(), SETTLED_CAP_MS + 50);
+    return () => clearTimeout(timer);
+  }, [overlay, clock]);
   const latestOverlay = useRef(live);
   useEffect(() => {
     latestOverlay.current = live;
@@ -207,7 +219,7 @@ export default function MonthScreen({ monthKey, currentKey, today, renderedAt, v
           </IconButton>
         </nav>
         {atCurrent ? (
-          <RefreshButton store={refreshStore} />
+          <RefreshButton store={refreshStore} onStart={clock.startLoad} />
         ) : (
           <IconButton
             framed

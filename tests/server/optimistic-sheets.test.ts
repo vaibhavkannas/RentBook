@@ -20,7 +20,7 @@ import PaymentSheet from "@/components/PaymentSheet";
 import UndoSheet from "@/components/UndoSheet";
 
 const read = (name: string) => withoutComments(readFileSync(new URL(`../../src/components/${name}`, import.meta.url), "utf8"));
-const writes = { begin: vi.fn(), settle: vi.fn(), rollback: vi.fn(), busy: vi.fn(() => false) };
+const writes = { begin: vi.fn(), settle: vi.fn(), rollback: vi.fn(), busy: vi.fn(() => false), noteRefresh: vi.fn() };
 
 const pending: PortionCard = {
   portionId: "p1",
@@ -146,7 +146,7 @@ describe("the month screen", () => {
   });
 
   it("shows the change on the cards and the summary from one overlay, and drops it when the server's data arrives", () => {
-    expect(screen).toMatch(/liveOverlay\(overlay, views\)/);
+    expect(screen).toMatch(/liveOverlay\(overlay, clockState\.arrivedSeq, clockState\.now\)/);
     expect(screen).toMatch(/applyOverlay\(shownView, live, shownKey\)/);
   });
 });
@@ -171,5 +171,17 @@ describe("a save answered after its sheet is gone", () => {
     const layout = withoutComments(readFileSync(new URL("../../src/app/layout.tsx", import.meta.url), "utf8"));
     expect(layout).toContain("<WriteNotices />");
     expect(read("WriteNotices.tsx")).toMatch(/sendJson<LogRetryResponse>\("\/api\/payments\/log-retry", \{ token \}\)/);
+  });
+});
+
+describe("the loads and the writes of the month screen share one clock", () => {
+  it("numbers every load it asks for (the refresh button, the quiet refresh, a write's own) and every confirmed write", () => {
+    const screen = read("MonthScreen.tsx");
+    expect(screen).toMatch(/clock\.startLoad\(\);\s*startQuietRefresh/);
+    expect(screen).toMatch(/onStart=\{clock\.startLoad\}/);
+    expect(screen).toMatch(/settleWrite\(o, month, portionId, clock\.confirmWrite\(\), clock\.now\(\)\)/);
+    expect(screen).toMatch(/noteRefresh: \(\) => void clock\.startLoad\(\)/);
+    expect(screen).toMatch(/useEffect\(\(\) => clock\.arrive\(\), \[views, clock\]\)/);
+    for (const name of ["PaymentSheet.tsx", "UndoSheet.tsx"]) expect(read(name), name).toMatch(/writes\?\.noteRefresh\(\);\s*router\.refresh\(\);/);
   });
 });

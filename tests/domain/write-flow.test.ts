@@ -8,7 +8,6 @@ import {
   UNDO_NO_CONFIRMATION,
 } from "@/lib/request-copy";
 import { applyStep, classifyPayment, classifyUndo, type PaymentAnswer, type UndoAnswer, type WriteHooks } from "@/lib/write-flow";
-import { beginWrite, liveOverlay, rollbackWrite, settleWrite } from "@/lib/optimistic";
 
 // The month screen changes a card at once and sends the request. These are the ways the answer can end that: which case each
 // answer is, and what each does to the card.
@@ -120,28 +119,6 @@ describe("what each ending does to the screen", () => {
     const unsure = hooks();
     applyStep({ kind: "failed", refresh: true }, unsure.h);
     expect(unsure.calls).toEqual(["rollback", "refresh"]);
-  });
-});
-
-describe("a whole write on the overlay", () => {
-  const log = { kind: "log", portionId: "p1", amount: 5450 } as const;
-  const v1 = { server: 1 };
-  const v2 = { server: 2 };
-
-  it("shows the change at once, keeps it through the answer and drops it when the real data arrives", () => {
-    let overlay = beginWrite({}, "2026-10", log, v1);
-    expect(Object.keys(liveOverlay(overlay, v1))).toHaveLength(1);
-    overlay = settleWrite(overlay, "2026-10", "p1", v1);
-    expect(Object.keys(liveOverlay(overlay, v1))).toHaveLength(1);
-    expect(liveOverlay(overlay, v2)).toEqual({});
-  });
-
-  it("drops the change when the write fails, and the later Replace or Try again starts a fresh one", () => {
-    let overlay = beginWrite({}, "2026-10", log, v1);
-    overlay = rollbackWrite(overlay, "2026-10", "p1");
-    expect(overlay).toEqual({});
-    overlay = beginWrite(overlay, "2026-10", { kind: "edit", portionId: "p1", amount: 6000 }, v1);
-    expect(Object.values(overlay)[0].change).toMatchObject({ kind: "edit", amount: 6000 });
   });
 });
 

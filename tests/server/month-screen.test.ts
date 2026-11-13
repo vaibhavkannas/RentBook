@@ -148,7 +148,7 @@ describe("the quiet refresh when the app returns to the foreground", () => {
   const screen = readFileSync(new URL("../../src/components/MonthScreen.tsx", import.meta.url), "utf8");
 
   it("is wired in the month screen, through a transition of its own so the figures stay while it loads", () => {
-    expect(screen).toMatch(/watchForeground\(document, \(\) => startQuietRefresh\(\(\) => router\.refresh\(\)\)\)/);
+    expect(screen).toMatch(/watchForeground\(document, \(\) => \{\s*clock\.startLoad\(\);\s*startQuietRefresh\(\(\) => router\.refresh\(\)\);\s*\}\)/);
     expect(screen).toMatch(/const \[, startQuietRefresh\] = useTransition\(\)/);
   });
 

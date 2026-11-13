@@ -91,7 +91,10 @@ export default function UndoSheet({ monthKey, monthLabel, card, onClose, writes 
       begin: () => writes?.begin(monthKey, { kind: "undo", portionId: card.portionId }),
       settle: () => writes?.settle(monthKey, card.portionId),
       rollback: () => writes?.rollback(monthKey, card.portionId),
-      refresh: () => router.refresh(),
+      refresh: () => {
+        writes?.noteRefresh();
+        router.refresh();
+      },
     };
     if (writes?.busy(monthKey, card.portionId)) return setError("A change to this portion is still being saved. Wait a moment, then try again.");
     setBusy(true);

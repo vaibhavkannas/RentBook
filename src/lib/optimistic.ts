@@ -70,22 +70,28 @@ export function applyChange(card: PortionCard, change: Change): PortionCard {
   }
 }
 
-/** One change on its way. `since` is the data the screen had when it was started or answered: new data after that ends it. */
-export type WriteEntry = { change: Change; saving: boolean; since: unknown };
+/**
+ * One change on its way. Once it is answered (`saving` false) it waits to be replaced by the server's own data: `settledSeq` is the
+ * logical time the write was confirmed (see refresh-clock.ts) and `settledAt` the clock time, for the hard cap.
+ */
+export type WriteEntry = { change: Change; saving: boolean; settledSeq: number; settledAt: number };
 export type Overlay = Record<string, WriteEntry>;
+
+/** How long a confirmed change may wait for data that contains it, at most, before it is let go. */
+export const SETTLED_CAP_MS = 6000;
 
 const keyOf = (monthKey: string, portionId: string) => `${monthKey}|${portionId}`;
 
 /** Starts a change as saving. A portion has one change at a time in a month: a later one replaces an earlier. */
-export function beginWrite(overlay: Overlay, monthKey: string, change: Change, since: unknown): Overlay {
-  return { ...overlay, [keyOf(monthKey, change.portionId)]: { change, saving: true, since } };
+export function beginWrite(overlay: Overlay, monthKey: string, change: Change): Overlay {
+  return { ...overlay, [keyOf(monthKey, change.portionId)]: { change, saving: true, settledSeq: 0, settledAt: 0 } };
 }
 
-/** The request was answered and saved: the "Saving" mark goes, and the change waits for the server's data to replace it. */
-export function settleWrite(overlay: Overlay, monthKey: string, portionId: string, since: unknown): Overlay {
+/** The request was answered and saved: the "Saving" mark goes, and the change waits for data that was asked for after this. */
+export function settleWrite(overlay: Overlay, monthKey: string, portionId: string, seq: number, now: number): Overlay {
   const key = keyOf(monthKey, portionId);
   const entry = overlay[key];
-  return entry ? { ...overlay, [key]: { ...entry, saving: false, since } } : overlay;
+  return entry ? { ...overlay, [key]: { ...entry, saving: false, settledSeq: seq, settledAt: now } } : overlay;
 }
 
 /** The request failed: the card goes back to what the server had. */
@@ -97,9 +103,15 @@ export function rollbackWrite(overlay: Overlay, monthKey: string, portionId: str
   return rest;
 }
 
-/** What is still on its way: a change that was answered goes once the screen has data other than what it was answered against. */
-export function liveOverlay(overlay: Overlay, data: unknown): Overlay {
-  const kept = Object.entries(overlay).filter(([, entry]) => entry.saving || entry.since === data);
+/**
+ * What is still on its way. A change that is saving stays. A change that was answered stays until data arrives that was asked for
+ * after the answer (`arrivedSeq` is the logical time of the newest such data: a load asked for earlier cannot contain the write,
+ * so it must not undo it), or until SETTLED_CAP_MS have passed, so a change cannot outlive a load that never comes.
+ */
+export function liveOverlay(overlay: Overlay, arrivedSeq: number, now: number): Overlay {
+  const kept = Object.entries(overlay).filter(
+    ([, entry]) => entry.saving || (arrivedSeq <= entry.settledSeq && now - entry.settledAt < SETTLED_CAP_MS),
+  );
   return kept.length === Object.keys(overlay).length ? overlay : Object.fromEntries(kept);
 }
 
@@ -143,4 +155,6 @@ export type Writes = {
   rollback(monthKey: string, portionId: string): void;
   /** Whether a change to the portion is still on its way: a second one is not started. */
   busy(monthKey: string, portionId: string): boolean;
+  /** The sheet is about to load the page again: the clock takes the time of the load, so a late load cannot undo a newer write. */
+  noteRefresh(): void;
 };

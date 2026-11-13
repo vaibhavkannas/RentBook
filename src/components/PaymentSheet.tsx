@@ -216,7 +216,10 @@ export default function PaymentSheet({
       begin: () => change && writes?.begin(monthKey, change),
       settle: () => writes?.settle(monthKey, portionId),
       rollback: () => change && writes?.rollback(monthKey, portionId),
-      refresh: () => router.refresh(),
+      refresh: () => {
+        writes?.noteRefresh();
+        router.refresh();
+      },
     };
     setBusy(true);
     setProblem(null);

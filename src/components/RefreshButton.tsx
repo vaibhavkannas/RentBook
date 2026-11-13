@@ -13,7 +13,7 @@ import { cx } from "@/lib/ui-classes";
  * for a moment. It keeps its 44 px square whatever it shows, so nothing moves. Its state lives in the store, so a press draws
  * this button (and the "Updated" words) and not the screen.
  */
-export default function RefreshButton({ store }: { store: RefreshStore }) {
+export default function RefreshButton({ store, onStart }: { store: RefreshStore; onStart?: () => void }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const phase = useSyncExternalStore(store.subscribe, store.get, () => "idle" as const);
@@ -33,7 +33,10 @@ export default function RefreshButton({ store }: { store: RefreshStore }) {
         label="Refresh"
         aria-busy={phase === "updating"}
         onClick={() => {
-          if (store.start()) startTransition(() => router.refresh());
+          if (store.start()) {
+            onStart?.();
+            startTransition(() => router.refresh());
+          }
         }}
       >
         <span className={cx("grid place-items-center", look.turning && "refresh-turn")}>
