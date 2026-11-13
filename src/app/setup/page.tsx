@@ -6,11 +6,13 @@ import { Card } from "@/components/ui/Card";
 import { Notice } from "@/components/ui/Notice";
 import { Page } from "@/components/ui/Page";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { Pill } from "@/components/ui/Pill";
 import { monthParam, withMonth } from "@/lib/app-nav";
 import { BRAND } from "@/lib/brand";
 import { LAYOUT_RULES } from "@/lib/layout-rules";
 import { getViewer } from "@/lib/server/auth-guard";
 import { getSheetsContext } from "@/lib/server/context";
+import { parseAllowedEmails } from "@/lib/server/env";
 import { setupReport } from "@/lib/server/setup-report";
 import { headline } from "@/lib/setup-checks";
 import { prepareOffer } from "@/lib/setup-prepare";
@@ -51,6 +53,8 @@ export default async function SetupPage({
   // A warning (an Active cell that is not Yes or No) means the tab is readable, so it keeps the link; a failure or a tab not made yet does not.
   const settingsReady = checks.some((check) => check.id === "settings" && (check.status === "ok" || check.status === "warn"));
   const allGood = checks.every((check) => check.status === "ok");
+  // Who may sign in: read-only here, because the list is a security setting that lives in the deployment, not in the app.
+  const allowed = parseAllowedEmails(process.env);
 
   return (
     <Page>
@@ -83,6 +87,22 @@ export default async function SetupPage({
           ),
         }}
       />
+
+      <Card className="mt-3">
+        <h2 className="font-medium">Who has access</h2>
+        <ul className="mt-2 divide-y divide-line">
+          {allowed.map((email, index) => (
+            <li key={email} className="flex items-center justify-between gap-3 py-2 text-sm">
+              <span className="min-w-0 break-words">{email}</span>
+              <Pill tone={index === 0 ? "success" : "neutral"}>{index === 0 ? "Owner" : "Member"}</Pill>
+            </li>
+          ))}
+        </ul>
+        <p className="mt-2 text-sm text-muted">
+          To add or remove someone, change ALLOWED_EMAILS in your Vercel settings and redeploy. The first address is the owner.
+          See SETUP.md.
+        </p>
+      </Card>
 
       <Card className="mt-3">
         <details>

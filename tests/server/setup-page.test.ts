@@ -150,6 +150,13 @@ describe("who sees the Set up page", () => {
     expect(html).not.toContain("<h2");
   });
 
+  it("shows a member no address from the list", async () => {
+    mocks.getViewer.mockResolvedValue({ email: "member@example.com", isOwner: false });
+    const text = visibleText(await render());
+    expect(text).not.toContain("Who has access");
+    expect(text).not.toContain("owner@example.com");
+  });
+
   it("exports the time limit every page that reads the Sheet has", () => {
     expect(maxDuration).toBe(15);
   });
@@ -211,6 +218,16 @@ describe("the owner's view of a connected Sheet", () => {
     ]) {
       expect(text, part).toContain(part);
     }
+  });
+
+  it("lists who has access, the owner first, and says where to change the list", async () => {
+    const html = await render();
+    const text = visibleText(html);
+    expect(text).toContain("Who has access");
+    expect(text).toContain("owner@example.com Owner");
+    expect(text).toContain("member@example.com Member");
+    expect(text.indexOf("owner@example.com Owner")).toBeLessThan(text.indexOf("member@example.com Member"));
+    expect(text).toContain("To add or remove someone, change ALLOWED_EMAILS in your Vercel settings and redeploy. The first address is the owner.");
   });
 
   it("has no Prepare my Sheet card when there is nothing to prepare", async () => {
@@ -491,7 +508,9 @@ describe("what the page never shows", () => {
       serveSheet(gateway);
       const html = await render();
       expect(html, name).toContain(CANARY_EMAIL);
-      const rest = html.replaceAll(CANARY_EMAIL, "");
+      // The owner's own address is shown once, in "Who has access" (the allowed list is read-only there), and nowhere else.
+      expect(html.split(owner).length - 1, `${name}: the owner's address`).toBe(1);
+      const rest = html.replaceAll(CANARY_EMAIL, "").replaceAll(owner, "");
       for (const canary of [...CANARIES, "CANARY", "2031", "BEGIN PRIVATE KEY", "MIIE"]) expect(rest, `${name}: ${canary}`).not.toContain(canary);
     }
   });
@@ -501,7 +520,7 @@ describe("what the page never shows", () => {
     mocks.getSheetsContext.mockImplementation(() => {
       throw configError("GOOGLE_SERVICE_ACCOUNT_JSON is not valid JSON.");
     });
-    const html = await render();
+    const html = (await render()).replaceAll(owner, "");
     for (const canary of [...CANARIES, "CANARY"]) expect(html, canary).not.toContain(canary);
 
     setEnv(env);
@@ -511,7 +530,7 @@ describe("what the page never shows", () => {
     broken.tabs.get(SETTINGS_TAB)![2][2] = "Tenant9";
     serveSheet(broken);
     const second = await render();
-    for (const canary of [...CANARIES, "CANARY"]) expect(second.replaceAll(CANARY_EMAIL, ""), canary).not.toContain(canary);
+    for (const canary of [...CANARIES, "CANARY"]) expect(second.replaceAll(CANARY_EMAIL, "").replaceAll(owner, ""), canary).not.toContain(canary);
   });
 
   it("does not print the version, the host or the Sheet's address", async () => {
