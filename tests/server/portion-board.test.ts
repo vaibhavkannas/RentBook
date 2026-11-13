@@ -37,14 +37,14 @@ describe("the filter chips", () => {
   const out = board();
   const group = out.match(/<div role="group" aria-label="Filter portions"[\s\S]*?<\/div>/)![0];
 
-  it("are a group of four buttons: All, Pending, Paid and Vacant, with their counts", () => {
+  it("are a group of four buttons: All, Unpaid, Paid and Vacant, with their counts", () => {
     const chips = [...group.matchAll(/<button[^>]*aria-pressed="(true|false)"[^>]*>([\s\S]*?)<\/button>/g)].map((m) => ({
       pressed: m[1],
       text: m[2].replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim(),
     }));
     expect(chips).toEqual([
       { pressed: "true", text: "All 5" },
-      { pressed: "false", text: "Pending 2" },
+      { pressed: "false", text: "Unpaid 2" },
       { pressed: "false", text: "Paid 1" },
       { pressed: "false", text: "Vacant 2" },
     ]);
@@ -160,8 +160,8 @@ describe("the Overdue state of a row", () => {
     expect(out).not.toContain("Overdue</span>");
   });
 
-  it("counts an overdue card under the Pending chip, which still shows it", () => {
+  it("counts an overdue card under the Unpaid chip, which still shows it", () => {
     const out = rows("2026-09", "2026-10-20", [owing("p1"), card("p2", "paid")]);
-    expect(out).toMatch(/aria-pressed="false"[^>]*>Pending[\s\S]*?>1<\/span>/);
+    expect(out).toMatch(/aria-pressed="false"[^>]*>Unpaid[\s\S]*?>1<\/span>/);
   });
 });

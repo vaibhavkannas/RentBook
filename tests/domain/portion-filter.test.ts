@@ -18,9 +18,9 @@ const card = (portionId: string, status: PortionCard["status"]): PortionCard => 
 const CARDS = [card("a", "paid"), card("b", "pending"), card("c", "pending"), card("d", "vacant"), card("e", "needs-tenant")];
 
 describe("the filter chips of the month screen", () => {
-  it("are All, Pending, Paid and Vacant, in that order", () => {
+  it("are All, Unpaid, Paid and Vacant, in that order", () => {
     expect(FILTERS).toEqual(["all", "pending", "paid", "vacant"]);
-    expect(FILTERS.map(filterLabel)).toEqual(["All", "Pending", "Paid", "Vacant"]);
+    expect(FILTERS.map(filterLabel)).toEqual(["All", "Unpaid", "Paid", "Vacant"]);
   });
 
   it("count the cards of each kind; a portion that never had a tenant is vacant too", () => {

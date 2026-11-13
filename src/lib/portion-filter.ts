@@ -5,7 +5,7 @@ import { isVacantCard } from "@/lib/month-summary";
 export const FILTERS = ["all", "pending", "paid", "vacant"] as const;
 export type Filter = (typeof FILTERS)[number];
 
-const LABELS: Record<Filter, string> = { all: "All", pending: "Pending", paid: "Paid", vacant: "Vacant" };
+const LABELS: Record<Filter, string> = { all: "All", pending: "Unpaid", paid: "Paid", vacant: "Vacant" };
 export const filterLabel = (filter: Filter): string => LABELS[filter];
 
 const MATCHES: Record<Filter, (card: PortionCard) => boolean> = {

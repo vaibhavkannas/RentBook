@@ -462,7 +462,7 @@ const rowsAndChips: Check = {
     const rowCount = async () => rows.count();
     if ((await rowCount()) !== 5) throw new Error(`The month screen has ${await rowCount()} rows, expected 5`);
     // A chip narrows the rows to its kind and says how many there are.
-    for (const [chip, expected] of [["Pending", 2], ["Paid", 1], ["Vacant", 2], ["All", 5]] as const) {
+    for (const [chip, expected] of [["Unpaid", 2], ["Paid", 1], ["Vacant", 2], ["All", 5]] as const) {
       await tap(chips.getByRole("button", { name: new RegExp(`^${chip}`) }), `the ${chip} chip`);
       await until(`${expected} rows under ${chip}`, async () => (await rowCount()) === expected);
       if ((await chips.getByRole("button", { name: new RegExp(`^${chip}`) }).getAttribute("aria-pressed")) !== "true") throw new Error(`The ${chip} chip is not pressed`);
@@ -573,9 +573,9 @@ const overdueState: Check = {
     // The month before is always overdue for a card with no payment: Chitra paid nothing for it.
     await open(run, page, `/?month=${months(run).beforeKey}`);
     await see(pill(page, P3, "Overdue"), `${P3} Overdue last month`);
-    // The Pending chip still lists the overdue card.
-    await tap(page.getByRole("button", { name: /^Pending/ }), "the Pending chip");
-    await see(card(page, P3), `${P3} under the Pending chip`);
+    // The Unpaid chip still lists the overdue card.
+    await tap(page.getByRole("button", { name: /^Unpaid/ }), "the Unpaid chip");
+    await see(card(page, P3), `${P3} under the Unpaid chip`);
   },
 };
 
