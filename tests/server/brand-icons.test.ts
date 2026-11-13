@@ -103,7 +103,7 @@ async function render(draw: (props: { id: Promise<string> }) => Response | Promi
   return { response, bytes: new Uint8Array(await response.arrayBuffer()) };
 }
 
-const ACCENT = [0x4f, 0x46, 0xe5, 255];
+const ACCENT = [0x0f, 0x76, 0x6e, 255];
 const WHITE = [255, 255, 255, 255];
 
 /** A pixel is the colour asked for, give or take a few steps a channel: another encoder or resvg version may round differently. */
