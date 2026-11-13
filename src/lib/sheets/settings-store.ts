@@ -10,8 +10,8 @@ import { headerKey } from "./headers";
 import { findHeaderRowIndex, shorten } from "./schedule";
 import { addTabIfMissing } from "./tabs";
 import { DEFAULT_TAB_NAMES } from "./tab-names";
-import { ensureTenancyLogTab, TENANCY_LOG_TAB } from "./tenancy-log-store";
-import { ensureTenantsTab, TENANTS_TAB } from "./tenants-store";
+import { ensureTenancyLogTab, TENANCY_LOG_HEADERS, TENANCY_LOG_TAB } from "./tenancy-log-store";
+import { ensureTenantsTab, TENANT_HEADERS, TENANTS_TAB } from "./tenants-store";
 
 export const SETTINGS_TAB = DEFAULT_TAB_NAMES.settings;
 export const LOG_TAB = DEFAULT_TAB_NAMES.log;
@@ -285,6 +285,30 @@ function logHeaderWrites(fill: number[]): CellWrite[] {
  */
 export type EnsureReport = { created: string[]; filled: string[] };
 
+/** What `prefetchChecks` read: the answer for each tab that was there; nothing for a tab that was not, or whose read failed. */
+type Prefetched = { settings?: unknown[][]; log?: unknown[][]; tenants?: unknown[][]; tenancyLog?: unknown[][] };
+
+/**
+ * Starts, together, the four reads the checks of `ensureTabs` begin with, for each of the Settings, Payments Log, Tenants and
+ * Tenancy Log tabs that is in `tabs`: the very reads each check made on its own, one after another. They are the same calls
+ * with the same ranges, only concurrent, and they are only reads: a tab that is missing is not asked for (it is created below,
+ * one step after another, as before), and nothing here writes. A read that fails is left out and the check that needs it reads
+ * it again in its own turn and fails the way it always did, so the first failure in the order the checks run is the one told,
+ * and the Tenancy Log's, which the app can do without, is still only logged by its own check.
+ */
+async function prefetchChecks(gateway: SheetsGateway, tabs: string[]): Promise<Prefetched> {
+  const read = (tab: string, a1: string, render: "UNFORMATTED_VALUE" | "FORMATTED_VALUE") =>
+    tabs.includes(tab) ? gateway.getValues(tab, a1, render) : Promise.resolve(undefined);
+  const [settings, log, tenants, tenancyLog] = await Promise.allSettled([
+    read(SETTINGS_TAB, SETTINGS_RANGE, "UNFORMATTED_VALUE"),
+    read(LOG_TAB, "A1:I1", "FORMATTED_VALUE"),
+    read(TENANTS_TAB, `A1:${colLetter(TENANT_HEADERS.length - 1)}1`, "FORMATTED_VALUE"),
+    read(TENANCY_LOG_TAB, `A1:${colLetter(TENANCY_LOG_HEADERS.length - 1)}1`, "FORMATTED_VALUE"),
+  ]);
+  const got = (result: PromiseSettledResult<unknown[][] | undefined>) => (result.status === "fulfilled" ? result.value : undefined);
+  return { settings: got(settings), log: got(log), tenants: got(tenants), tenancyLog: got(tenancyLog) };
+}
+
 /**
  * Creates the Settings, Payments Log, Tenants and Tenancy Log tabs when they are missing, once per gateway instance
  * (until resetBootstrap). Settings is seeded from the Schedule header row, and only on a Sheet that has none
@@ -301,6 +325,10 @@ export async function ensureTabs(gateway: SheetsGateway, scheduleTab: string): P
   if (bootstrapped.has(gateway)) return report;
   const tabs = await gateway.listTabs();
   if (!tabs.includes(scheduleTab)) throw tabMissing(scheduleTab);
+  // The reads the checks below start with do not depend on one another, so, for the tabs that are there, they are asked for
+  // together (a cold server used to wait for each in turn). Nothing is written here, and what is decided and written below is
+  // decided from the same answers, in the same order. See `prefetchChecks`.
+  const known = await prefetchChecks(gateway, tabs);
 
   const hasSettings = tabs.includes(SETTINGS_TAB);
   if (!hasSettings && (tabs.includes(LOG_TAB) || tabs.includes(TENANTS_TAB) || tabs.includes(TENANCY_LOG_TAB))) {
@@ -310,7 +338,7 @@ export async function ensureTabs(gateway: SheetsGateway, scheduleTab: string): P
     // An empty answer is read once more before it is believed: seeding writes over A1:H6 (its header row has eight cells, so it
     // writes "Active" into H1 of a tab that holds at most a header row; portion rows stay seven cells), so a read that came
     // back empty by mistake must never be what decides to replace the owner's settings.
-    let settings = await gateway.getValues(SETTINGS_TAB, SETTINGS_RANGE, "UNFORMATTED_VALUE");
+    let settings = known.settings ?? (await gateway.getValues(SETTINGS_TAB, SETTINGS_RANGE, "UNFORMATTED_VALUE"));
     if (settingsIsEmpty(settings)) {
       settings = await gateway.getValues(SETTINGS_TAB, SETTINGS_RANGE, "UNFORMATTED_VALUE");
     }
@@ -324,7 +352,7 @@ export async function ensureTabs(gateway: SheetsGateway, scheduleTab: string): P
     await gateway.updateValues([{ tab: LOG_TAB, a1: "A1", values: [LOG_HEADERS] }]);
     note(report, LOG_TAB, "created");
   } else {
-    const header = (await gateway.getValues(LOG_TAB, "A1:I1", "FORMATTED_VALUE"))[0] ?? [];
+    const header = (known.log ?? (await gateway.getValues(LOG_TAB, "A1:I1", "FORMATTED_VALUE")))[0] ?? [];
     if (header.length === 0) {
       await gateway.updateValues([{ tab: LOG_TAB, a1: "A1", values: [LOG_HEADERS] }]);
       note(report, LOG_TAB, "filled");
@@ -343,9 +371,9 @@ export async function ensureTabs(gateway: SheetsGateway, scheduleTab: string): P
       }
     }
   }
-  note(report, TENANTS_TAB, await ensureTenantsTab(gateway, tabs));
+  note(report, TENANTS_TAB, await ensureTenantsTab(gateway, tabs, known.tenants));
   try {
-    note(report, TENANCY_LOG_TAB, await ensureTenancyLogTab(gateway, tabs));
+    note(report, TENANCY_LOG_TAB, await ensureTenancyLogTab(gateway, tabs, known.tenancyLog));
   } catch (error) {
     logEvent("warn", "tenancy-log-tab-failed", errorLogFields(error, "The Tenancy Log tab could not be added or checked, so the history of changes is not kept until it can be"));
   }
