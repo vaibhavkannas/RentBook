@@ -39,7 +39,7 @@ vi.mock("@/lib/sheets/service", () => ({ readActivity: state.readActivity }));
 vi.mock("react", async (importOriginal) => (await import("../support/render-open")).mockReact(await importOriginal()));
 
 import ActivityPage from "@/app/activity/page";
-import { metadata, viewport } from "@/app/layout";
+import { generateViewport, metadata } from "@/app/layout";
 import MorePage from "@/app/more/page";
 import SignInPage from "@/app/signin/page";
 import LoadProblem from "@/components/LoadProblem";
@@ -269,8 +269,8 @@ beforeEach(() => {
 });
 
 describe("the viewport", () => {
-  it("fills the screen to the edges, follows the device's light and dark, and colours the browser bar", () => {
-    expect(viewport).toEqual({
+  it("fills the screen to the edges, follows the device's light and dark, and colours the browser bar", async () => {
+    expect(await generateViewport()).toEqual({
       width: "device-width",
       initialScale: 1,
       viewportFit: "cover",
@@ -283,7 +283,8 @@ describe("the viewport", () => {
     });
   });
 
-  it("never stops the person zooming in: no maximum scale, no user-scalable", () => {
+  it("never stops the person zooming in: no maximum scale, no user-scalable", async () => {
+    const viewport = await generateViewport();
     expect(viewport).not.toHaveProperty("maximumScale");
     expect(viewport).not.toHaveProperty("userScalable");
     expect(withoutComments(source("src/app/layout.tsx"))).not.toMatch(/maximumScale|userScalable|user-scalable|maximum-scale/);

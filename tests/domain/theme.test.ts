@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { adoptStoredTheme, chooseTheme, dataTheme, parseTheme, themeCookie, type ThemeEnv } from "@/lib/theme";
+import { adoptStoredTheme, applyThemeColor, chooseTheme, dataTheme, parseTheme, themeColorFor, themeCookie, type ThemeEnv } from "@/lib/theme";
+import { BRAND } from "@/lib/brand";
 
 /** A page, a cookie jar and a storage that can be taken away, as small fakes. */
 function fakeEnv(options: { stored?: string; storageThrows?: boolean } = {}) {
@@ -94,5 +95,44 @@ describe("adoptStoredTheme", () => {
       expect(attrs.size).toBe(0);
       expect(written).toEqual([]);
     }
+  });
+});
+
+describe("the browser bar colour", () => {
+  it("follows the phone in Auto, and the chosen Appearance in Light and Dark", () => {
+    expect(themeColorFor("auto")).toEqual([
+      { media: "(prefers-color-scheme: light)", color: BRAND.colors.accent },
+      { media: "(prefers-color-scheme: dark)", color: BRAND.colors.backgroundDark },
+    ]);
+    expect(themeColorFor("light")).toBe(BRAND.colors.accent);
+    expect(themeColorFor("dark")).toBe(BRAND.colors.backgroundDark);
+  });
+
+  it("is carried out on the page's own meta tags when the choice is made, and given back for Auto", () => {
+    const metas = [
+      { getAttribute: (n: string) => (n === "media" ? "(prefers-color-scheme: light)" : null), content: "#a", media: "(prefers-color-scheme: light)", dataset: {} as Record<string, string> },
+      { getAttribute: (n: string) => (n === "media" ? "(prefers-color-scheme: dark)" : null), content: "#b", media: "(prefers-color-scheme: dark)", dataset: {} as Record<string, string> },
+    ];
+    applyThemeColor(metas, "dark");
+    expect(metas.map((m) => [m.content, m.media])).toEqual([[BRAND.colors.backgroundDark, "all"], [BRAND.colors.backgroundDark, "all"]]);
+    applyThemeColor(metas, "auto");
+    expect(metas.map((m) => [m.content, m.media])).toEqual([
+      [BRAND.colors.accent, "(prefers-color-scheme: light)"],
+      [BRAND.colors.backgroundDark, "(prefers-color-scheme: dark)"],
+    ]);
+  });
+});
+
+describe("the cookie over https", () => {
+  it("is Secure only when the page is served over https", () => {
+    expect(themeCookie("dark", true)).toBe("rentbook-theme=dark; Path=/; Max-Age=31536000; SameSite=Lax; Secure");
+    expect(themeCookie("auto", true)).toBe("rentbook-theme=; Path=/; Max-Age=0; SameSite=Lax; Secure");
+    expect(themeCookie("dark", false)).toBe(themeCookie("dark"));
+  });
+
+  it("is written Secure by chooseTheme when the browser says it is on https", () => {
+    const written: string[] = [];
+    chooseTheme({ setRoot: () => {}, writeCookie: (t) => written.push(t), storage: null, secure: true }, "light");
+    expect(written[0]).toMatch(/; Secure$/);
   });
 });

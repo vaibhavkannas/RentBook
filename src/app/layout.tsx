@@ -8,7 +8,7 @@ import ThemeSync from "@/components/ThemeSync";
 import TabBar, { TabBarFallback } from "@/components/TabBar";
 import { ToastProvider } from "@/components/ui/Toast";
 import { BRAND } from "@/lib/brand";
-import { dataTheme, parseTheme, THEME_COOKIE } from "@/lib/theme";
+import { dataTheme, parseTheme, themeColorFor, THEME_COOKIE } from "@/lib/theme";
 import "./globals.css";
 
 // Inter for text, Space Grotesk for numbers and headings (the `font-display` class). Both are fetched when the app is built and
@@ -33,17 +33,18 @@ export const metadata: Metadata = {
 // Pinch zoom stays on: never set maximumScale or userScalable. viewportFit "cover" draws the page edge to edge, so the
 // safe-area padding (pt-safe, px-safe, pb-safe, pb-tabbar in globals.css) keeps content clear of a notch and the home
 // indicator. The browser bar takes the accent in light mode and the page's own colour in dark mode.
-export const viewport: Viewport = {
-  width: "device-width",
-  initialScale: 1,
-  viewportFit: "cover",
-  colorScheme: "light dark",
-  themeColor: [
-    { media: "(prefers-color-scheme: light)", color: BRAND.colors.accent },
-    { media: "(prefers-color-scheme: dark)", color: BRAND.colors.backgroundDark },
-  ],
-  interactiveWidget: "resizes-content",
-};
+// The browser bar takes the accent in light mode and the page's own colour in dark mode: by the phone's scheme in Auto, and by the
+// chosen Appearance (the cookie) in Light and Dark. Every page already asks for the request, so reading the cookie costs nothing.
+export async function generateViewport(): Promise<Viewport> {
+  return {
+    width: "device-width",
+    initialScale: 1,
+    viewportFit: "cover",
+    colorScheme: "light dark",
+    themeColor: themeColorFor(parseTheme((await cookies()).get(THEME_COOKIE)?.value)),
+    interactiveWidget: "resizes-content",
+  };
+}
 
 export default async function RootLayout({ children }: LayoutProps<"/">) {
   // The Appearance choice (More) is a cookie, so the first paint is already Light or Dark and nothing flashes. Every page asks
