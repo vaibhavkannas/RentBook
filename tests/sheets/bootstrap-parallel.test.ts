@@ -164,6 +164,72 @@ describe("a cold start when Google does not answer", () => {
   });
 });
 
+describe("a read that fails or hangs", () => {
+  /** A Sheet whose first getValues of `tab` fails (once) or never answers, and that counts the reads of each tab. */
+  function flaky(tab: string, how: "fail" | "hang") {
+    const reads: Record<string, number> = {};
+    class Flaky extends FakeGateway {
+      async getValues(t: string, a1: string, render: Parameters<FakeGateway["getValues"]>[2]): Promise<unknown[][]> {
+        reads[t] = (reads[t] ?? 0) + 1;
+        if (t === tab && reads[t] === 1) {
+          if (how === "hang") return new Promise<never>(() => {});
+          throw new AppError("unavailable", `${t} read failed`);
+        }
+        return super.getValues(t, a1, render);
+      }
+    }
+    return { fake: new Flaky(allTabs()), reads };
+  }
+
+  it.each([SETTINGS_TAB, LOG_TAB, TENANTS_TAB])("is not read a second time: a first read of %s that fails is the failure told, as before", async (tab) => {
+    const { fake, reads } = flaky(tab, "fail");
+    await expect(ensureTabs(fake, "Schedule")).rejects.toThrow(`${tab} read failed`);
+    expect(reads[tab]).toBe(1);
+  });
+
+  it("is told by the check's own turn for the optional Tenancy Log: logged, and carried on, with the tab read once", async () => {
+    const logs = captureLogs();
+    const { fake, reads } = flaky(TENANCY_LOG_TAB, "fail");
+    await expect(ensureTabs(fake, "Schedule")).resolves.toEqual({ created: [], filled: [] });
+    expect(reads[TENANCY_LOG_TAB]).toBe(1);
+    expect(loggedLines(logs.warn).map((line) => line.event)).toEqual(["tenancy-log-tab-failed"]);
+  });
+
+  it("does not make a failure wait for the reads after it: a failed Settings read is told while a later read still hangs", async () => {
+    class SettingsFailsLogHangs extends FakeGateway {
+      async getValues(t: string, a1: string, render: Parameters<FakeGateway["getValues"]>[2]): Promise<unknown[][]> {
+        if (t === SETTINGS_TAB) throw new AppError("unavailable", "settings read failed");
+        if (t === LOG_TAB) return new Promise<never>(() => {});
+        return super.getValues(t, a1, render);
+      }
+    }
+    const told = await Promise.race([
+      ensureTabs(new SettingsFailsLogHangs(allTabs()), "Schedule").then(() => "no error", (e: unknown) => (e as Error).message),
+      new Promise<string>((resolve) => setTimeout(() => resolve("waited"), 300)),
+    ]);
+    expect(told).toBe("settings read failed");
+  });
+
+  it("matches what the one-after-another checks did for a fault on the first call only (unavailable, then fine)", async () => {
+    // Before, a first read that failed failed the check at once; the optional Tenancy Log carried on.
+    for (const [tab, fatal] of [[SETTINGS_TAB, true], [LOG_TAB, true], [TENANTS_TAB, true], [TENANCY_LOG_TAB, false]] as const) {
+      const { fake } = flaky(tab, "fail");
+      const outcome = await ensureTabs(fake, "Schedule").then(() => "ok", (e: unknown) => (e as AppError).code);
+      expect(outcome, tab).toBe(fatal ? "unavailable" : "ok");
+    }
+  });
+});
+
+describe("a Settings tab that is missing", () => {
+  it("is refused right after the tab list, with no header read at all", async () => {
+    const tabs = allTabs();
+    delete (tabs as Record<string, unknown>)[SETTINGS_TAB];
+    const fake = new FakeGateway(tabs);
+    await expect(ensureTabs(fake, "Schedule")).rejects.toThrow("The Settings tab is missing");
+    expect(fake.calls).toEqual(["listTabs"]);
+  });
+});
+
 describe("two cold servers at once", () => {
   it("add each missing tab once and overwrite nothing", async () => {
     const tabs = { Schedule: baseSchedule(), [SETTINGS_TAB]: settingsGrid(), [LOG_TAB]: [[...LOG_HEADERS]] };

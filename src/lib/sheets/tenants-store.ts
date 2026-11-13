@@ -44,8 +44,8 @@ export const TENANTS_RANGE = `A1:${LAST_COLUMN}`;
 export async function ensureTenantsTab(
   gateway: SheetsGateway,
   existingTabs: string[],
-  /** The header row (A1:O1) when the caller has already read it, so the tab is not asked again; the same answer a read here would give. */
-  knownHeader?: unknown[][],
+  /** The read of the header row (A1:O1) when the caller has already started it: awaited here, in this check's turn, so it is not asked twice and a failure is thrown here. */
+  knownHeader?: Promise<unknown[][]>,
 ): Promise<"created" | "filled" | "none"> {
   // A tab another instance added a moment ago is treated as an existing one: its header is checked below.
   if (!existingTabs.includes(TENANTS_TAB) && (await addTabIfMissing(gateway, TENANTS_TAB))) {
@@ -53,7 +53,7 @@ export async function ensureTenantsTab(
     return "created";
   }
   // A row 1 that holds anything, even a space, is not empty: it is checked on every read (readTenancies), never written over.
-  const header = (knownHeader ?? (await gateway.getValues(TENANTS_TAB, `A1:${LAST_COLUMN}1`, "FORMATTED_VALUE")))[0] ?? [];
+  const header = (await (knownHeader ?? gateway.getValues(TENANTS_TAB, `A1:${LAST_COLUMN}1`, "FORMATTED_VALUE")))[0] ?? [];
   if (header.length === 0) {
     await gateway.updateValues([{ tab: TENANTS_TAB, a1: "A1", values: [TENANT_HEADERS] }]);
     return "filled";
