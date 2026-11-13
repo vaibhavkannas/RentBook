@@ -178,7 +178,7 @@ Do not set `NODE_TLS_REJECT_UNAUTHORIZED=0`. It turns off certificate checking f
 
 ## Adding another person
 
-Everyone on the list can log, edit and undo payments and read the Activity screen. Only the first address in `ALLOWED_EMAILS` (the owner) can change Portion settings. The owner can see who is on the list, read-only, in the "Who has access" card on the Set up page; to change the list, edit `ALLOWED_EMAILS` and redeploy as described below. Set up, Diagnostics and Prepare my Sheet are the owner's too.
+Everyone on the list can log, edit and undo payments and read the Activity screen. Only the first address in `ALLOWED_EMAILS` (the owner) can change Portion settings. Set up, Diagnostics and Prepare my Sheet are the owner's too. The owner can see who is on the list, read-only, in the "Who has access" card on Set up; to change it, edit `ALLOWED_EMAILS` and redeploy as described below.
 
 Try all of this on a test copy of the Sheet first (step 1), then repeat it for the live Sheet.
 
