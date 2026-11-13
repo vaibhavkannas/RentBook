@@ -1,13 +1,13 @@
 import type { ReactElement, SVGProps } from "react";
 
 /**
- * The brand mark: a house outline with two ledger lines, on a 32-unit grid. It has no currency in it, so wave 3 can
+ * The brand mark: a roof over an open book (the rent record), on a 32-unit grid. It has no currency in it, so wave 3 can
  * let the owner pick one. The paths are drawn with a stroke and no fill.
  */
 export const BRAND_MARK_PATHS = [
-  "M7 15.5 L16 8 L25 15.5 V24.5 A1.5 1.5 0 0 1 23.5 26 H8.5 A1.5 1.5 0 0 1 7 24.5 Z",
-  "M11.5 18.5 H20.5",
-  "M11.5 22 H17.5",
+  "M5 13 L16 6 L27 13",
+  "M16 17.5 C13 16 9.5 16 7 17 V26 C9.5 25 13 25 16 26.5 C19 25 22.5 25 25 26 V17 C22.5 16 19 16 16 17.5 Z",
+  "M16 17.5 V26.5",
 ] as const;
 
 export const BRAND_MARK_STROKE_WIDTH = 2.4;

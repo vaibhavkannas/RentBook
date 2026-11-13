@@ -21,11 +21,11 @@ const DEFAULT_FAVICON_SHA256 = "2b8ad2d33455a8f736fc3a8ebf8f0bdea8848ad4c0db48a2
 const PNG_SIGNATURE = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
 
 describe("the brand mark", () => {
-  it("is a house outline with two ledger lines, on a 32-unit grid", () => {
+  it("is a roof over an open book, on a 32-unit grid", () => {
     expect(BRAND_MARK_PATHS).toEqual([
-      "M7 15.5 L16 8 L25 15.5 V24.5 A1.5 1.5 0 0 1 23.5 26 H8.5 A1.5 1.5 0 0 1 7 24.5 Z",
-      "M11.5 18.5 H20.5",
-      "M11.5 22 H17.5",
+      "M5 13 L16 6 L27 13",
+      "M16 17.5 C13 16 9.5 16 7 17 V26 C9.5 25 13 25 16 26.5 C19 25 22.5 25 25 26 V17 C22.5 16 19 16 16 17.5 Z",
+      "M16 17.5 V26.5",
     ]);
     expect(BRAND_MARK_STROKE_WIDTH).toBe(2.4);
   });
@@ -123,10 +123,10 @@ describe("the generated icons", () => {
     expect(png.rgba(0, 0)[3]).toBeLessThanOrEqual(2);
     expect(png.rgba(511, 511)[3]).toBeLessThanOrEqual(2);
     expectNear(png.rgba(20, 256), ACCENT);
-    // the roof's apex (16, 8 on the 32 grid) and the end of the lower ledger line's neighbour
-    expectNear(png.rgba(256, 128), WHITE);
-    expectNear(png.rgba(256, 296), WHITE);
-    expectNear(png.rgba(330, 360), ACCENT);
+    // the roof's apex (16, 6 on the 32 grid), the book's spine (16, 22) and the inside of its left page (11, 22)
+    expectNear(png.rgba(256, 96), WHITE);
+    expectNear(png.rgba(256, 352), WHITE);
+    expectNear(png.rgba(176, 352), ACCENT);
   });
 
   it("icon 32 and 192 are PNGs of those sizes", async () => {
@@ -146,8 +146,8 @@ describe("the generated icons", () => {
     const png = decodePng(bytes);
     expect([png.width, png.height]).toEqual([512, 512]);
     for (const [x, y] of [[0, 0], [511, 0], [0, 511], [511, 511]]) expectNear(png.rgba(x, y), ACCENT);
-    // the roof's apex, with the 4-unit inset: (16 + 4) * 12.8 across, (8 + 4) * 12.8 down
-    expectNear(png.rgba(256, 154), WHITE);
+    // the roof's apex, with the 4-unit inset: (16 + 4) * 12.8 across, (6 + 4) * 12.8 down
+    expectNear(png.rgba(256, 128), WHITE);
     // anything that is not the accent colour lies within 40 % of the width of the centre
     const safeRadius = 0.4 * 512;
     let inside = 0;
@@ -257,6 +257,6 @@ describe("src/app/favicon.ico", () => {
     expect([picture.width, picture.height]).toEqual([32, 32]);
     expect(picture.rgba(0, 0)[3]).toBeLessThanOrEqual(2);
     expectNear(picture.rgba(1, 16), ACCENT);
-    expectNear(picture.rgba(16, 8), WHITE, 6);
+    expectNear(picture.rgba(16, 6), WHITE, 6);
   });
 });
