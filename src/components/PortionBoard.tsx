@@ -58,9 +58,9 @@ export default function PortionBoard({ monthKey, cards, defaultDate, saving = NO
       </div>
 
       {shown.length === 0 ? (
-        <p className="py-7 text-center text-sm text-muted">Nothing here for this filter.</p>
+        <p className="py-8 text-center text-sm text-muted">Nothing here for this filter.</p>
       ) : (
-        <ul className="grid gap-2">
+        <ul className="mt-2 grid gap-2">
           {shown.map((card) => (
             <PortionRow
               key={card.portionId}

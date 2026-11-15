@@ -124,7 +124,7 @@ function Summary({ view }: { view: YearView }) {
 /** What each glyph means: a glyph and a word beside the colour it is drawn in. */
 function Key() {
   return (
-    <ul aria-label="Key" className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-sm">
+    <ul aria-label="Key" className="mt-3 flex flex-wrap gap-x-4 gap-y-2 text-sm">
       {YEAR_LEGEND.map(({ state, glyph, label }) => (
         <li key={state} className="flex items-center gap-1.5">
           <span aria-hidden="true" className={cx("inline-grid size-6 place-items-center rounded-chip text-xs", yearCellClasses(state))}>

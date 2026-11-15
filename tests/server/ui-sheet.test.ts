@@ -69,7 +69,7 @@ describe("Sheet", () => {
       "overscroll-contain",
       "rounded-t-2xl",
       "bg-surface",
-      "p-5",
+      "p-4",
       "pb-safe",
     ]) {
       expect(panel.split(" ")).toContain(wanted);

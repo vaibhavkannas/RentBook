@@ -121,7 +121,7 @@ describe("yearCellClasses", () => {
 
 describe("FIELD_CONTROL", () => {
   it("is the text field every form uses today", () => {
-    expect(FIELD_CONTROL).toBe("mt-1 min-h-12 w-full rounded-control border border-control bg-surface px-3 text-base");
+    expect(FIELD_CONTROL).toBe("mt-2 min-h-12 w-full rounded-control border border-control bg-surface px-3 text-base");
   });
 
   it("is a 16 px text field, so a phone does not zoom in when it takes focus", () => {
@@ -146,7 +146,7 @@ describe("fieldControlClasses", () => {
     const area = tokens(fieldControlClasses("textarea"));
     expect(area).toContain("py-2");
     expect(area).not.toContain("min-h-12");
-    expect(area).toEqual(expect.arrayContaining(["mt-1", "w-full", "rounded-control", "border", "border-control", "bg-surface", "px-3", "text-base"]));
+    expect(area).toEqual(expect.arrayContaining(["mt-2", "w-full", "rounded-control", "border", "border-control", "bg-surface", "px-3", "text-base"]));
   });
 });
 
@@ -187,8 +187,8 @@ describe("the card, the skeleton bar and the page", () => {
     expect(pageClasses(false)).toBe("mx-auto min-h-dvh max-w-md px-safe pt-safe pb-tabbar");
   });
 
-  it("keeps the old 2.5rem of bottom padding where there is no tab bar", () => {
-    expect(pageClasses(false, false)).toBe("mx-auto min-h-dvh max-w-md px-safe pb-10 pt-safe");
+  it("keeps 2rem of bottom padding where there is no tab bar", () => {
+    expect(pageClasses(false, false)).toBe("mx-auto min-h-dvh max-w-md px-safe pb-8 pt-safe");
   });
 
   it("centres the content of a sign-in or error page in the whole screen, with no vertical padding to push it off centre", () => {

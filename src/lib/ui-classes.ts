@@ -82,13 +82,13 @@ export const yearCellClasses = (state: YearCellState) => YEAR_CELL[state];
 
 /** A text field, a select and a date field. 16 px text, so a phone does not zoom in when it takes focus. */
 export const FIELD_CONTROL =
-  "mt-1 min-h-12 w-full rounded-control border border-control bg-surface px-3 text-base";
+  "mt-2 min-h-12 w-full rounded-control border border-control bg-surface px-3 text-base";
 
 /** The amount field: the same, with larger text. */
-const LARGE_CONTROL = "mt-1 min-h-12 w-full rounded-control border border-control bg-surface px-3 text-lg";
+const LARGE_CONTROL = "mt-2 min-h-12 w-full rounded-control border border-control bg-surface px-3 text-lg";
 
 /** A text area grows with its rows, so it has vertical padding and no minimum height. */
-const TEXTAREA_CONTROL = "mt-1 w-full rounded-control border border-control bg-surface px-3 py-2 text-base";
+const TEXTAREA_CONTROL = "mt-2 w-full rounded-control border border-control bg-surface px-3 py-2 text-base";
 
 export const fieldControlClasses = (kind: "input" | "textarea" = "input", large = false) =>
   `${kind === "textarea" ? TEXTAREA_CONTROL : large ? LARGE_CONTROL : FIELD_CONTROL} disabled:opacity-50`;
@@ -136,4 +136,4 @@ export const pageClasses = (center: boolean, tabBar = true) =>
     ? cx("mx-auto flex min-h-dvh max-w-md flex-col justify-center px-safe", tabBar && "pb-tabbar")
     : tabBar
       ? "mx-auto min-h-dvh max-w-md px-safe pt-safe pb-tabbar"
-      : "mx-auto min-h-dvh max-w-md px-safe pb-10 pt-safe";
+      : "mx-auto min-h-dvh max-w-md px-safe pb-8 pt-safe";

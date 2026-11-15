@@ -197,7 +197,7 @@ export default function MonthScreen({ monthKey, currentKey, today, renderedAt, v
   return (
     <div onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
       {/* One line: the arrows round the title, and on the right the refresh button, or the way back to this month. It wraps rather than overlap on a very narrow screen. */}
-      <div className="flex flex-wrap items-center justify-between gap-x-2">
+      <div className="mb-1 flex flex-wrap items-center justify-between gap-x-2">
         <nav aria-label="Month" className="flex min-w-0 items-center gap-1">
           <IconButton framed label="Previous month" onClick={() => go(ymKey(addMonths(shown, -1)))}>
             <Icon name="left" />

@@ -163,7 +163,7 @@ describe("Field", () => {
 
   it("links a hint to the control, and says nothing is wrong when nothing is", () => {
     const out = html(field({ label: "Move-in date", hint: "Change this if they moved in earlier." }, createElement(Input, { type: "date" })));
-    const hintId = /<p id="([^"]+)" class="mt-1 text-sm text-muted">Change this if they moved in earlier\.<\/p>/.exec(out)?.[1];
+    const hintId = /<p id="([^"]+)" class="mt-2 text-sm text-muted">Change this if they moved in earlier\.<\/p>/.exec(out)?.[1];
     expect(hintId).toBeTruthy();
     const control = out.match(/<input[^>]*>/)![0];
     expect(attr(control, "aria-describedby")).toBe(hintId);
@@ -173,7 +173,7 @@ describe("Field", () => {
 
   it("shows an error under the control, links it to the control, and marks the control invalid", () => {
     const out = html(field({ label: "Amount", error: "Enter the amount as a number." }, createElement(Input, { inputMode: "numeric" })));
-    const errorId = /<p id="([^"]+)" role="alert" class="mt-1 text-sm text-danger-ink">Enter the amount as a number\.<\/p>/.exec(out)?.[1];
+    const errorId = /<p id="([^"]+)" role="alert" class="mt-2 text-sm text-danger-ink">Enter the amount as a number\.<\/p>/.exec(out)?.[1];
     expect(errorId).toBeTruthy();
     const control = out.match(/<input[^>]*>/)![0];
     expect(attr(control, "aria-describedby")).toBe(errorId);
@@ -352,13 +352,13 @@ describe("Page", () => {
   });
 
   it("says when there is no tab bar (the sign-in page), and keeps the old bottom padding then", () => {
-    expect(html(createElement(Page, { tabBar: false }, "x"))).toBe('<main class="mx-auto min-h-dvh max-w-md px-safe pb-10 pt-safe">x</main>');
+    expect(html(createElement(Page, { tabBar: false }, "x"))).toBe('<main class="mx-auto min-h-dvh max-w-md px-safe pb-8 pt-safe">x</main>');
   });
 
   it("can centre its content, for the sign-in and error pages", () => {
     const out = html(createElement(Page, { center: true, tabBar: false }, "x"));
     expect(out).toContain("flex min-h-dvh max-w-md flex-col justify-center");
-    expect(out).not.toContain("pb-10");
+    expect(out).not.toContain("pb-8");
     expect(out).not.toMatch(/\bpt-/);
     expect(html(createElement(Page, { center: true }, "x"))).toContain("pb-tabbar");
   });

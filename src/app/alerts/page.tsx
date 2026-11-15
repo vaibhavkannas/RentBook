@@ -131,7 +131,7 @@ export default async function AlertsPage({
             )}
           </section>
 
-          <section id="hikes" aria-labelledby="hikes-heading" className="mt-5">
+          <section id="hikes" aria-labelledby="hikes-heading" className="mt-6">
             <SectionLabel id="hikes-heading" className="mb-2 px-0.5">
               Rent hikes
             </SectionLabel>

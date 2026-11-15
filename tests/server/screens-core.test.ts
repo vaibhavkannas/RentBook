@@ -526,9 +526,9 @@ describe("a tenant's page", () => {
 
   it("centres each detail row's label on its value, so the phone link, a taller target, sits level with its label", async () => {
     const html = await tenant("p1");
-    const rows = html.match(/<div class="flex items-center justify-between gap-4 py-1\.5 text-sm"><dt/g) ?? [];
+    const rows = html.match(/<div class="flex items-center justify-between gap-4 py-2 text-sm"><dt/g) ?? [];
     expect(rows.length).toBeGreaterThanOrEqual(5);
-    expect(html).not.toContain('<div class="flex justify-between gap-4 py-1.5 text-sm"><dt');
+    expect(html).not.toContain('<div class="flex justify-between gap-4 py-2 text-sm"><dt');
   });
 
   it("keeps the month in the way back and in the forms", async () => {

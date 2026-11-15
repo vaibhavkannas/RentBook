@@ -13,9 +13,9 @@ type Props = {
 export function PageHeader({ title, back }: Props) {
   const heading =
     title === null ? <Skeleton className="h-6 w-40" /> : <h1 className="min-w-0 break-words font-display text-xl font-bold leading-tight">{title}</h1>;
-  if (!back) return <header className="flex min-h-11 items-center gap-2">{heading}</header>;
+  if (!back) return <header className="mb-1 flex min-h-11 items-center gap-2">{heading}</header>;
   return (
-    <header className="flex min-h-11 items-center gap-2">
+    <header className="mb-1 flex min-h-11 items-center gap-2">
       <Suspense fallback={<BackLinkFallback href={back.href} label={back.label} />}>
         <BackLink href={back.href} label={back.label} />
       </Suspense>

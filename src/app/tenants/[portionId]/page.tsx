@@ -56,7 +56,7 @@ const HISTORY_LOOK: Record<HistoryEntry["kind"], { icon: IconName; tint: string 
 /** One label and value of the current tenancy. An empty value reads "Not added". */
 function Detail({ label, children }: { label: string; children?: ReactNode }) {
   return (
-    <div className="flex items-center justify-between gap-4 py-1.5 text-sm">
+    <div className="flex items-center justify-between gap-4 py-2 text-sm">
       <dt className="shrink-0 text-muted">{label}</dt>
       <dd className="min-w-0 break-words text-right">
         {children || <span className="text-muted">Not added</span>}
@@ -68,7 +68,7 @@ function Detail({ label, children }: { label: string; children?: ReactNode }) {
 /** Long text (notes) on a full-width row of its own, left-aligned, with its line breaks kept. */
 function LongDetail({ label, children }: { label: string; children?: ReactNode }) {
   return (
-    <div className="py-1.5 text-sm">
+    <div className="py-2 text-sm">
       <dt className="text-muted">{label}</dt>
       <dd className="mt-0.5 whitespace-pre-wrap break-words text-left">
         {children || <span className="text-muted">Not added</span>}
@@ -292,7 +292,7 @@ export default async function TenantsPage({
         </Card>
       )}
 
-      <section aria-labelledby="past-heading" className="mt-5">
+      <section aria-labelledby="past-heading" className="mt-6">
         <SectionLabel id="past-heading" className="mb-2 mt-1 px-0.5">Past tenants</SectionLabel>
         {past.length === 0 ? (
           <p className="mt-2 text-sm text-muted">No past tenants yet.</p>
@@ -312,7 +312,7 @@ export default async function TenantsPage({
         )}
       </section>
 
-      <section aria-labelledby="history-heading" className="mt-5">
+      <section aria-labelledby="history-heading" className="mt-6">
         <SectionLabel id="history-heading" className="mb-2 mt-1 px-0.5">History</SectionLabel>
         {history.problem !== undefined ? (
           <Notice tone="warn" className="mt-2">

@@ -35,14 +35,14 @@ export function Field({ label, hint, error, children }: FieldProps) {
           {children}
         </label>
         {hint && (
-          <p id={hintId} className="mt-1 text-sm text-muted">
+          <p id={hintId} className="mt-2 text-sm text-muted">
             {hint}
           </p>
         )}
         {error && (
           // role="alert": the message is read out when it appears, even where the control already has focus (focusing a
           // control that has it says nothing new). The forms also move focus to the first control with an error.
-          <p id={errorId} role="alert" className="mt-1 text-sm text-danger-ink">
+          <p id={errorId} role="alert" className="mt-2 text-sm text-danger-ink">
             {error}
           </p>
         )}

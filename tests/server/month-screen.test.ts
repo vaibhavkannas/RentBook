@@ -73,7 +73,7 @@ describe("the month screen", () => {
 
   it("puts the arrows, the title and the refresh button on one line, the button last", () => {
     const html = render("2026-10");
-    const line = html.match(/<div class="flex flex-wrap items-center justify-between[^"]*">([\s\S]*?)<\/div>\s*<p role="status"/)?.[1] ?? "";
+    const line = html.match(/<div class="mb-1 flex flex-wrap items-center justify-between[^"]*">([\s\S]*?)<\/div>\s*<p role="status"/)?.[1] ?? "";
     const at = (needle: string) => line.indexOf(needle);
     expect(at('aria-label="Previous month"')).toBeGreaterThan(-1);
     expect(at('aria-label="Previous month"')).toBeLessThan(at("October 2026"));

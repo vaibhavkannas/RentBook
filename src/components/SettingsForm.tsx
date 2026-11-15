@@ -149,7 +149,7 @@ export default function SettingsForm({ portions }: { portions: PortionConfig[] }
             // The name in the Sheet, not the one being typed: the button and the dialog name the portion as it is.
             const stored = known.find((portion) => portion.id === row.id)?.name ?? row.name;
             return (
-              <Card as="fieldset" key={row.id} className="space-y-2">
+              <Card as="fieldset" key={row.id} className="space-y-3">
                 <legend className="sr-only">Settings for {row.name || row.id}</legend>
                 <Field label="Portion name" error={problemAt(problem, "name", row.id)}>
                   <Input

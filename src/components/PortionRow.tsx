@@ -65,12 +65,12 @@ function PortionRow({ card, monthKey, defaultDate, store, saving, overdue, onAct
           aria-expanded={open}
           aria-controls={panelId}
           onClick={() => store.toggle(card.portionId)}
-          className="press grid min-h-16 w-full grid-cols-[2.25rem_minmax(0,1fr)_auto] items-center gap-3 p-3 text-left"
+          className="press grid min-h-16 w-full grid-cols-[2.25rem_minmax(0,1fr)_auto] items-center gap-3 px-3 py-3.5 text-left"
         >
           <StatusDot status={status} />
           <span className="min-w-0">
             <span className="block break-words font-semibold leading-tight">{card.name}</span>
-            <span className="mt-0.5 block break-words text-sm leading-snug text-muted">{rowSubtitle(card)}</span>
+            <span className="mt-1 block break-words text-sm leading-snug text-muted">{rowSubtitle(card)}</span>
           </span>
           <span className="flex flex-col items-end gap-0.5 text-right">
             {amount && <span className="whitespace-nowrap font-display font-semibold tabular-nums">{amount}</span>}

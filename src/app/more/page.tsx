@@ -76,7 +76,7 @@ export default async function MorePage({
       </section>
 
       <form
-        className="mt-5"
+        className="mt-6"
         action={async () => {
           "use server";
           await signOut({ redirectTo: "/signin" });

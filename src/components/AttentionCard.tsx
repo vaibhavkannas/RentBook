@@ -20,12 +20,12 @@ export default function AttentionCard({ items }: { items: readonly AttentionItem
   return (
     <section aria-label="Needs attention" className="mt-3">
       <h2 className="sr-only">Needs attention</h2>
-      <ul className="grid gap-1.5">
+      <ul className="grid gap-2">
         {items.map((item) => (
           <li key={`${item.href}-${item.text}`}>
             <Link
               href={item.href}
-              className={cx("press flex min-h-11 w-full items-center gap-2.5 rounded-control px-3 py-2 text-sm font-medium", LOOK[item.tone].row)}
+              className={cx("press flex min-h-11 w-full items-center gap-3 rounded-control px-3 py-2 text-sm font-medium", LOOK[item.tone].row)}
             >
               <Icon name={LOOK[item.tone].icon} />
               <span className="min-w-0 flex-1">{item.text}</span>
