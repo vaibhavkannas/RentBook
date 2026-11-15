@@ -257,9 +257,9 @@ html.sheet-open body {
   }
 }
 
-/* Bottom padding for a page with the tab bar: clears the bar, the home indicator and 1.5rem more. */
+/* Bottom padding for a page with the tab bar: clears the bar, the home indicator and 1rem more. */
 @utility pb-tabbar {
-  padding-bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom) + 1.5rem);
+  padding-bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom) + 1rem);
 }
 
 /*

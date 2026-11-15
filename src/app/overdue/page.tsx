@@ -100,7 +100,7 @@ function Rules() {
             ›
           </span>
         </summary>
-        <ul className="mt-1 list-disc space-y-1 pl-5 text-sm text-muted">
+        <ul className="mt-1 list-disc space-y-1 pl-6 text-sm text-muted">
           {OVERDUE_RULES.map((rule) => (
             <li key={rule}>{rule}</li>
           ))}

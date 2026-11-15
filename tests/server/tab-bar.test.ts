@@ -233,9 +233,9 @@ describe("globals.css for the tab bar", () => {
     expect(bar("/")).toContain('<nav aria-label="Main"');
   });
 
-  it("makes a page's bottom padding clear the bar, the home indicator and 1.5rem more", () => {
+  it("makes a page's bottom padding clear the bar, the home indicator and 1rem more", () => {
     expect(css).toMatch(
-      /@utility pb-tabbar\s*\{\s*padding-bottom:\s*calc\(var\(--tabbar-h\) \+ env\(safe-area-inset-bottom\) \+ 1\.5rem\);\s*\}/,
+      /@utility pb-tabbar\s*\{\s*padding-bottom:\s*calc\(var\(--tabbar-h\) \+ env\(safe-area-inset-bottom\) \+ 1rem\);\s*\}/,
     );
   });
 });
