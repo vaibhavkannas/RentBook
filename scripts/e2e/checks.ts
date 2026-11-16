@@ -518,13 +518,27 @@ const refreshButton: Check = {
 
 // 5. The reports
 
+/** Opens the collapsed Needs attention row (it is closed on every visit) so that its rows can be reached. */
+async function openAttention(page: PwPage): Promise<void> {
+  const row = page.getByRole("button", { name: /^Needs attention/ });
+  if ((await row.getAttribute("aria-expanded")) !== "true") await tap(row, "the Needs attention row");
+  await until("the Needs attention row to open", async () => (await row.getAttribute("aria-expanded")) === "true");
+}
+
 const reports: Check = {
   name: "reports",
   async run(run) {
     const { key, beforeKey, beforeTitle } = months(run);
     const { page } = await run.actor("owner");
     await open(run, page, "/");
+    // Needs attention is one collapsed row with the most pressing headline; its rows are out of reach until it is opened.
+    const attention = page.getByRole("button", { name: /^Needs attention/ });
+    if ((await attention.getAttribute("aria-expanded")) !== "false") throw new Error("Needs attention is not collapsed on a visit");
+    if (!(await attention.innerText()).includes("Rent overdue")) throw new Error("The collapsed row does not name the most pressing item");
+    if (await page.getByRole("link", { name: /^Rent overdue/ }).count()) throw new Error("A Needs attention row can be reached while it is collapsed");
     // Needs attention, then Overdue rent, then a month in it.
+    await openAttention(page);
+    if (run.shots !== null) await page.screenshot({ path: path.join(run.shots, "attention-open.png"), fullPage: true });
     await tap(page.getByRole("link", { name: /^Rent overdue/ }), "the Rent overdue row of Needs attention");
     await arrive(page, "Overdue rent", (url) => url.pathname === "/overdue");
     await see(page.getByRole("heading", { level: 1, name: "Overdue rent" }), "the Overdue rent heading");
@@ -540,6 +554,7 @@ const reports: Check = {
     await arrive(page, `${beforeTitle} from the year`, onMonth(beforeKey));
     // Agreements and hikes, from the card on this month's screen.
     await open(run, page, "/");
+    await openAttention(page);
     await tap(page.getByRole("link", { name: /agreement ended$/ }), "the agreement row of Needs attention");
     await arrive(page, "Agreements and hikes", (url) => url.pathname === "/alerts");
     const ended = page.locator("li").filter({ has: page.getByRole("heading", { name: P3, exact: true }) });

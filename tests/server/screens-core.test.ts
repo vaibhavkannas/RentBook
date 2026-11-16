@@ -161,7 +161,7 @@ describe("the month screen", () => {
 
   it("opens on this month, and says what needs attention under it", async () => {
     const text = section(await month(), "Needs attention");
-    expect(text).toBe("Needs attention Rent overdue: 2 portions, ₹ 31,335 1 agreement ended 1 agreement ends within 60 days Rent goes up soon for 1 portion");
+    expect(text).toBe("Needs attention Needs attention 4 Rent overdue: 2 portions, ₹ 31,335 +3 more Rent overdue: 2 portions, ₹ 31,335 1 agreement ended 1 agreement ends within 60 days Rent goes up soon for 1 portion");
   });
 
   it("shows another month from ?month: September 2026, with a This month button and no one else's rent on it", async () => {
